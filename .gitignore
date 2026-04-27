@@ -49,3 +49,6 @@ next-env.d.ts
 
 # generated reports
 *.pdf
+
+# Supabase local temp
+supabase/.temp/
