@@ -1,0 +1,237 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { sanitizeSidebarModulesForPersist, type SidebarModulePersisted } from "@/lib/admin/adminSidebarModules";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Inicializa cliente Supabase con service role (admin)
+ */
+function supabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Faltan env NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+}
+
+const CONFIG_KEY = "portal_config";
+
+type PortalConfig = {
+  nombre_camara?: string;
+  moneda?: "USD" | "UYU";
+  timezone?: string;
+  titulo_header?: string | null;
+  logo_url?: string | null;
+  label_member_singular?: string | null;
+  label_member_plural?: string | null;
+  /** Overrides del menú lateral admin (`mergeAdminSidebarModules` en cliente). */
+  sidebar_modules?: SidebarModulePersisted[];
+  /**
+   * Home opcional al entrar a `/admin` (debe coincidir con un href de menú y módulo `activo`).
+   * Si falta o el módulo no está activo, aplica la resolución por defecto en `resolveAdminLandingPath`.
+   */
+  admin_landing_path?: string | null;
+};
+
+const DEFAULT_CONFIG: PortalConfig = {
+  nombre_camara: "Cámara Costa",
+  moneda: "USD",
+  timezone: "America/Montevideo",
+  titulo_header: null,
+  logo_url: null,
+  label_member_singular: "Socio",
+  label_member_plural: "Socios",
+};
+
+/**
+ * GET /api/admin/config/portal
+ * 
+ * Obtiene la configuración del portal desde public.config
+ */
+export async function GET() {
+  try {
+    const sb = supabaseAdmin();
+
+    const { data, error } = await sb
+      .from("config")
+      .select("value")
+      .eq("key", CONFIG_KEY)
+      .maybeSingle();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Error leyendo portal config:", error);
+      return NextResponse.json(
+        { data: DEFAULT_CONFIG },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Si no existe, devolver defaults
+    if (!data?.value) {
+      return NextResponse.json(
+        { data: DEFAULT_CONFIG },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Parsear JSON
+    try {
+      const config = JSON.parse(data.value) as PortalConfig;
+      // Mergear con defaults para asegurar que todos los campos existan
+      const merged = { ...DEFAULT_CONFIG, ...config };
+      if (process.env.NODE_ENV === "development" && Array.isArray(config.sidebar_modules)) {
+        console.debug(
+          "[portal_config GET] sidebar_modules desde DB (antes del merge en cliente; labels aquí pisan defaults en AdminShell):",
+          config.sidebar_modules
+        );
+      }
+      return NextResponse.json(
+        { data: merged },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    } catch (parseError) {
+      console.error("Error parseando portal config JSON:", parseError);
+      return NextResponse.json(
+        { data: DEFAULT_CONFIG },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+  } catch (e: any) {
+    console.error("Error inesperado en GET /api/admin/config/portal:", e);
+    return NextResponse.json(
+      { data: DEFAULT_CONFIG },
+      { status: 200, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+}
+
+/**
+ * PATCH /api/admin/config/portal
+ * 
+ * Actualiza la configuración del portal en public.config
+ * 
+ * Body esperado:
+ * { "nombre_camara": "string", "moneda": "USD"|"UYU", "timezone": "string", "titulo_header": "string|null", "logo_url": "string|null", "label_member_singular": "string|null", "label_member_plural": "string|null" }
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const sb = supabaseAdmin();
+    
+    const body = await req.json().catch(() => ({}));
+
+    // Validar y normalizar campos
+    const updates: Partial<PortalConfig> = {};
+    
+    if (typeof body.nombre_camara === "string") {
+      updates.nombre_camara = body.nombre_camara.trim() || DEFAULT_CONFIG.nombre_camara;
+    }
+    
+    if (body.moneda === "USD" || body.moneda === "UYU") {
+      updates.moneda = body.moneda;
+    }
+    
+    if (typeof body.timezone === "string") {
+      updates.timezone = body.timezone.trim() || DEFAULT_CONFIG.timezone;
+    }
+    
+    if (body.titulo_header === null || typeof body.titulo_header === "string") {
+      updates.titulo_header = body.titulo_header === "" ? null : body.titulo_header;
+    }
+    
+    if (body.logo_url === null || typeof body.logo_url === "string") {
+      updates.logo_url = body.logo_url === "" ? null : body.logo_url;
+    }
+    
+    if (body.label_member_singular === null || typeof body.label_member_singular === "string") {
+      updates.label_member_singular = body.label_member_singular === "" || !body.label_member_singular.trim()
+        ? DEFAULT_CONFIG.label_member_singular
+        : body.label_member_singular.trim();
+    }
+    
+    if (body.label_member_plural === null || typeof body.label_member_plural === "string") {
+      updates.label_member_plural = body.label_member_plural === "" || !body.label_member_plural.trim()
+        ? DEFAULT_CONFIG.label_member_plural
+        : body.label_member_plural.trim();
+    }
+
+    if (Array.isArray(body.sidebar_modules)) {
+      updates.sidebar_modules = sanitizeSidebarModulesForPersist(body.sidebar_modules);
+    }
+
+    if (body.admin_landing_path === null) {
+      updates.admin_landing_path = null;
+    } else if (typeof body.admin_landing_path === "string") {
+      const t = body.admin_landing_path.trim();
+      if (!t) {
+        updates.admin_landing_path = null;
+      } else if (t.startsWith("/admin") && !t.includes("..") && t.length < 240) {
+        updates.admin_landing_path = t.split("?")[0] ?? t;
+      }
+    }
+
+    // Obtener config actual para mergear
+    const { data: currentData } = await sb
+      .from("config")
+      .select("value")
+      .eq("key", CONFIG_KEY)
+      .maybeSingle();
+
+    let currentConfig: PortalConfig = DEFAULT_CONFIG;
+    if (currentData?.value) {
+      try {
+        currentConfig = { ...DEFAULT_CONFIG, ...JSON.parse(currentData.value) };
+      } catch {
+        // Si falla el parse, usar defaults
+      }
+    }
+
+    // Mergear con updates
+    const mergedConfig: PortalConfig = { ...currentConfig, ...updates };
+
+    // Guardar como JSON
+    const { data, error } = await sb
+      .from("config")
+      .upsert(
+        {
+          key: CONFIG_KEY,
+          value: JSON.stringify(mergedConfig),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "key",
+        }
+      )
+      .select("value")
+      .single();
+
+    if (error) {
+      console.error("Error guardando portal config:", error);
+      return NextResponse.json(
+        { error: error.message ?? "Error guardando configuración" },
+        { status: 500, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Parsear y devolver
+    try {
+      const savedConfig = JSON.parse(data.value) as PortalConfig;
+      return NextResponse.json(
+        { data: { ...DEFAULT_CONFIG, ...savedConfig } },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    } catch {
+      return NextResponse.json(
+        { data: mergedConfig },
+        { status: 200, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+  } catch (e: any) {
+    console.error("Error inesperado en PATCH /api/admin/config/portal:", e);
+    return NextResponse.json(
+      { error: e?.message ?? "Error inesperado" },
+      { status: 500, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+}
