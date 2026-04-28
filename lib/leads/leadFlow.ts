@@ -37,24 +37,24 @@ export const LEAD_FLOW_STEP_IDS: LeadFlowStep["id"][] = [
 ];
 
 export const LEAD_FLOW_LABELS: Record<LeadFlowStep["id"], string> = {
-  lead: "Lead creado",
-  datos: "Datos completos",
-  investigacion: "Investigación iniciada",
-  diagnostico: "Diagnóstico IA",
-  acciones: "Acciones definidas",
-  servicios: "Servicios propuestos",
-  propuesta: "Propuesta preparada",
-  presentacion: "Presentación lista",
+  lead: "Lead",
+  datos: "Datos del prospecto",
+  investigacion: "Visita",
+  diagnostico: "Evaluación",
+  acciones: "Servicios",
+  servicios: "Costeo",
+  propuesta: "Cotización / Propuesta",
+  presentacion: "Presentación",
 };
 
 export const LEAD_FLOW_DESCRIPTIONS: Record<LeadFlowStep["id"], string> = {
-  lead: "El lead ya fue dado de alta dentro del CRM.",
-  datos: "Se cuenta con la información mínima necesaria para avanzar con el análisis.",
-  investigacion: "Ya existe una base de investigación digital o relevamiento inicial del lead.",
-  diagnostico: "El sistema ya generó un diagnóstico con oportunidades, visión o análisis estratégico.",
-  acciones: "Ya fueron detectadas acciones concretas para ejecutar en 72 horas o 30–90 días.",
-  servicios: "Ya existe una propuesta inicial de servicios EASY asociada al lead.",
-  propuesta: "La propuesta comercial ya tiene estructura consultiva y base de presentación.",
+  lead: "El prospecto ya fue dado de alta dentro del CRM.",
+  datos: "Se cuenta con la información mínima del prospecto y su instalación para avanzar.",
+  investigacion: "La visita técnica está agendada o el relevamiento inicial ya comenzó.",
+  diagnostico: "Ya existe una evaluación de necesidades, riesgos y oportunidades del servicio.",
+  acciones: "Ya fueron definidos los servicios de limpieza o facility services a cotizar.",
+  servicios: "Ya existe una base para estimar alcance, frecuencia y costo del servicio.",
+  propuesta: "La cotización o propuesta comercial ya está preparada para revisión.",
   presentacion: "Ya existe una salida lista para compartir, presentar o exportar.",
 };
 
@@ -62,14 +62,21 @@ export const LEAD_FLOW_DESCRIPTIONS: Record<LeadFlowStep["id"], string> = {
 export type LeadFlowLead = {
   id?: string | null;
   nombre?: string | null;
+  contacto?: string | null;
   telefono?: string | null;
   email?: string | null;
   website?: string | null;
   objetivos?: string | null;
   audiencia?: string | null;
   linkedin_empresa?: string | null;
+  rubro_id?: string | null;
+  direccion?: string | null;
+  superficie_m2?: number | string | null;
+  cantidad_personal?: number | string | null;
+  notas_instalacion?: string | null;
+  visita_scheduled_at?: string | null;
   ai_report?: string | null;
-  empresas?: { instagram?: string | null; facebook?: string | null } | null;
+  empresas?: { instagram?: string | null; facebook?: string | null; rubro_id?: string | null } | null;
   /** Draft de propuesta (matriz servicio × mes). Si existe y tiene rows, servicios puede considerarse hecho. */
   proposal_draft_json?: string | null;
   /** Si está definido, la propuesta comercial está confirmada → propuesta = done. */
@@ -163,12 +170,10 @@ export function getLeadFlowSignals(
   const entity = lead?.empresas;
   const datosCount = [
     lead?.nombre?.trim(),
-    lead?.telefono?.trim(),
-    lead?.email?.trim(),
-    lead?.website?.trim(),
-    lead?.objetivos?.trim(),
-    lead?.audiencia?.trim(),
-    entity?.instagram?.trim() || entity?.facebook?.trim() || lead?.linkedin_empresa?.trim(),
+    lead?.contacto?.trim() || lead?.telefono?.trim() || lead?.email?.trim(),
+    lead?.rubro_id?.trim() || entity?.rubro_id?.trim(),
+    lead?.superficie_m2 != null || lead?.direccion?.trim(),
+    lead?.cantidad_personal != null || lead?.notas_instalacion?.trim(),
   ].filter(Boolean).length;
   const presentationReady = getPresentationReadySignal(lead, leadServicesOrCount, presentationSignals, documents);
   const proposalConfirmedAt = (lead as LeadFlowLead & { proposal_confirmed_at?: string | null })?.proposal_confirmed_at;
@@ -209,7 +214,7 @@ export function getLeadFlowSignals(
   return {
     lead: !!lead?.id,
     datos: datosCount >= 3,
-    investigacion: rawReport.length > 50 || has("INVESTIGACION_DIGITAL") || has("REDES_SOCIALES"),
+    investigacion: typeof lead?.visita_scheduled_at === "string" && lead.visita_scheduled_at.trim().length > 0,
     // Documento diagnostic en lead_documents (p. ej. PDF Gamma o informe IA archivado como markdown) o tabs clásicos del informe.
     diagnostico: diagnosticFromDocuments || has("FODA") || has("OPORTUNIDADES"),
     acciones: accionesDone,
@@ -266,19 +271,19 @@ export function getLeadNextAction(step: LeadFlowStep | null): string {
     case "lead":
       return "Crear lead correctamente";
     case "datos":
-      return "Completar datos del lead";
+      return "Completar datos del prospecto e instalación";
     case "investigacion":
-      return "Iniciar investigación";
+      return "Agendar visita técnica";
     case "diagnostico":
-      return "Generar diagnóstico IA";
+      return "Completar evaluación de necesidades";
     case "acciones":
-      return "Definir acciones";
+      return "Definir servicios de limpieza requeridos";
     case "servicios":
-      return "Cargar servicios";
+      return "Preparar base de costeo";
     case "propuesta":
-      return "Preparar propuesta";
+      return "Preparar cotización / propuesta";
     case "presentacion":
-      return "Generar presentación";
+      return "Preparar presentación comercial";
     default:
       return "Flujo completo";
   }

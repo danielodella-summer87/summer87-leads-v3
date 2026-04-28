@@ -110,18 +110,40 @@ function hasStr(v: unknown): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-const KANBAN_COLUMNS = ["Nuevo", "Contactado", "Investigación", "Diagnóstico", "Estrategia", "Servicios", "Propuesta", "Presentación", "Seguimiento"] as const;
+const KANBAN_COLUMNS = [
+  "Nuevo",
+  "Visita",
+  "Evaluación",
+  "Servicios",
+  "Costeo",
+  "Cotización",
+  "Propuesta",
+  "Presentación",
+  "Contrato",
+  "Ganado",
+  "Perdido",
+] as const;
 const KANBAN_COLUMN_SET = new Set<string>(KANBAN_COLUMNS);
 const NORM_TO_KANBAN_COLUMN: Record<string, string> = {
   nuevo: "Nuevo",
-  contactado: "Contactado",
-  investigacion: "Investigación",
-  diagnostico: "Diagnóstico",
-  estrategia: "Estrategia",
+  visita: "Visita",
+  contactado: "Visita",
+  "en contacto": "Visita",
+  investigacion: "Visita",
+  evaluacion: "Evaluación",
+  diagnostico: "Evaluación",
   servicios: "Servicios",
+  estrategia: "Servicios",
+  costeo: "Costeo",
+  cotizacion: "Cotización",
   propuesta: "Propuesta",
+  "en propuesta": "Propuesta",
   presentacion: "Presentación",
-  seguimiento: "Seguimiento",
+  seguimiento: "Presentación",
+  "en seguimiento": "Presentación",
+  contrato: "Contrato",
+  ganado: "Ganado",
+  perdido: "Perdido",
 };
 
 /**
@@ -641,6 +663,8 @@ export default function Leads87Page() {
     const p = (searchParams.get("pipeline") ?? "").trim();
     if (!p || p.toLowerCase() === "todos") return "Todos";
     const normalized = normPipeline(p);
+    const mappedLegacy = NORM_TO_KANBAN_COLUMN[normalized];
+    if (mappedLegacy && KANBAN_COLUMN_SET.has(mappedLegacy)) return mappedLegacy;
     const found = KANBAN_COLUMNS.find((c) => normPipeline(c) === normalized);
     return found ?? "Todos";
   });
@@ -781,8 +805,7 @@ export default function Leads87Page() {
   const filteredLeads = useMemo(() => {
     let list = leads;
     if (selectedPipeline !== "Todos") {
-      const targetNorm = normPipeline(selectedPipeline);
-      list = list.filter((l) => normPipeline(l.pipeline) === targetNorm);
+      list = list.filter((l) => (NORM_TO_KANBAN_COLUMN[normPipeline(l.pipeline)] ?? null) === selectedPipeline);
     }
     if (searchText.trim()) {
       const q = searchText.trim().toLowerCase();

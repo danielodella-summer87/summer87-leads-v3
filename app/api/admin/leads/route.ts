@@ -39,6 +39,25 @@ type LeadRow = {
   estado: string | null;
   pipeline: string | null;
   notas: string | null;
+  rubro_id?: string | null;
+  cantidad_personal?: number | null;
+  superficie_m2?: number | null;
+  cantidad_pisos?: number | null;
+  cantidad_banos?: number | null;
+  tachos_residuos?: number | null;
+  tiene_parking?: boolean | null;
+  tiene_subsuelo?: boolean | null;
+  tiene_ascensores?: boolean | null;
+  tiene_escaleras?: boolean | null;
+  tiene_vidrios_altos?: boolean | null;
+  tipos_suelo?: string[] | null;
+  horario_operacion?: string | null;
+  restricciones_acceso?: string | null;
+  zonas_criticas?: string | null;
+  requerimientos_especiales?: string | null;
+  notas_instalacion?: string | null;
+  installation_details_json?: Record<string, unknown> | null;
+  visita_scheduled_at?: string | null;
 
   // ✅ nuevos
   rating: number | null;
@@ -96,6 +115,37 @@ function cleanInt(v: unknown): number | null {
   return null;
 }
 
+function cleanNumeric(v: unknown): number | null {
+  if (v === null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s.length) return null;
+    const n = Number(s);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function cleanBool(v: unknown): boolean | null {
+  if (v === null) return null;
+  if (typeof v === "boolean") return v;
+  return null;
+}
+
+function cleanTextArray(v: unknown): string[] | null {
+  if (v === null) return null;
+  if (!Array.isArray(v)) return null;
+  const values = v.map((item) => cleanStr(item)).filter((item): item is string => Boolean(item));
+  return values.length ? values : null;
+}
+
+function cleanJsonObject(v: unknown): Record<string, unknown> | null {
+  if (v === null) return null;
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) return v as Record<string, unknown>;
+  return null;
+}
+
 function cleanDateToISO(v: unknown): string | null {
   if (v === null) return null;
   if (typeof v === "string") {
@@ -137,8 +187,10 @@ function isMissingColumnError(message: string | undefined, table: string, column
   return msg.includes(`could not find the '${column.toLowerCase()}' column of '${table.toLowerCase()}'`);
 }
 
+const CASALIMPIA_LEAD_FIELDS =
+  "rubro_id,cantidad_personal,superficie_m2,cantidad_pisos,cantidad_banos,tachos_residuos,tiene_parking,tiene_subsuelo,tiene_ascensores,tiene_escaleras,tiene_vidrios_altos,tipos_suelo,horario_operacion,restricciones_acceso,zonas_criticas,requerimientos_especiales,notas_instalacion,installation_details_json,visita_scheduled_at";
 const SELECT_WITH_SNAPSHOT =
-  "id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,objetivos,audiencia,tamano,website,instagram,direccion,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)";
+  `id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},objetivos,audiencia,tamano,website,instagram,direccion,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
 const SELECT_LEGACY =
   "id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,objetivos,audiencia,tamano,website,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)";
 
@@ -151,6 +203,25 @@ type LeadCreateInput = Partial<{
   estado: string | null;
   pipeline: string | null;
   notas: string | null;
+  rubro_id: string | null;
+  cantidad_personal: number | string | null;
+  superficie_m2: number | string | null;
+  cantidad_pisos: number | string | null;
+  cantidad_banos: number | string | null;
+  tachos_residuos: number | string | null;
+  tiene_parking: boolean | null;
+  tiene_subsuelo: boolean | null;
+  tiene_ascensores: boolean | null;
+  tiene_escaleras: boolean | null;
+  tiene_vidrios_altos: boolean | null;
+  tipos_suelo: unknown;
+  horario_operacion: string | null;
+  restricciones_acceso: string | null;
+  zonas_criticas: string | null;
+  requerimientos_especiales: string | null;
+  notas_instalacion: string | null;
+  installation_details_json: unknown;
+  visita_scheduled_at: string | number | null;
   website: string | null;
   instagram: string | null;
   direccion: string | null;
@@ -539,6 +610,25 @@ export async function POST(req: Request) {
       estado: cleanStr(body.estado),
       pipeline,
       notas: cleanStr(body.notas),
+      rubro_id: cleanStr(body.rubro_id),
+      cantidad_personal: cleanInt(body.cantidad_personal),
+      superficie_m2: cleanNumeric(body.superficie_m2),
+      cantidad_pisos: cleanInt(body.cantidad_pisos),
+      cantidad_banos: cleanInt(body.cantidad_banos),
+      tachos_residuos: cleanInt(body.tachos_residuos),
+      tiene_parking: cleanBool(body.tiene_parking),
+      tiene_subsuelo: cleanBool(body.tiene_subsuelo),
+      tiene_ascensores: cleanBool(body.tiene_ascensores),
+      tiene_escaleras: cleanBool(body.tiene_escaleras),
+      tiene_vidrios_altos: cleanBool(body.tiene_vidrios_altos),
+      tipos_suelo: cleanTextArray(body.tipos_suelo),
+      horario_operacion: cleanStr(body.horario_operacion),
+      restricciones_acceso: cleanStr(body.restricciones_acceso),
+      zonas_criticas: cleanStr(body.zonas_criticas),
+      requerimientos_especiales: cleanStr(body.requerimientos_especiales),
+      notas_instalacion: cleanStr(body.notas_instalacion),
+      installation_details_json: cleanJsonObject(body.installation_details_json),
+      visita_scheduled_at: cleanDateToISO(body.visita_scheduled_at),
       website: cleanStr(body.website),
       instagram: cleanStr(body.instagram),
       direccion: cleanStr(body.direccion),
