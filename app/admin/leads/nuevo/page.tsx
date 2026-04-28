@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import RubroSelect from "@/app/admin/empresas/RubroSelect";
 
 type LeadCreatePayload = {
   nombre: string;
@@ -14,6 +15,11 @@ type LeadCreatePayload = {
   pipeline: string | null;
   notas: string | null;
   comercial_id: string | null;
+  rubro_id: string | null;
+  cantidad_personal: number | null;
+  superficie_m2: number | null;
+  direccion: string | null;
+  visita_scheduled_at: string | null;
 };
 
 type Lead = LeadCreatePayload & {
@@ -43,6 +49,20 @@ function norm(v: string): string | null {
   return s.length ? s : null;
 }
 
+function normNumber(v: string): number | null {
+  const s = (v ?? "").trim();
+  if (!s.length) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normDateTimeLocal(v: string): string | null {
+  const s = (v ?? "").trim();
+  if (!s.length) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
+
 export default function NuevoLeadPage() {
   const router = useRouter();
 
@@ -58,6 +78,11 @@ export default function NuevoLeadPage() {
   const [notas, setNotas] = useState("");
   const [comercialId, setComercialId] = useState<string>("");
   const [comerciales, setComerciales] = useState<Comercial[]>([]);
+  const [rubroId, setRubroId] = useState<string | null>(null);
+  const [cantidadPersonal, setCantidadPersonal] = useState("");
+  const [superficieM2, setSuperficieM2] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [visitaScheduledAt, setVisitaScheduledAt] = useState("");
 
   const canSave = useMemo(() => {
     return nombre.trim().length > 0 && !saving;
@@ -68,7 +93,9 @@ export default function NuevoLeadPage() {
       try {
         const res = await fetch("/api/admin/comerciales", { cache: "no-store" });
         const json = (await res.json()) as ComercialesApiResponse;
-        setComerciales(Array.isArray(json?.data) ? json.data : []);
+        const rows = Array.isArray(json?.data) ? json.data : [];
+        setComerciales(rows);
+        if (rows.length === 1) setComercialId((current) => current || rows[0].id);
       } catch {
         setComerciales([]);
       }
@@ -83,6 +110,11 @@ export default function NuevoLeadPage() {
       return;
     }
 
+    if (!comercialId.trim()) {
+      setError("Seleccioná un comercial antes de guardar el lead.");
+      return;
+    }
+
     const payload: LeadCreatePayload = {
       nombre: nombre.trim(),
       contacto: norm(contacto),
@@ -91,7 +123,12 @@ export default function NuevoLeadPage() {
       origen: norm(origen),
       pipeline: norm(pipeline),
       notas: norm(notas),
-      comercial_id: comercialId.trim() || null,
+      comercial_id: comercialId.trim(),
+      rubro_id: rubroId,
+      cantidad_personal: normNumber(cantidadPersonal),
+      superficie_m2: normNumber(superficieM2),
+      direccion: norm(direccion),
+      visita_scheduled_at: normDateTimeLocal(visitaScheduledAt),
     };
 
     setSaving(true);
@@ -186,7 +223,7 @@ export default function NuevoLeadPage() {
           </div>
 
           <div className="rounded-xl border p-4">
-            <div className="text-xs font-semibold text-slate-600">Comercial</div>
+            <div className="text-xs font-semibold text-slate-600">Comercial *</div>
             <select
               value={comercialId}
               onChange={(e) => setComercialId(e.target.value)}
@@ -200,6 +237,60 @@ export default function NuevoLeadPage() {
                 </option>
               ))}
             </select>
+            <div className="mt-2 text-xs text-slate-500">
+              Obligatorio para guardar el lead.
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border p-4">
+          <h2 className="text-sm font-semibold text-slate-800">Datos Casalimpia</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Estos datos permiten preparar la visita, estimar alcance y avanzar hacia evaluación/costeo.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border p-4">
+              <div className="text-xs font-semibold text-slate-600">Rubro</div>
+              <div className="mt-2">
+                <RubroSelect
+                  value={rubroId}
+                  onChange={setRubroId}
+                  disabled={saving}
+                  placeholder="Seleccionar rubro…"
+                />
+              </div>
+            </div>
+
+            <Input
+              label="Cantidad de personal"
+              value={cantidadPersonal}
+              onChange={setCantidadPersonal}
+              disabled={saving}
+              type="number"
+              min="0"
+              step="1"
+            />
+
+            <Input
+              label="Superficie m²"
+              value={superficieM2}
+              onChange={setSuperficieM2}
+              disabled={saving}
+              type="number"
+              min="0"
+              step="0.01"
+            />
+
+            <Input label="Dirección" value={direccion} onChange={setDireccion} disabled={saving} />
+
+            <Input
+              label="Fecha de visita"
+              value={visitaScheduledAt}
+              onChange={setVisitaScheduledAt}
+              disabled={saving}
+              type="datetime-local"
+            />
           </div>
         </div>
 
@@ -216,19 +307,28 @@ function Input({
   value,
   onChange,
   disabled,
+  type = "text",
+  min,
+  step,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  type?: string;
+  min?: string;
+  step?: string;
 }) {
   return (
     <div className="rounded-xl border p-4">
       <div className="text-xs font-semibold text-slate-600">{label}</div>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        min={min}
+        step={step}
         className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 disabled:opacity-50"
       />
     </div>
