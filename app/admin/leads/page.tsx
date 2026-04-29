@@ -177,18 +177,11 @@ function NewLeadButton() {
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link
-                href={`/admin/leads87/${duplicateConflict.leadId}`}
+                href={`/admin/leads/${duplicateConflict.leadId}`}
                 onClick={() => setDuplicateConflict(null)}
                 className="inline-flex rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
               >
-                Abrir en LEADS87
-              </Link>
-              <Link
-                href={`/admin/leads/${duplicateConflict.leadId}`}
-                onClick={() => setDuplicateConflict(null)}
-                className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-              >
-                Ficha clásica
+                Abrir lead
               </Link>
               <button
                 type="button"
@@ -217,7 +210,7 @@ function NewLeadButton() {
               const convJson = await convRes.json().catch(() => ({}));
               const leadId = typeof convJson?.data?.lead_id === "string" ? convJson.data.lead_id.trim() : "";
               if (convRes.ok && leadId) {
-                router.push(`/admin/leads87/${leadId}`);
+                router.push(`/admin/leads/${leadId}`);
                 return;
               }
               if (convRes.status === 409 && leadId) {

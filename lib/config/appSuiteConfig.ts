@@ -8,7 +8,7 @@ export const APP_SUITE_CONFIG = {
       key: "leads",
       name: "Summer87 Leads",
       enabled: true,
-      href: "/admin/leads87",
+      href: "/admin/leads",
       description: "Motor de inteligencia comercial y propuestas",
     },
     copilot: {

@@ -656,9 +656,9 @@ const NEXT_STEP_CONFIG: Record<
     tab: "datos",
     section: "lead-data-base",
     generar: {
-      description: "Falta completar o validar información mínima del lead. Revisá datos clave (contacto, web, objetivos, audiencia) antes de continuar.",
+      description: "Falta completar o validar información mínima del prospecto. Revisá datos clave como contacto, teléfono, dirección, rubro/sector, superficie y visita antes de continuar.",
       cta: "Revisar datos del lead",
-      checklist: ["Verificar nombre, contacto y teléfono", "Completar web, objetivos y audiencia", "Confirmar vínculo con iniciativa si corresponde"],
+      checklist: ["Verificar nombre, contacto y teléfono", "Completar dirección, rubro/sector y datos de instalación", "Confirmar visita técnica si corresponde"],
     },
   },
   investigacion: {
@@ -962,6 +962,7 @@ export default function LeadDetailPage() {
   }, [tabFromUrl, visibleTabIds]);
   useEffect(() => {
     if (!sectionFromUrl || !activeTab) return;
+    if (sectionFromUrl === "lead-data-base") setInvestigacionOpen(true);
     const t = setTimeout(() => {
       const el = document.getElementById(sectionFromUrl);
       if (el) {
@@ -3720,9 +3721,10 @@ export default function LeadDetailPage() {
                                   {!isPresentacion ? (
                                     <button
                                       type="button"
-                                      onClick={() =>
-                                        router.push(`/admin/leads/${id}?tab=${display.tab}&section=${display.section}`)
-                                      }
+                                      onClick={() => {
+                                        if (display.section === "lead-data-base") setInvestigacionOpen(true);
+                                        router.push(`/admin/leads/${id}?tab=${display.tab}&section=${display.section}`);
+                                      }}
                                       className="rounded-xl border border-blue-300 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 shadow-sm"
                                     >
                                       {display.cta}
