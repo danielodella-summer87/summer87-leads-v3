@@ -343,10 +343,151 @@ function formatDateTime(iso?: string | null) {
   }
 }
 
-function getVisitaRelevamientoNotas(value?: Record<string, unknown> | null) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const notas = value.notas;
-  return typeof notas === "string" ? notas : "";
+type VisitaRelevamiento = {
+  nombre_contrato?: string;
+  tipo_servicio?: "permanente" | "especial" | "";
+  forma_pago?: string;
+  financiamiento?: string;
+  incluir_feriados?: boolean;
+  requerimientos_adicionales?: string;
+
+  superficie_m2?: string;
+  tipo_suelo?: string;
+  cantidad_puestos_trabajo?: string;
+  cantidad_basureros?: string;
+  area_cafeteria?: string;
+  material_escritorios?: string;
+
+  tiene_parking?: boolean;
+  tiene_subsuelo?: boolean;
+  tiene_ascensores?: boolean;
+  tiene_escaleras?: boolean;
+  tiene_vidrios_altos?: boolean;
+
+  dias_servicio?: string;
+  horarios?: string;
+  numero_operarios?: string;
+  horas_estimadas?: string;
+  supervision_requerida?: boolean;
+
+  tipo_epp?: string;
+  certificados_competencia?: string;
+  insumos_requeridos?: string;
+  montaje?: string;
+  maquinaria_necesaria?: string;
+
+  servicio_lavado_alfombras?: boolean;
+  servicio_limpieza_paneles?: boolean;
+  servicio_lavado_sillas?: boolean;
+  servicio_cisternas?: boolean;
+  servicio_fumigacion?: boolean;
+  servicio_desratizacion?: boolean;
+  servicio_jardineria?: boolean;
+  servicio_limpieza_vidrios?: boolean;
+  servicio_sanitizacion?: boolean;
+
+  observaciones?: string;
+  updated_at?: string;
+};
+
+const EMPTY_VISITA_RELEVAMIENTO: VisitaRelevamiento = {
+  nombre_contrato: "",
+  tipo_servicio: "",
+  forma_pago: "",
+  financiamiento: "",
+  incluir_feriados: false,
+  requerimientos_adicionales: "",
+  superficie_m2: "",
+  tipo_suelo: "",
+  cantidad_puestos_trabajo: "",
+  cantidad_basureros: "",
+  area_cafeteria: "",
+  material_escritorios: "",
+  tiene_parking: false,
+  tiene_subsuelo: false,
+  tiene_ascensores: false,
+  tiene_escaleras: false,
+  tiene_vidrios_altos: false,
+  dias_servicio: "",
+  horarios: "",
+  numero_operarios: "",
+  horas_estimadas: "",
+  supervision_requerida: false,
+  tipo_epp: "",
+  certificados_competencia: "",
+  insumos_requeridos: "",
+  montaje: "",
+  maquinaria_necesaria: "",
+  servicio_lavado_alfombras: false,
+  servicio_limpieza_paneles: false,
+  servicio_lavado_sillas: false,
+  servicio_cisternas: false,
+  servicio_fumigacion: false,
+  servicio_desratizacion: false,
+  servicio_jardineria: false,
+  servicio_limpieza_vidrios: false,
+  servicio_sanitizacion: false,
+  observaciones: "",
+  updated_at: "",
+};
+
+function visitaString(value: Record<string, unknown>, key: keyof VisitaRelevamiento) {
+  const raw = value[key];
+  return typeof raw === "string" ? raw : "";
+}
+
+function visitaBoolean(value: Record<string, unknown>, key: keyof VisitaRelevamiento) {
+  return value[key] === true;
+}
+
+function getVisitaRelevamiento(value?: Record<string, unknown> | null): VisitaRelevamiento {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...EMPTY_VISITA_RELEVAMIENTO };
+  }
+
+  const tipoServicio = visitaString(value, "tipo_servicio");
+  const observaciones = visitaString(value, "observaciones") || visitaString(value, "notas" as keyof VisitaRelevamiento);
+
+  return {
+    nombre_contrato: visitaString(value, "nombre_contrato"),
+    tipo_servicio: tipoServicio === "permanente" || tipoServicio === "especial" ? tipoServicio : "",
+    forma_pago: visitaString(value, "forma_pago"),
+    financiamiento: visitaString(value, "financiamiento"),
+    incluir_feriados: visitaBoolean(value, "incluir_feriados"),
+    requerimientos_adicionales: visitaString(value, "requerimientos_adicionales"),
+    superficie_m2: visitaString(value, "superficie_m2"),
+    tipo_suelo: visitaString(value, "tipo_suelo"),
+    cantidad_puestos_trabajo: visitaString(value, "cantidad_puestos_trabajo"),
+    cantidad_basureros: visitaString(value, "cantidad_basureros"),
+    area_cafeteria: visitaString(value, "area_cafeteria"),
+    material_escritorios: visitaString(value, "material_escritorios"),
+    tiene_parking: visitaBoolean(value, "tiene_parking"),
+    tiene_subsuelo: visitaBoolean(value, "tiene_subsuelo"),
+    tiene_ascensores: visitaBoolean(value, "tiene_ascensores"),
+    tiene_escaleras: visitaBoolean(value, "tiene_escaleras"),
+    tiene_vidrios_altos: visitaBoolean(value, "tiene_vidrios_altos"),
+    dias_servicio: visitaString(value, "dias_servicio"),
+    horarios: visitaString(value, "horarios"),
+    numero_operarios: visitaString(value, "numero_operarios"),
+    horas_estimadas: visitaString(value, "horas_estimadas"),
+    supervision_requerida: visitaBoolean(value, "supervision_requerida"),
+    tipo_epp: visitaString(value, "tipo_epp"),
+    certificados_competencia: visitaString(value, "certificados_competencia"),
+    insumos_requeridos: visitaString(value, "insumos_requeridos"),
+    montaje: visitaString(value, "montaje"),
+    maquinaria_necesaria: visitaString(value, "maquinaria_necesaria"),
+    servicio_lavado_alfombras: visitaBoolean(value, "servicio_lavado_alfombras"),
+    servicio_limpieza_paneles: visitaBoolean(value, "servicio_limpieza_paneles"),
+    servicio_lavado_sillas: visitaBoolean(value, "servicio_lavado_sillas"),
+    servicio_cisternas: visitaBoolean(value, "servicio_cisternas"),
+    servicio_fumigacion: visitaBoolean(value, "servicio_fumigacion"),
+    servicio_desratizacion: visitaBoolean(value, "servicio_desratizacion"),
+    servicio_jardineria: visitaBoolean(value, "servicio_jardineria"),
+    servicio_limpieza_vidrios: visitaBoolean(value, "servicio_limpieza_vidrios"),
+    servicio_sanitizacion: visitaBoolean(value, "servicio_sanitizacion"),
+    observaciones,
+    updated_at: visitaString(value, "updated_at"),
+  };
 }
 
 function bytes(n?: number | null) {
@@ -505,7 +646,7 @@ const NEXT_STEP_CONFIG: Record<
     tab: "datos",
     section: "lead-data-base",
     generar: {
-      description: "Completá los datos mínimos del lead (contacto, web, objetivos, audiencia) para poder avanzar con el análisis comercial.",
+      description: "Completá los datos mínimos del lead (contacto, instalación, objetivo y requerimientos) para poder avanzar con la evaluación.",
       cta: "Ir a completar datos",
       checklist: ["Verificar nombre, contacto y teléfono", "Completar web, objetivos y audiencia", "Confirmar vínculo con iniciativa si corresponde"],
     },
@@ -521,18 +662,18 @@ const NEXT_STEP_CONFIG: Record<
     },
   },
   investigacion: {
-    label: "Investigación / Análisis interno",
+    label: "Preparación de visita",
     tab: "comercial",
     section: "ia-report-block",
     generar: {
-      description: "Aún no hay investigación digital ni análisis interno generado. Generá el análisis comercial con IA para construir la base necesaria antes del diagnóstico.",
-      cta: "Generar análisis comercial",
-      checklist: ["Ejecutar análisis IA del lead", "Revisar presencia digital y contexto", "Validar la base antes de generar el diagnóstico"],
+      description: "Aún no está preparada la visita. Prepará el checklist de visita para construir la base necesaria antes de la evaluación.",
+      cta: "Preparar visita",
+      checklist: ["Preparar checklist de visita", "Revisar datos del prospecto y características de la instalación", "Validar información mínima antes de la evaluación"],
     },
     revisar: {
-      description: "Ya existe una base de investigación digital generada. Revisá el análisis interno del lead para validar la información antes de avanzar a la evaluación de necesidades.",
-      cta: "Revisar investigación",
-      checklist: ["Abrir el informe en el tab Comercial", "Validar oportunidades y contexto", "Confirmar que la base está lista para el diagnóstico"],
+      description: "Ya existe una base preparada para la visita. Revisá la información del lead antes de avanzar a la evaluación de necesidades.",
+      cta: "Revisar preparación",
+      checklist: ["Abrir el informe en el tab Comercial", "Validar oportunidades y contexto", "Confirmar que la base está lista para la evaluación"],
     },
   },
   diagnostico: {
@@ -540,14 +681,14 @@ const NEXT_STEP_CONFIG: Record<
     tab: "comercial",
     section: "ia-report-block",
     generar: {
-      description: "Generá el diagnóstico estratégico del lead (FODA, oportunidades, visión) desde el informe IA. Es el documento consultivo del Paso 2 del proceso comercial.",
-      cta: "Generar diagnóstico",
-      checklist: ["Generar módulos clave del informe IA", "Revisar oportunidades y riesgos detectados", "Validar que el diagnóstico sea coherente con el lead"],
+      description: "Generá la evaluación de necesidades del lead desde el informe IA. Es el documento consultivo del Paso 2 del proceso comercial.",
+      cta: "Generar evaluación",
+      checklist: ["Generar módulos clave del informe IA", "Revisar oportunidades y riesgos detectados", "Validar que la evaluación sea coherente con el lead"],
     },
     revisar: {
       description: "La evaluación de necesidades ya fue generada. Revisala y validala antes de continuar con la visión estratégica.",
-      cta: "Revisar diagnóstico",
-      checklist: ["Abrir el documento de diagnóstico", "Validar oportunidades y riesgos", "Confirmar antes de pasar a estrategia"],
+      cta: "Revisar evaluación",
+      checklist: ["Abrir el documento de evaluación", "Validar oportunidades y riesgos", "Confirmar antes de pasar a estrategia"],
     },
   },
   acciones: {
@@ -600,7 +741,7 @@ const NEXT_STEP_CONFIG: Record<
     tab: "consultor",
     section: "proposal-export",
     generar: {
-      description: "Generá o abrí la presentación final para compartir con el cliente. Confirmá que diagnóstico, estrategia y propuesta estén listos.",
+      description: "Generá o abrí la presentación final para compartir con el cliente. Confirmá que evaluación, estrategia y propuesta estén listas.",
       cta: "Generar presentación comercial",
       checklist: ["Revisar la estructura económica confirmada", "Generar la presentación final en Gamma o PDF", "Dejar el material listo para compartir"],
     },
@@ -754,7 +895,7 @@ export default function LeadDetailPage() {
   const [estadoComercialOpen, setEstadoComercialOpen] = useState(false);
   const [datosLeadOpen, setDatosLeadOpen] = useState(false);
   const [investigacionOpen, setInvestigacionOpen] = useState(false);
-  const [visitaNotas, setVisitaNotas] = useState("");
+  const [visitaRelevamiento, setVisitaRelevamiento] = useState<VisitaRelevamiento>(EMPTY_VISITA_RELEVAMIENTO);
   const [visitaSaving, setVisitaSaving] = useState(false);
   const [linkedinInitBusy, setLinkedinInitBusy] = useState(false);
   const linkedInModule = useModuleReadiness("leads_linkedin_personal");
@@ -1198,12 +1339,12 @@ export default function LeadDetailPage() {
         },
         2: {
           title: "Paso 2 — Evaluación de necesidades",
-          description: "El análisis ya está listo. Aquí generás el documento consultivo del diagnóstico para presentar al lead.",
+          description: "El análisis ya está listo. Aquí generás la evaluación de necesidades para presentar al lead.",
           nextStep: "Paso 3 — Estrategia de crecimiento",
         },
         3: {
           title: "Paso 3 — Estrategia de crecimiento",
-          description: "Generá la visión estratégica que conecta el diagnóstico con el plan de crecimiento.",
+          description: "Generá la visión estratégica que conecta la evaluación con el plan de crecimiento.",
           nextStep: "Paso 4 — Estructura de servicios",
         },
       };
@@ -1591,7 +1732,7 @@ export default function LeadDetailPage() {
       "alta",
       {
         diagnostico:
-          "En el informe aparecen prioridades sobre redes, contenido o presencia digital (Instagram, Facebook u otras comunidades).",
+          "En el informe aparecen prioridades sobre canales de contacto, contenido o comunicación con el prospecto.",
         implicancia:
           "Sin calendario y mensajes alineados a la marca, el alcance rara vez se traduce en consultas o ventas medibles.",
         impacto:
@@ -1622,7 +1763,7 @@ export default function LeadDetailPage() {
         diagnostico:
           "Las acciones del informe señalan mejorar sitio, landing o conversión; no asumen que la web ya está resuelta.",
         implicancia:
-          "Sin una base digital clara y orientada a cierre, marketing y ventas no comparten un destino único para medir y convertir.",
+          "Sin una base clara y orientada a cierre, el seguimiento comercial pierde un destino único para medir y convertir.",
         impacto:
           "Este servicio entrega una base para captar, medir y cerrar con menos fricción desde el sitio.",
       };
@@ -1787,7 +1928,7 @@ export default function LeadDetailPage() {
     if (matchesService(service, ["auditoria", "diagnostico", "consultoria", "estrategia", "growth"])) {
       return {
         why: "Este servicio ayuda a ordenar prioridades, detectar oportunidades y definir un camino más claro antes de invertir tiempo o presupuesto en acciones aisladas.",
-        outcome: "Genera claridad estratégica, reduce improvisación y permite que las siguientes decisiones comerciales o de marketing tengan más dirección.",
+        outcome: "Genera claridad estratégica, reduce improvisación y permite que las siguientes decisiones comerciales tengan más dirección.",
         howToSell: "Se puede vender como una instancia de orden y visión, ideal para transformar intuiciones en una hoja de ruta concreta con foco en resultados.",
       };
     }
@@ -1850,7 +1991,7 @@ export default function LeadDetailPage() {
 
     if (!signals.hasWebsite) {
       add(["web", "landing", "sitio", "pagina"], "alta", {
-        diagnostico: "En la ficha no hay URL de sitio web o presencia digital clara para el negocio.",
+        diagnostico: "En la ficha no hay URL de sitio web o contexto claro del negocio.",
         implicancia:
           "Sin un destino único, las campañas, redes y contactos comerciales no tienen dónde medir interés ni conversión.",
         impacto: "Crea una base visible y profesional para canalizar tráfico, credibilidad y pedidos de contacto.",
@@ -1860,7 +2001,7 @@ export default function LeadDetailPage() {
       add(["auditoria", "diagnostico", "consultoria"], "alta", {
         diagnostico: "Hay web cargada pero aún no hay informe IA completo que priorice gaps y próximos pasos.",
         implicancia:
-          "Proponer tácticas sin diagnóstico suele generar propuestas genéricas y difíciles de defender con el cliente.",
+          "Proponer tácticas sin evaluación suele generar propuestas genéricas y difíciles de defender con el cliente.",
         impacto: "Una auditoría o consultoría inicial ordena prioridades y evita invertir primero en lo que menos mueve la aguja.",
       });
     }
@@ -1892,7 +2033,7 @@ export default function LeadDetailPage() {
       add(["consultoria", "implementacion", "automatizacion"], "alta", {
         diagnostico: "El lead ya tiene informe IA y la propuesta aún no tiene líneas de servicio cargadas.",
         implicancia:
-          "El diagnóstico solo cobra valor cuando se traduce en alcance, entregables y priorización con presupuesto.",
+          "La evaluación solo cobra valor cuando se traduce en alcance, entregables y priorización con presupuesto.",
         impacto: "Permite pasar de lectura a ejecución con plan, priorización y alcance acordado con el cliente.",
       });
     }
@@ -2386,7 +2527,7 @@ export default function LeadDetailPage() {
         };
       });
       
-      // Si hay advertencia (ej: error al crear socio), mostrarla pero no fallar
+      // Si hay advertencia (ej: error al crear cliente), mostrarla pero no fallar
       if (json?.warning) {
         setError(json.warning);
       } else {
@@ -2401,8 +2542,12 @@ export default function LeadDetailPage() {
   }
 
   useEffect(() => {
-    setVisitaNotas(getVisitaRelevamientoNotas(lead?.visita_relevamiento_json ?? null));
+    setVisitaRelevamiento(getVisitaRelevamiento(lead?.visita_relevamiento_json ?? null));
   }, [lead?.id, lead?.visita_relevamiento_json]);
+
+  function updateVisitaRelevamiento<K extends keyof VisitaRelevamiento>(key: K, value: VisitaRelevamiento[K]) {
+    setVisitaRelevamiento((prev) => ({ ...prev, [key]: value }));
+  }
 
   async function saveVisitaRelevamiento(markCompleted: boolean) {
     if (!id || !lead) return;
@@ -2410,9 +2555,9 @@ export default function LeadDetailPage() {
     const updatedAt = new Date().toISOString();
     const payload: PatchPayload = {
       visita_relevamiento_json: {
-        notas: visitaNotas,
+        ...visitaRelevamiento,
         updated_at: updatedAt,
-      },
+      } as Record<string, unknown>,
     };
 
     if (markCompleted && !lead.visita_completed_at) {
@@ -2671,9 +2816,7 @@ export default function LeadDetailPage() {
   async function convertToMember() {
     if (!id || !lead) return;
 
-    const ok = window.confirm(
-      `¿Convertir este lead en ${labels.memberSingular.toLowerCase()}? Se creará un registro en la tabla de ${labels.memberPlural.toLowerCase()}.`
-    );
+    const ok = window.confirm("¿Convertir este lead en cliente? Se registrará como cliente para continuar el cierre.");
     if (!ok) return;
 
     setError(null);
@@ -2682,7 +2825,7 @@ export default function LeadDetailPage() {
       // Primero guardar el draft pendiente
       await saveDraft();
 
-      // Luego convertir a socio
+      // Luego convertir a cliente
       const res = await fetch(`/api/admin/leads/${id}/convert-to-member`, {
         method: "POST",
         cache: "no-store",
@@ -2690,12 +2833,12 @@ export default function LeadDetailPage() {
       });
 
       const json = (await res.json()) as ApiResp<any>;
-      if (!res.ok) throw new Error(json?.error ?? "Error convirtiendo a socio");
+      if (!res.ok) throw new Error(json?.error ?? "Error convirtiendo a cliente");
 
-      flash("Lead convertido en socio correctamente.");
+      flash("Lead convertido en cliente correctamente.");
       await fetchLead();
     } catch (e: any) {
-      setError(e?.message ?? "Error convirtiendo a socio");
+      setError(e?.message ?? "Error convirtiendo a cliente");
     } finally {
       setMutating(false);
     }
@@ -3164,7 +3307,7 @@ export default function LeadDetailPage() {
             {lead?.is_member && (
               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                {labels.memberSingular}
+                Cliente
                 {lead.member_since && (
                   <span className="text-emerald-600">
                     desde {new Date(lead.member_since).toLocaleDateString("es-UY", { year: "numeric", month: "short", day: "numeric" })}
@@ -3348,16 +3491,16 @@ export default function LeadDetailPage() {
                 )}
               </div>
 
-              {!lead?.is_member ? (
+              {!lead?.is_member && currentStep >= 6 ? (
                 <div className="flex shrink-0 items-center border-t border-slate-100 pt-3 sm:border-t-0 sm:border-l sm:border-slate-200 sm:pt-0 sm:pl-4">
                   <button
                     type="button"
                     onClick={convertToMember}
                     className="w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50 transition sm:w-auto"
                     disabled={disabled || !lead}
-                    title={`Convertir este lead en ${labels.memberSingular.toLowerCase()}`}
+                    title="Convertir este lead en cliente"
                   >
-                    Convertir en {labels.memberSingular.toLowerCase()}
+                    Convertir en cliente
                   </button>
                 </div>
               ) : null}
@@ -3712,7 +3855,7 @@ export default function LeadDetailPage() {
           {/* Contenido de Tabs */}
           {activeTab === "datos" && (
             <div id="lead-data-base" className="mt-5 grid grid-cols-1 gap-4">
-              {/* Investigación Digital */}
+              {/* Datos del prospecto e instalación */}
               <div className="rounded-2xl border bg-white">
                 <div
                   role="button"
@@ -3722,7 +3865,7 @@ export default function LeadDetailPage() {
                   className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-900 flex items-center gap-2"
                 >
                   <span className="text-slate-500">{investigacionOpen ? "▼" : "▶"}</span>
-                  Investigación Digital
+                  Datos del prospecto e instalación
                 </div>
                 {investigacionOpen && (
                 <div className="p-4">
@@ -4132,7 +4275,7 @@ export default function LeadDetailPage() {
                         onChange={(e) => setDraft((p) => ({ ...p, objetivos: e.target.value }))}
                         className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                         rows={3}
-                        placeholder="Ej: Abrir mercado USA, conseguir distribuidores, networking, visibilidad..."
+                        placeholder="Ej: tipo de servicio requerido, horarios, instalación, necesidades operativas..."
                       />
                     ) : (
                       <div className="mt-1 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap">
@@ -4142,7 +4285,7 @@ export default function LeadDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-500">¿Ya es cliente de la Agencia?</div>
+                    <div className="text-xs text-slate-500">¿Ya es cliente de Casalimpia?</div>
                     {editing ? (
                       <textarea
                         value={(draft.audiencia as any) ?? ""}
@@ -4280,19 +4423,363 @@ export default function LeadDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="text-xs font-semibold text-slate-500" htmlFor="visita-relevamiento-notas">
-                    Notas de relevamiento de visita
-                  </label>
-                  <textarea
-                    id="visita-relevamiento-notas"
-                    value={visitaNotas}
-                    onChange={(e) => setVisitaNotas(e.target.value)}
-                    className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                    rows={4}
-                    placeholder="Notas relevadas en la visita..."
-                    disabled={visitaSaving || mutating}
-                  />
+                <div className="mt-4 grid grid-cols-1 gap-4">
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Datos generales del contrato</h3>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-nombre-contrato">
+                          Nombre del contrato
+                        </label>
+                        <input
+                          id="visita-nombre-contrato"
+                          value={visitaRelevamiento.nombre_contrato ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("nombre_contrato", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-tipo-servicio">
+                          Tipo de servicio
+                        </label>
+                        <select
+                          id="visita-tipo-servicio"
+                          value={visitaRelevamiento.tipo_servicio ?? ""}
+                          onChange={(e) =>
+                            updateVisitaRelevamiento(
+                              "tipo_servicio",
+                              e.target.value === "permanente" || e.target.value === "especial" ? e.target.value : ""
+                            )
+                          }
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        >
+                          <option value="">Seleccionar</option>
+                          <option value="permanente">Permanente</option>
+                          <option value="especial">Especial</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-forma-pago">
+                          Forma de pago
+                        </label>
+                        <input
+                          id="visita-forma-pago"
+                          value={visitaRelevamiento.forma_pago ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("forma_pago", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-financiamiento">
+                          Financiamiento
+                        </label>
+                        <input
+                          id="visita-financiamiento"
+                          value={visitaRelevamiento.financiamiento ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("financiamiento", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(visitaRelevamiento.incluir_feriados)}
+                          onChange={(e) => updateVisitaRelevamiento("incluir_feriados", e.target.checked)}
+                          disabled={visitaSaving || mutating}
+                        />
+                        Incluir feriados
+                      </label>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-requerimientos">
+                          Requerimientos adicionales
+                        </label>
+                        <textarea
+                          id="visita-requerimientos"
+                          value={visitaRelevamiento.requerimientos_adicionales ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("requerimientos_adicionales", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          rows={3}
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Características de la instalación</h3>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-superficie">
+                          Superficie o m²
+                        </label>
+                        <input
+                          id="visita-superficie"
+                          inputMode="decimal"
+                          value={visitaRelevamiento.superficie_m2 ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("superficie_m2", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-tipo-suelo">
+                          Tipo de suelo
+                        </label>
+                        <input
+                          id="visita-tipo-suelo"
+                          value={visitaRelevamiento.tipo_suelo ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("tipo_suelo", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-puestos">
+                          Puestos de trabajo
+                        </label>
+                        <input
+                          id="visita-puestos"
+                          inputMode="numeric"
+                          value={visitaRelevamiento.cantidad_puestos_trabajo ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("cantidad_puestos_trabajo", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-basureros">
+                          Cantidad de basureros
+                        </label>
+                        <input
+                          id="visita-basureros"
+                          inputMode="numeric"
+                          value={visitaRelevamiento.cantidad_basureros ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("cantidad_basureros", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-cafeteria">
+                          Área de cafetería
+                        </label>
+                        <input
+                          id="visita-cafeteria"
+                          value={visitaRelevamiento.area_cafeteria ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("area_cafeteria", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-escritorios">
+                          Material de escritorios / mesas
+                        </label>
+                        <input
+                          id="visita-escritorios"
+                          value={visitaRelevamiento.material_escritorios ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("material_escritorios", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {([
+                        ["tiene_parking", "Parking"],
+                        ["tiene_subsuelo", "Subsuelo"],
+                        ["tiene_ascensores", "Ascensores"],
+                        ["tiene_escaleras", "Escaleras"],
+                        ["tiene_vidrios_altos", "Vidrios altos"],
+                      ] as const).map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(visitaRelevamiento[key])}
+                            onChange={(e) => updateVisitaRelevamiento(key, e.target.checked)}
+                            disabled={visitaSaving || mutating}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Personal requerido</h3>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-dias">
+                          Días de servicio
+                        </label>
+                        <input
+                          id="visita-dias"
+                          value={visitaRelevamiento.dias_servicio ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("dias_servicio", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          placeholder="Ej: lunes a viernes"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-horarios">
+                          Horarios
+                        </label>
+                        <input
+                          id="visita-horarios"
+                          value={visitaRelevamiento.horarios ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("horarios", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-operarios">
+                          Número de operarios
+                        </label>
+                        <input
+                          id="visita-operarios"
+                          inputMode="numeric"
+                          value={visitaRelevamiento.numero_operarios ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("numero_operarios", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-horas">
+                          Horas estimadas
+                        </label>
+                        <input
+                          id="visita-horas"
+                          value={visitaRelevamiento.horas_estimadas ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("horas_estimadas", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(visitaRelevamiento.supervision_requerida)}
+                          onChange={(e) => updateVisitaRelevamiento("supervision_requerida", e.target.checked)}
+                          disabled={visitaSaving || mutating}
+                        />
+                        Supervisión requerida
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Insumos, EPP y maquinaria</h3>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-epp">
+                          Tipo de EPP
+                        </label>
+                        <input
+                          id="visita-epp"
+                          value={visitaRelevamiento.tipo_epp ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("tipo_epp", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-certificados">
+                          Certificados de competencia
+                        </label>
+                        <input
+                          id="visita-certificados"
+                          value={visitaRelevamiento.certificados_competencia ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("certificados_competencia", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-insumos">
+                          Insumos requeridos
+                        </label>
+                        <textarea
+                          id="visita-insumos"
+                          value={visitaRelevamiento.insumos_requeridos ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("insumos_requeridos", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          rows={3}
+                          placeholder="Presentación y cantidad"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-montaje">
+                          Montaje
+                        </label>
+                        <input
+                          id="visita-montaje"
+                          value={visitaRelevamiento.montaje ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("montaje", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500" htmlFor="visita-maquinaria">
+                          Maquinaria necesaria
+                        </label>
+                        <input
+                          id="visita-maquinaria"
+                          value={visitaRelevamiento.maquinaria_necesaria ?? ""}
+                          onChange={(e) => updateVisitaRelevamiento("maquinaria_necesaria", e.target.value)}
+                          className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                          disabled={visitaSaving || mutating}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Servicios especiales</h3>
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {([
+                        ["servicio_lavado_alfombras", "Lavado de alfombras"],
+                        ["servicio_limpieza_paneles", "Limpieza de paneles"],
+                        ["servicio_lavado_sillas", "Lavado de sillas"],
+                        ["servicio_cisternas", "Cisternas"],
+                        ["servicio_fumigacion", "Fumigación"],
+                        ["servicio_desratizacion", "Desratización"],
+                        ["servicio_jardineria", "Jardinería"],
+                        ["servicio_limpieza_vidrios", "Limpieza de vidrios"],
+                        ["servicio_sanitizacion", "Sanitización"],
+                      ] as const).map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(visitaRelevamiento[key])}
+                            onChange={(e) => updateVisitaRelevamiento(key, e.target.checked)}
+                            disabled={visitaSaving || mutating}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Observaciones finales</h3>
+                    <textarea
+                      value={visitaRelevamiento.observaciones ?? ""}
+                      onChange={(e) => updateVisitaRelevamiento("observaciones", e.target.value)}
+                      className="mt-3 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                      rows={4}
+                      placeholder="Registrar observaciones del levantamiento en sitio."
+                      disabled={visitaSaving || mutating}
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -4300,20 +4787,30 @@ export default function LeadDetailPage() {
                     <button
                       type="button"
                       onClick={() => saveVisitaRelevamiento(false)}
-                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
                       disabled={visitaSaving || mutating}
                     >
                       {visitaSaving ? "Guardando..." : "Actualizar relevamiento"}
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => saveVisitaRelevamiento(true)}
-                      className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
-                      disabled={visitaSaving || mutating}
-                    >
-                      {visitaSaving ? "Guardando..." : "Marcar visita como realizada"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => saveVisitaRelevamiento(false)}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        disabled={visitaSaving || mutating}
+                      >
+                        {visitaSaving ? "Guardando..." : "Guardar relevamiento"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveVisitaRelevamiento(true)}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                        disabled={visitaSaving || mutating}
+                      >
+                        {visitaSaving ? "Guardando..." : "Marcar visita como realizada"}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -4324,7 +4821,7 @@ export default function LeadDetailPage() {
                   <h2 className="text-xl font-semibold text-slate-900 inline-block cursor-help">Proceso comercial</h2>
                 </Tooltip>
                 <p className="mt-1 text-sm text-slate-600">
-                  Seis pasos para llevar el lead desde el análisis interno hasta la presentación final para el cliente.
+                  Seis pasos para llevar el lead desde la preparación de visita hasta la presentación final para el cliente.
                 </p>
                 {commercialDocError && (
                   <p className="mt-2 text-sm text-red-600 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
@@ -4358,9 +4855,9 @@ export default function LeadDetailPage() {
                 {/* BLOQUE 1 — Tarjetas de pasos 1–6 */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {([
-                    { n: 1, label: "Análisis", tip: "Análisis del lead con IA. Entrada: datos del lead. Salida: informe interno que alimenta diagnóstico y estrategia." },
-                    { n: 2, label: "Diagnóstico", tip: "Documento consultivo del diagnóstico. Usa el análisis interno. Salida: diagnóstico listo para presentar al lead." },
-                    { n: 3, label: "Estrategia", tip: "Visión estratégica de crecimiento. Usa el diagnóstico. Salida: documento de estrategia o confirmación en LEADS87." },
+                    { n: 1, label: "Preparación", tip: "Preparación del lead con IA. Entrada: datos del lead. Salida: informe interno que alimenta evaluación y estrategia." },
+                    { n: 2, label: "Evaluación", tip: "Documento consultivo de evaluación. Usa el análisis interno. Salida: evaluación lista para presentar al lead." },
+                    { n: 3, label: "Estrategia", tip: "Visión estratégica de crecimiento. Usa la evaluación. Salida: documento de estrategia o confirmación en LEADS87." },
                     { n: 4, label: "Estructura", tip: "Estructura de servicios y costos. Se define en Consultor. Base económica de la propuesta." },
                     { n: 5, label: "Propuesta final", tip: "Propuesta comercial y documento final para el cliente. Revisar, compartir y marcar envío." },
                     {
@@ -4404,9 +4901,9 @@ export default function LeadDetailPage() {
                   <p className="mt-0.5 text-sm text-slate-600">{nextStepConfig.description}</p>
                   <p className="mt-2 text-xs font-medium text-slate-500">
                     Qué obtiene:{" "}
-                    {currentStep === 1 && "Informe interno del lead que servirá de base para diagnóstico y estrategia."}
-                    {currentStep === 2 && "Documento consultivo del diagnóstico listo para presentar al lead."}
-                    {currentStep === 3 && "Documento de visión estratégica que conecta diagnóstico con el plan de crecimiento."}
+                    {currentStep === 1 && "Informe interno del lead que servirá de base para evaluación y estrategia."}
+                    {currentStep === 2 && "Documento consultivo de evaluación listo para presentar al lead."}
+                    {currentStep === 3 && "Documento de visión estratégica que conecta evaluación con el plan de crecimiento."}
                     {currentStep === 4 && "Tabla de servicios, alcance y costos definida en Consultor (base de la propuesta)."}
                     {currentStep === 5 && "Documento final para compartir con el cliente, descargar PDF y marcar como enviada."}
                     {currentStep === 6 &&
@@ -4427,7 +4924,7 @@ export default function LeadDetailPage() {
                       </Tooltip>
                     )}
                     {currentStep === 2 && (
-                      <Tooltip content="Genera el documento comercial del Paso 2. Este archivo presenta el diagnóstico consultivo del lead de forma clara y profesional." maxWidth="300px">
+                      <Tooltip content="Genera el documento comercial del Paso 2. Este archivo presenta la evaluación de necesidades del lead de forma clara y profesional." maxWidth="300px">
                         <span className="inline-block">
                           <button
                             type="button"
@@ -4441,7 +4938,7 @@ export default function LeadDetailPage() {
                       </Tooltip>
                     )}
                     {currentStep === 3 && (
-                      <Tooltip content="Genera el documento de estrategia de crecimiento a partir del diagnóstico y la información disponible del lead." maxWidth="300px">
+                      <Tooltip content="Genera el documento de estrategia de crecimiento a partir de la evaluación y la información disponible del lead." maxWidth="300px">
                         <span className="inline-block">
                           <button
                             type="button"
@@ -4542,7 +5039,7 @@ export default function LeadDetailPage() {
                     <p className="text-xs font-semibold text-slate-600">Después de esto sigue</p>
                     <p className="mt-0.5 text-sm text-slate-700">
                       {currentStep === 1 && "Paso 2: Evaluación de necesidades — relevamiento técnico y operativo para preparar servicios y costeo."}
-                      {currentStep === 2 && "Paso 3: Estrategia de crecimiento — visión estratégica que conecta diagnóstico con el plan."}
+                      {currentStep === 2 && "Paso 3: Estrategia de crecimiento — visión estratégica que conecta evaluación con el plan."}
                       {currentStep === 3 && "Paso 4: Estructura de servicios — tabla de servicios y costos en el tab Consultor."}
                       {currentStep === 4 && "Paso 5: Propuesta final para cliente — documento integral, compartir y marcar envío."}
                       {currentStep === 5 && "Paso 6: Presentación comercial — generá y archivá la presentación en LEADS87 (recomendado)."}
@@ -4625,7 +5122,7 @@ export default function LeadDetailPage() {
                 {/* BLOQUE 4 — Herramientas avanzadas (colapsado por defecto) */}
                 <details className="mt-6 rounded-lg border border-slate-200 bg-slate-50/50">
                   <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
-                    <Tooltip content="Abre herramientas por paso: informe IA, diagnóstico, estrategia, exportación PDF, copiar texto, prompt en uso y acciones secundarias." maxWidth="320px">
+                    <Tooltip content="Abre herramientas por paso: informe IA, evaluación, estrategia, exportación PDF, copiar texto, prompt en uso y acciones secundarias." maxWidth="320px">
                       <span className="inline-block">▼ Ver herramientas avanzadas de este flujo</span>
                     </Tooltip>
                   </summary>
@@ -4658,7 +5155,7 @@ export default function LeadDetailPage() {
                           onPresentationSignalChange={(signals) => setPresentationSignals((prev) => ({ ...prev, ...signals }))}
                           titleLabel="Análisis interno del lead (IA)"
                           subtitleLabel="Este análisis interno genera la base técnica y estratégica que alimenta la evaluación de necesidades."
-                          buttonHelperText="Usa IA para analizar el lead, detectar oportunidades y preparar el contenido base del diagnóstico."
+                          buttonHelperText="Usa IA para analizar el lead, detectar oportunidades y preparar el contenido base de la evaluación."
                           buttonTooltipContent="Ejecuta el análisis interno con IA. Este proceso no reemplaza la evaluación de necesidades: la prepara y la alimenta."
                         />
                       )}
@@ -4667,8 +5164,8 @@ export default function LeadDetailPage() {
                   </div>
                   <details className="rounded-lg border border-slate-200 bg-white">
                     <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                      <Tooltip content="Documentos de diagnóstico y visión estratégica (pasos 2 y 3). En todos: Ver, Descargar, Copiar." maxWidth="300px">
-                        <span className="inline-block">▼ Herramientas del Paso 2 y 3 — Diagnóstico y Estrategia</span>
+                      <Tooltip content="Documentos de evaluación y visión estratégica (pasos 2 y 3). En todos: Ver, Descargar, Copiar." maxWidth="300px">
+                        <span className="inline-block">▼ Herramientas del Paso 2 y 3 — Evaluación y Estrategia</span>
                       </Tooltip>
                     </summary>
                     <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-4">
@@ -4904,12 +5401,12 @@ export default function LeadDetailPage() {
               <div className="space-y-6">
                 {/* BLOQUE B — Informe comercial (documento interno CRM: ai_report). Generar/Regenerar → tab Comercial; Ver/Copiar cuando hay contenido; contenido colapsado por defecto. */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                  <h2 className="text-lg font-semibold text-slate-900">Informe comercial</h2>
+                  <h2 className="text-lg font-semibold text-slate-900">Informe de evaluación</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Documento de respaldo con análisis comercial, investigación digital, FODA, oportunidades, acciones y plan de avance.
+                    Documento de respaldo con evaluación del prospecto, características de la instalación, oportunidades, acciones y plan de avance.
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
-                    Incluye: investigación digital, redes, posicionamiento, competencia, FODA, oportunidades, acciones 72h, plan 30–90 días.
+                    Incluye: datos del prospecto, contexto operativo, instalación, oportunidades, acciones 72h y plan 30–90 días.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {id && (
@@ -4922,7 +5419,7 @@ export default function LeadDetailPage() {
                           }}
                           className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                         >
-                          {hasAnalysisInternal ? "Regenerar informe comercial" : "Generar informe comercial"}
+                          {hasAnalysisInternal ? "Regenerar informe de evaluación" : "Generar informe de evaluación"}
                         </button>
                       </Tooltip>
                     )}
@@ -4933,7 +5430,7 @@ export default function LeadDetailPage() {
                           onClick={() => setShowCommercialReport((v) => !v)}
                           className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                         >
-                          {showCommercialReport ? "Ocultar informe comercial" : "Ver informe comercial"}
+                          {showCommercialReport ? "Ocultar informe de evaluación" : "Ver informe de evaluación"}
                         </button>
                       </Tooltip>
                     )}
@@ -5124,7 +5621,7 @@ export default function LeadDetailPage() {
 
                 {id && (
                   <div>
-                    <Tooltip content="Lleva al tab Comercial para ver el proceso de 6 pasos: análisis, diagnóstico, estrategia, estructura, propuesta y presentación." maxWidth="300px">
+                    <Tooltip content="Lleva al tab Comercial para ver el proceso de 6 pasos: preparación, evaluación, estrategia, estructura, propuesta y presentación." maxWidth="300px">
                       <Link
                         href={`/admin/leads/${id}?tab=comercial&section=proceso-comercial`}
                         className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -5140,7 +5637,7 @@ export default function LeadDetailPage() {
               <div className="rounded-2xl border bg-white p-6">
                 <h2 className="text-lg font-semibold text-slate-900">Servicios sugeridos para este lead</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Recomendaciones iniciales construidas a partir del diagnóstico estratégico y de las acciones detectadas por la IA.
+                  Recomendaciones iniciales construidas a partir de la evaluación de necesidades y de las acciones detectadas por la IA.
                 </p>
                 {(() => {
                   const { sourceText } = getStrategicSourceText(lead);
@@ -5204,7 +5701,7 @@ export default function LeadDetailPage() {
                   )}
                 <h2 className="text-lg font-semibold text-slate-900">Propuesta Comercial Inteligente</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Seleccioná servicios del catálogo de la agencia, definí precio unitario y cantidad, organizá por mes y prepará la propuesta para este lead.
+                  Seleccioná servicios del catálogo, definí precio unitario y cantidad, organizá por mes y prepará la propuesta para este lead.
                 </p>
 
                 {servicesLoading && (
@@ -5584,7 +6081,7 @@ export default function LeadDetailPage() {
                     <>
                       <div className="mt-3 space-y-3 text-sm text-slate-700">
                         {groupServicesByPhase(leadServices).some((x) => x.phase === "Diagnóstico y Base") && (
-                          <p>La propuesta comienza con una fase de diagnóstico y base, orientada a ordenar la situación actual del lead, detectar oportunidades y preparar una estructura clara para avanzar.</p>
+                          <p>La propuesta comienza con una fase de evaluación y base, orientada a ordenar la situación actual del lead, detectar oportunidades y preparar una estructura clara para avanzar.</p>
                         )}
                         {groupServicesByPhase(leadServices).some((x) => x.phase === "Implementación") && (
                           <p>Luego se incorpora una fase de implementación, donde se ejecutan los activos, sistemas o acciones necesarias para transformar la estrategia en una operación concreta.</p>
