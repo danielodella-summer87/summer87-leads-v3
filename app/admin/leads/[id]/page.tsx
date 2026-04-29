@@ -116,6 +116,14 @@ type Lead = {
   presentation_doc_url?: string | null;
   strategy_approved_at?: string | null;
   commercial_strategy_json?: unknown;
+  visita_scheduled_at?: string | null;
+  visita_completed_at?: string | null;
+  visita_relevamiento_json?: Record<string, unknown> | null;
+  rubro_id?: string | null;
+  cantidad_personal?: number | null;
+  superficie_m2?: number | null;
+  direccion?: string | null;
+  notas_instalacion?: string | null;
 };
 
 type LeadApiResponse = {
@@ -145,6 +153,14 @@ type PatchPayload = Partial<
     | "comercial_id"
     | "score"
     | "score_categoria"
+    | "visita_scheduled_at"
+    | "visita_completed_at"
+    | "visita_relevamiento_json"
+    | "rubro_id"
+    | "cantidad_personal"
+    | "superficie_m2"
+    | "direccion"
+    | "notas_instalacion"
   >
 >;
 
@@ -325,6 +341,12 @@ function formatDateTime(iso?: string | null) {
   } catch {
     return d.toLocaleString();
   }
+}
+
+function getVisitaRelevamientoNotas(value?: Record<string, unknown> | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const notas = value.notas;
+  return typeof notas === "string" ? notas : "";
 }
 
 function bytes(n?: number | null) {
@@ -508,13 +530,13 @@ const NEXT_STEP_CONFIG: Record<
       checklist: ["Ejecutar análisis IA del lead", "Revisar presencia digital y contexto", "Validar la base antes de generar el diagnóstico"],
     },
     revisar: {
-      description: "Ya existe una base de investigación digital generada. Revisá el análisis interno del lead para validar la información antes de avanzar al diagnóstico comercial.",
+      description: "Ya existe una base de investigación digital generada. Revisá el análisis interno del lead para validar la información antes de avanzar a la evaluación de necesidades.",
       cta: "Revisar investigación",
       checklist: ["Abrir el informe en el tab Comercial", "Validar oportunidades y contexto", "Confirmar que la base está lista para el diagnóstico"],
     },
   },
   diagnostico: {
-    label: "Diagnóstico comercial",
+    label: "Evaluación de necesidades",
     tab: "comercial",
     section: "ia-report-block",
     generar: {
@@ -523,7 +545,7 @@ const NEXT_STEP_CONFIG: Record<
       checklist: ["Generar módulos clave del informe IA", "Revisar oportunidades y riesgos detectados", "Validar que el diagnóstico sea coherente con el lead"],
     },
     revisar: {
-      description: "El diagnóstico comercial ya fue generado. Revisalo y validalo antes de continuar con la visión estratégica.",
+      description: "La evaluación de necesidades ya fue generada. Revisala y validala antes de continuar con la visión estratégica.",
       cta: "Revisar diagnóstico",
       checklist: ["Abrir el documento de diagnóstico", "Validar oportunidades y riesgos", "Confirmar antes de pasar a estrategia"],
     },
@@ -732,6 +754,8 @@ export default function LeadDetailPage() {
   const [estadoComercialOpen, setEstadoComercialOpen] = useState(false);
   const [datosLeadOpen, setDatosLeadOpen] = useState(false);
   const [investigacionOpen, setInvestigacionOpen] = useState(false);
+  const [visitaNotas, setVisitaNotas] = useState("");
+  const [visitaSaving, setVisitaSaving] = useState(false);
   const [linkedinInitBusy, setLinkedinInitBusy] = useState(false);
   const linkedInModule = useModuleReadiness("leads_linkedin_personal");
 
@@ -1169,11 +1193,11 @@ export default function LeadDetailPage() {
       const config: Record<number, { title: string; description: string; nextStep: string }> = {
         1: {
           title: "Paso 1 — Análisis del lead",
-          description: "Generá el análisis interno con IA para detectar oportunidades y preparar la base del diagnóstico comercial.",
-          nextStep: "Paso 2 — Diagnóstico comercial",
+          description: "Generá el análisis interno con IA para detectar oportunidades y preparar la base de la evaluación de necesidades.",
+          nextStep: "Paso 2 — Evaluación de necesidades",
         },
         2: {
-          title: "Paso 2 — Diagnóstico comercial",
+          title: "Paso 2 — Evaluación de necesidades",
           description: "El análisis ya está listo. Aquí generás el documento consultivo del diagnóstico para presentar al lead.",
           nextStep: "Paso 3 — Estrategia de crecimiento",
         },
@@ -2373,6 +2397,33 @@ export default function LeadDetailPage() {
       throw e; // Re-lanzar para que el caller pueda manejar el error
     } finally {
       setMutating(false);
+    }
+  }
+
+  useEffect(() => {
+    setVisitaNotas(getVisitaRelevamientoNotas(lead?.visita_relevamiento_json ?? null));
+  }, [lead?.id, lead?.visita_relevamiento_json]);
+
+  async function saveVisitaRelevamiento(markCompleted: boolean) {
+    if (!id || !lead) return;
+
+    const updatedAt = new Date().toISOString();
+    const payload: PatchPayload = {
+      visita_relevamiento_json: {
+        notas: visitaNotas,
+        updated_at: updatedAt,
+      },
+    };
+
+    if (markCompleted && !lead.visita_completed_at) {
+      payload.visita_completed_at = updatedAt;
+    }
+
+    setVisitaSaving(true);
+    try {
+      await patchLead(payload);
+    } finally {
+      setVisitaSaving(false);
     }
   }
 
@@ -4195,9 +4246,81 @@ export default function LeadDetailPage() {
                 </div>
               </div>
 
-              {/* PROCESO COMERCIAL — pipeline de 6 pasos */}
+              <div id="relevamiento-visita" className="rounded-2xl border bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-900">Relevamiento de visita</h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Registrá la visita física cuando el relevamiento en sitio esté realizado.
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                      lead?.visita_completed_at
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {lead?.visita_completed_at ? "Visita realizada" : "Pendiente de relevamiento"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-xs font-semibold text-slate-500">Fecha de visita agendada</div>
+                    <div className="mt-1 text-slate-800">
+                      {lead?.visita_scheduled_at ? formatDateTime(lead.visita_scheduled_at) : "Sin visita agendada"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-xs font-semibold text-slate-500">Fecha de realización</div>
+                    <div className="mt-1 text-slate-800">
+                      {lead?.visita_completed_at ? formatDateTime(lead.visita_completed_at) : "—"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="text-xs font-semibold text-slate-500" htmlFor="visita-relevamiento-notas">
+                    Notas de relevamiento de visita
+                  </label>
+                  <textarea
+                    id="visita-relevamiento-notas"
+                    value={visitaNotas}
+                    onChange={(e) => setVisitaNotas(e.target.value)}
+                    className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                    rows={4}
+                    placeholder="Notas relevadas en la visita..."
+                    disabled={visitaSaving || mutating}
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {lead?.visita_completed_at ? (
+                    <button
+                      type="button"
+                      onClick={() => saveVisitaRelevamiento(false)}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      disabled={visitaSaving || mutating}
+                    >
+                      {visitaSaving ? "Guardando..." : "Actualizar relevamiento"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => saveVisitaRelevamiento(true)}
+                      className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                      disabled={visitaSaving || mutating}
+                    >
+                      {visitaSaving ? "Guardando..." : "Marcar visita como realizada"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* PROCESO COMERCIAL — flujo Casalimpia */}
               <div id="proceso-comercial" className="rounded-2xl border-2 border-slate-200 bg-white p-6 shadow-sm">
-                <Tooltip content="Flujo consultivo: Análisis del lead (IA) → Diagnóstico comercial → Estrategia → Estructura de servicios → Propuesta comercial → Presentación para el cliente." maxWidth="340px">
+                <Tooltip content="Flujo Casalimpia: Datos del prospecto → Visita → Evaluación → Servicios → Costeo → Cotización / Propuesta → Presentación." maxWidth="340px">
                   <h2 className="text-xl font-semibold text-slate-900 inline-block cursor-help">Proceso comercial</h2>
                 </Tooltip>
                 <p className="mt-1 text-sm text-slate-600">
@@ -4291,7 +4414,7 @@ export default function LeadDetailPage() {
                   </p>
                   <div className="mt-3">
                     {currentStep === 1 && (
-                      <Tooltip content="Crea el análisis interno del lead con IA. Este resultado alimenta el diagnóstico comercial y la estrategia. Abre las herramientas del paso 1 para ejecutarlo." maxWidth="320px">
+                      <Tooltip content="Crea el análisis interno del lead con IA. Este resultado alimenta la evaluación de necesidades y la estrategia. Abre las herramientas del paso 1 para ejecutarlo." maxWidth="320px">
                         <span className="inline-block">
                           <button
                             type="button"
@@ -4418,7 +4541,7 @@ export default function LeadDetailPage() {
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
                     <p className="text-xs font-semibold text-slate-600">Después de esto sigue</p>
                     <p className="mt-0.5 text-sm text-slate-700">
-                      {currentStep === 1 && "Paso 2: Diagnóstico comercial — documento consultivo para presentar al lead."}
+                      {currentStep === 1 && "Paso 2: Evaluación de necesidades — relevamiento técnico y operativo para preparar servicios y costeo."}
                       {currentStep === 2 && "Paso 3: Estrategia de crecimiento — visión estratégica que conecta diagnóstico con el plan."}
                       {currentStep === 3 && "Paso 4: Estructura de servicios — tabla de servicios y costos en el tab Consultor."}
                       {currentStep === 4 && "Paso 5: Propuesta final para cliente — documento integral, compartir y marcar envío."}
@@ -4534,9 +4657,9 @@ export default function LeadDetailPage() {
                           onPromptSaved={fetchLead}
                           onPresentationSignalChange={(signals) => setPresentationSignals((prev) => ({ ...prev, ...signals }))}
                           titleLabel="Análisis interno del lead (IA)"
-                          subtitleLabel="Este análisis interno genera la base técnica y estratégica que alimenta el diagnóstico comercial."
+                          subtitleLabel="Este análisis interno genera la base técnica y estratégica que alimenta la evaluación de necesidades."
                           buttonHelperText="Usa IA para analizar el lead, detectar oportunidades y preparar el contenido base del diagnóstico."
-                          buttonTooltipContent="Ejecuta el análisis interno con IA. Este proceso no reemplaza el diagnóstico comercial: lo prepara y lo alimenta."
+                          buttonTooltipContent="Ejecuta el análisis interno con IA. Este proceso no reemplaza la evaluación de necesidades: la prepara y la alimenta."
                         />
                       )}
                     </div>
@@ -4584,12 +4707,12 @@ export default function LeadDetailPage() {
                         </details>
                       )}
                       <div>
-                        <p className="text-xs font-medium text-slate-600 mb-1.5">Diagnóstico comercial</p>
+                        <p className="text-xs font-medium text-slate-600 mb-1.5">Evaluación de necesidades</p>
                         <div className="flex flex-wrap gap-2">
                           {commercialDocUrls.diagnostic ? (
                             <Tooltip content="Abre el documento generado para revisión." maxWidth="260px">
                               <a href={commercialDocUrls.diagnostic} target="_blank" rel="noreferrer noopener" className="inline-block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                                Ver diagnóstico comercial
+                                Ver evaluación de necesidades
                               </a>
                             </Tooltip>
                           ) : null}
@@ -4597,13 +4720,13 @@ export default function LeadDetailPage() {
                             ? (typeof window !== "undefined" && isSameOriginPdfUrl(commercialDocUrls.diagnostic, window.location.origin) ? (
                                 <Tooltip content="Descarga el PDF ya generado del documento." maxWidth="260px">
                                   <button type="button" onClick={() => handleDownloadPdf(commercialDocUrls.diagnostic!, "diagnostico-comercial.pdf")} className="inline-block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                                    Descargar PDF diagnóstico comercial
+                                    Descargar PDF evaluación de necesidades
                                   </button>
                                 </Tooltip>
                               ) : (
                                 <Tooltip content="Abre el PDF en el navegador (documento externo)." maxWidth="260px">
                                   <a href={commercialDocUrls.diagnostic} target="_blank" rel="noreferrer noopener" className="inline-block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                                    Abrir PDF diagnóstico comercial
+                                    Abrir PDF evaluación de necesidades
                                   </a>
                                 </Tooltip>
                               ))

@@ -35,7 +35,7 @@ function isMissingColumnError(message: string | undefined, table: string, column
 }
 
 const CASALIMPIA_LEAD_FIELDS =
-  "rubro_id,cantidad_personal,superficie_m2,cantidad_pisos,cantidad_banos,tachos_residuos,tiene_parking,tiene_subsuelo,tiene_ascensores,tiene_escaleras,tiene_vidrios_altos,tipos_suelo,horario_operacion,restricciones_acceso,zonas_criticas,requerimientos_especiales,notas_instalacion,installation_details_json,visita_scheduled_at";
+  "rubro_id,cantidad_personal,superficie_m2,cantidad_pisos,cantidad_banos,tachos_residuos,tiene_parking,tiene_subsuelo,tiene_ascensores,tiene_escaleras,tiene_vidrios_altos,tipos_suelo,horario_operacion,restricciones_acceso,zonas_criticas,requerimientos_especiales,notas_instalacion,installation_details_json,visita_scheduled_at,visita_completed_at,visita_relevamiento_json";
 
 /**
  * GET /api/admin/leads/:id
