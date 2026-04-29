@@ -132,6 +132,100 @@ function getServicesCount(leadServicesOrCount: { length: number } | number): num
   return typeof leadServicesOrCount === "number" ? leadServicesOrCount : leadServicesOrCount.length;
 }
 
+// ─── Casalimpia flow helpers ──────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getVisitaRelevamiento(lead: LeadFlowLead | null): Record<string, unknown> | null {
+  if (!lead) return null;
+  return isRecord(lead.visita_relevamiento_json) ? lead.visita_relevamiento_json : null;
+}
+
+function hasCompletedVisit(lead: LeadFlowLead | null): boolean {
+  return typeof lead?.visita_completed_at === "string" && lead.visita_completed_at.trim().length > 0;
+}
+
+const RELEVAMIENTO_KEY_FIELDS = [
+  "tipo_servicio",
+  "superficie_m2",
+  "cantidad_puestos_trabajo",
+  "numero_operarios",
+  "horarios",
+  "insumos_requeridos",
+  "maquinaria_necesaria",
+  "observaciones",
+] as const;
+
+const RELEVAMIENTO_KEY_FIELDS_MIN = 3;
+
+/** Visita completada + al menos 3 campos clave del relevamiento cargados. */
+function hasRelevamientoKeyFields(lead: LeadFlowLead | null): boolean {
+  if (!hasCompletedVisit(lead)) return false;
+  const r = getVisitaRelevamiento(lead);
+  if (!r) return false;
+  let filled = 0;
+  for (const field of RELEVAMIENTO_KEY_FIELDS) {
+    const val = r[field];
+    if (val === null || val === undefined || val === "" || val === false) continue;
+    if (Array.isArray(val) && val.length === 0) continue;
+    filled++;
+    if (filled >= RELEVAMIENTO_KEY_FIELDS_MIN) return true;
+  }
+  return false;
+}
+
+const SERVICIOS_ESPECIALES_FLAT = [
+  "servicio_lavado_alfombras",
+  "servicio_limpieza_paneles",
+  "servicio_lavado_sillas",
+  "servicio_cisternas",
+  "servicio_fumigacion",
+  "servicio_desratizacion",
+  "servicio_jardineria",
+  "servicio_limpieza_vidrios",
+  "servicio_sanitizacion",
+] as const;
+
+const SERVICIOS_ESPECIALES_GROUPED = [
+  "lavado_alfombras",
+  "limpieza_paneles",
+  "lavado_sillas",
+  "cisterna_aguas_blancas",
+  "cisterna_aguas_negras",
+  "fumigacion",
+  "desratizacion",
+  "jardineria",
+  "limpieza_vidrios",
+  "sanitizacion",
+] as const;
+
+/** tipo_servicio definido (permanente/especial) o al menos un servicio especial marcado. */
+function hasServiciosDefinidos(lead: LeadFlowLead | null): boolean {
+  const r = getVisitaRelevamiento(lead);
+  if (!r) return false;
+  const tipoServicio = r["tipo_servicio"];
+  if (
+    typeof tipoServicio === "string" &&
+    ["permanente", "especial", "PERMANENTE", "ESPECIAL"].includes(tipoServicio.trim())
+  ) {
+    return true;
+  }
+  for (const key of SERVICIOS_ESPECIALES_FLAT) {
+    if (r[key] === true) return true;
+  }
+  const grouped = r["servicios_especiales"];
+  if (isRecord(grouped)) {
+    for (const key of SERVICIOS_ESPECIALES_GROUPED) {
+      if (grouped[key] === true) return true;
+    }
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function getPresentationReadySignal(
   lead: LeadFlowLead | null,
   _leadServicesOrCount: { length: number } | number,
@@ -165,10 +259,7 @@ export function getLeadFlowSignals(
   documents?: LeadFlowDocumentsMerge
 ): Record<LeadFlowStep["id"], boolean> {
   const count = getServicesCount(leadServicesOrCount);
-  const aiReport = lead?.ai_report;
-  const rawReport = typeof aiReport === "string" ? aiReport : "";
-  const tabs = parseReportTabsLocal(rawReport);
-  const has = (id: string) => (tabs[id]?.trim() ?? "").length > 0;
+  const rawReport = typeof lead?.ai_report === "string" ? lead.ai_report : "";
   const entity = lead?.empresas;
   const datosCount = [
     lead?.nombre?.trim(),
@@ -184,7 +275,6 @@ export function getLeadFlowSignals(
 
   const serviciosDone = count > 0 || draftWithRows;
   const propuestaLegacyDone = hasProposalConfirmed || count >= 2 || (count > 0 && rawReport.trim().length > 0);
-  const accionesBase = has("ACCIONES") || has("plan_crecimiento");
 
   const proposalFromLead = typeof lead?.proposal_doc_url === "string" ? lead.proposal_doc_url.trim() : "";
   const proposalFromDocs = typeof documents?.proposal === "string" ? documents.proposal.trim() : "";
@@ -208,17 +298,16 @@ export function getLeadFlowSignals(
   const diagnosticFromDocuments =
     Boolean(diagnosticDocUrl) && isOfficialCrmPersistedDocumentUrl(diagnosticDocUrl);
 
-  // Una vez confirmada la propuesta económica, el siguiente paso es siempre generar el material final (Gamma/PDF).
-  // No volver a mostrar "Acciones definidas" ni "Servicios": forzar acciones/servicios/propuesta = done.
-  const accionesDone = hasProposalConfirmed ? true : strategyApproved ? true : accionesBase;
+  // Una vez confirmada la propuesta económica, forzar etapas previas como done.
+  const accionesDone = hasProposalConfirmed ? true : strategyApproved ? true : hasServiciosDefinidos(lead);
   const serviciosDoneFinal = hasProposalConfirmed ? true : serviciosDone;
 
   return {
     lead: !!lead?.id,
     datos: datosCount >= 3,
     investigacion: typeof lead?.visita_completed_at === "string" && lead.visita_completed_at.trim().length > 0,
-    // Documento diagnostic en lead_documents (p. ej. PDF Gamma o informe IA archivado como markdown) o tabs clásicos del informe.
-    diagnostico: diagnosticFromDocuments || has("FODA") || has("OPORTUNIDADES"),
+    // Documento diagnostic archivado o relevamiento completado con campos clave.
+    diagnostico: diagnosticFromDocuments || hasRelevamientoKeyFields(lead),
     acciones: accionesDone,
     servicios: serviciosDoneFinal,
     propuesta: propuestaDoneFinal,
