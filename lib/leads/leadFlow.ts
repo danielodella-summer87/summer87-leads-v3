@@ -50,7 +50,7 @@ export const LEAD_FLOW_LABELS: Record<LeadFlowStep["id"], string> = {
 export const LEAD_FLOW_DESCRIPTIONS: Record<LeadFlowStep["id"], string> = {
   lead: "El prospecto ya fue dado de alta dentro del CRM.",
   datos: "Se cuenta con la información mínima del prospecto y su instalación para avanzar.",
-  investigacion: "La visita técnica está agendada o el relevamiento inicial ya comenzó.",
+  investigacion: "La visita técnica ya fue realizada y el relevamiento del lugar quedó registrado.",
   diagnostico: "Ya existe una evaluación de necesidades, riesgos y oportunidades del servicio.",
   acciones: "Ya fueron definidos los servicios de limpieza o facility services a cotizar.",
   servicios: "Ya existe una base para estimar alcance, frecuencia y costo del servicio.",
@@ -75,6 +75,8 @@ export type LeadFlowLead = {
   cantidad_personal?: number | string | null;
   notas_instalacion?: string | null;
   visita_scheduled_at?: string | null;
+  visita_completed_at?: string | null;
+  visita_relevamiento_json?: unknown | null;
   ai_report?: string | null;
   empresas?: { instagram?: string | null; facebook?: string | null; rubro_id?: string | null } | null;
   /** Draft de propuesta (matriz servicio × mes). Si existe y tiene rows, servicios puede considerarse hecho. */
@@ -214,7 +216,7 @@ export function getLeadFlowSignals(
   return {
     lead: !!lead?.id,
     datos: datosCount >= 3,
-    investigacion: typeof lead?.visita_scheduled_at === "string" && lead.visita_scheduled_at.trim().length > 0,
+    investigacion: typeof lead?.visita_completed_at === "string" && lead.visita_completed_at.trim().length > 0,
     // Documento diagnostic en lead_documents (p. ej. PDF Gamma o informe IA archivado como markdown) o tabs clásicos del informe.
     diagnostico: diagnosticFromDocuments || has("FODA") || has("OPORTUNIDADES"),
     acciones: accionesDone,
@@ -273,7 +275,7 @@ export function getLeadNextAction(step: LeadFlowStep | null): string {
     case "datos":
       return "Completar datos del prospecto e instalación";
     case "investigacion":
-      return "Agendar visita técnica";
+      return "Completar relevamiento de visita";
     case "diagnostico":
       return "Completar evaluación de necesidades";
     case "acciones":
