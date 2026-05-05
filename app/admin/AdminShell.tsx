@@ -25,6 +25,18 @@ function cx(...classes: Array<false | null | string | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+function toSafeLabel(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+
+  if (value && typeof value === "object" && "name" in value) {
+    const name = (value as { name?: unknown }).name;
+    return typeof name === "string" && name.trim() ? name : fallback;
+  }
+
+  return fallback;
+}
+
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   if (href === "/admin") return pathname === "/admin";
@@ -38,7 +50,9 @@ function getBreadcrumbParts(
   breadcrumbSegment: string | null,
   clientePlural: string
 ): string[] {
-  const suite = APP_SUITE_CONFIG.suiteName;
+  const suite = toSafeLabel(APP_SUITE_CONFIG.suiteName, "Summer87 Intelligence");
+  const leadsName = toSafeLabel(APP_SUITE_CONFIG.modules.leads.name, "Summer87 Leads");
+  const copilotName = toSafeLabel(APP_SUITE_CONFIG.modules.copilot.name, "Summer87 Copilot");
 
   if (!pathname || !pathname.startsWith("/admin")) return [suite, "Dashboard"];
 
@@ -55,12 +69,12 @@ function getBreadcrumbParts(
   }
   if (pathname.startsWith("/admin/leads87/") && segments[0] === "leads87" && segments.length >= 2) {
     const last = breadcrumbSegment?.trim() || "Oportunidad";
-    return [suite, APP_SUITE_CONFIG.modules.leads.name, last];
+    return [suite, leadsName, last];
   }
-  if (pathname.startsWith("/admin/leads87")) return [suite, APP_SUITE_CONFIG.modules.leads.name];
+  if (pathname.startsWith("/admin/leads87")) return [suite, leadsName];
   if (pathname.startsWith("/admin/leads")) return [suite, "Leads", "Gestión operativa"];
   if (pathname.startsWith("/admin/leadsok")) return [suite, "LeadsOk"];
-  if (pathname.startsWith("/admin/copilot")) return [suite, APP_SUITE_CONFIG.modules.copilot.name];
+  if (pathname.startsWith("/admin/copilot")) return [suite, copilotName];
 
   const labelMap: Record<string, string> = {
     empresas: "Iniciativas",
@@ -71,8 +85,9 @@ function getBreadcrumbParts(
     operaciones: "Operaciones",
     reportes: "Reportes",
     oportunidades: "Oportunidades",
-    leads87: APP_SUITE_CONFIG.modules.leads.name,
-    copilot: APP_SUITE_CONFIG.modules.copilot.name,
+    leads87: leadsName,
+    copilot: copilotName,
+    constructor: "Constructor CRM",
     eventos: "Eventos",
     "mesa-de-ayuda": "Mesa de ayuda",
     neuroventas: "Manual de neuroventas",
@@ -276,7 +291,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               const isPrep = item.status === "en_preparacion";
               const displayLabel = item.useMemberPluralLabel
                 ? clientePlural.trim() || "Socios"
-                : item.label;
+                : toSafeLabel(item.label, item.key);
               return (
                 <Link
                   key={item.key}
@@ -304,7 +319,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center text-lg leading-none" aria-hidden>
                     {item.icon || "·"}
                   </span>
-                  <span>{displayLabel}</span>
+                  <span>{toSafeLabel(displayLabel, item.key)}</span>
                 </Link>
               );
             })}
@@ -317,7 +332,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   const isPrep = item.status === "en_preparacion";
                   const displayLabel = item.useMemberPluralLabel
                     ? clientePlural.trim() || "Socios"
-                    : item.label;
+                    : toSafeLabel(item.label, item.key);
                   return (
                     <Link
                       key={item.key}
@@ -345,7 +360,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center text-lg leading-none" aria-hidden>
                         {item.icon || "·"}
                       </span>
-                      <span>{displayLabel}</span>
+                      <span>{toSafeLabel(displayLabel, item.key)}</span>
                     </Link>
                   );
                 })}
@@ -394,14 +409,17 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   )}
                 </button>
                 <div className="text-sm text-gray-500">
-                  {breadcrumbParts.slice(0, -1).map((part, i) => (
-                    <span key={`bc-${i}-${part}`}>
-                      {part}
-                      {" / "}
-                    </span>
-                  ))}
+                  {breadcrumbParts.slice(0, -1).map((part, i) => {
+                    const safePart = toSafeLabel(part, "");
+                    return (
+                      <span key={`bc-${i}-${safePart || i}`}>
+                        {safePart}
+                        {" / "}
+                      </span>
+                    );
+                  })}
                   <span className="text-gray-900 font-medium">
-                    {breadcrumbParts[breadcrumbParts.length - 1] ?? ""}
+                    {toSafeLabel(breadcrumbParts[breadcrumbParts.length - 1], "")}
                   </span>
                 </div>
               </div>
