@@ -68,7 +68,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "cuestionario",
     step: 2,
     title: "Cuestionario",
-    status: "current",
+    status: "done",
     description:
       "Responder preguntas guiadas para entender el modelo comercial.",
     href: "/admin/constructor/cuestionario",
@@ -77,9 +77,10 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "documentos",
     step: 3,
     title: "Documentos fuente",
-    status: "locked",
+    status: "current",
     description:
       "Subir Excel, PDF, Word, capturas y materiales actuales del negocio.",
+    href: "/admin/constructor/documentos",
   },
   {
     id: "diagnostico",
