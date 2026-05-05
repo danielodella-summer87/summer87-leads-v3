@@ -1,7 +1,7 @@
 /**
  * Modo del CRM y pasos del Constructor.
  * Config estática temporal — sin DB, sin API, sin localStorage.
- * Se conectará a Supabase/API en Bloque 1C.
+ * Se conectará a Supabase/API en un bloque futuro.
  */
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "empresa",
     step: 1,
     title: "Empresa",
-    status: "current",
+    status: "done",
     description:
       "Definir país, rubro, giro, vertical, web y datos base de la empresa.",
     href: "/admin/constructor/empresa",
@@ -68,9 +68,10 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "cuestionario",
     step: 2,
     title: "Cuestionario",
-    status: "locked",
+    status: "current",
     description:
       "Responder preguntas guiadas para entender el modelo comercial.",
+    href: "/admin/constructor/cuestionario",
   },
   {
     id: "documentos",
