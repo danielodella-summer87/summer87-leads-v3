@@ -86,7 +86,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "diagnostico",
     step: 4,
     title: "Diagnóstico comercial",
-    status: "current",
+    status: "done",
     description:
       "Analizar cómo vende la empresa, qué datos faltan y qué riesgos existen.",
     href: "/admin/constructor/diagnostico",
@@ -95,9 +95,10 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "proceso-pipeline",
     step: 5,
     title: "Proceso y pipeline",
-    status: "locked",
+    status: "current",
     description:
       "Definir etapas, tareas, responsables, condiciones de avance y columnas Kanban.",
+    href: "/admin/constructor/proceso-pipeline",
   },
   {
     id: "motores-ia",
