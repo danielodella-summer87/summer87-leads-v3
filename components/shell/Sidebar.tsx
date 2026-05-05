@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { usePermissions } from "@/lib/rbac/usePermissions";
+import { CRM_MODE, CRM_MODE_LABELS, isSetupMode } from "@/lib/config/crmMode";
 import {
   FolderTree,
   GitBranch,
@@ -135,6 +136,12 @@ export default function Sidebar() {
             />
           </div>
         </div>
+        {isSetupMode(CRM_MODE) && (
+          <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-semibold text-amber-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            {CRM_MODE_LABELS[CRM_MODE]}
+          </div>
+        )}
       </div>
 
       {/* Menu */}
