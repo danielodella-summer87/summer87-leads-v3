@@ -16,6 +16,8 @@ export type CRMSetupStep = {
   title: string;
   description: string;
   status: CRMSetupStepStatus;
+  /** Ruta habilitada para este paso. Undefined si el paso todavía no tiene pantalla. */
+  href?: string;
 };
 
 export type CRMSetupProgress = {
@@ -60,6 +62,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     status: "current",
     description:
       "Definir país, rubro, giro, vertical, web y datos base de la empresa.",
+    href: "/admin/constructor/empresa",
   },
   {
     id: "cuestionario",

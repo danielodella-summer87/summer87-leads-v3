@@ -172,12 +172,9 @@ export default function ConstructorCRMPage() {
               const Icon = STEP_ICONS[s.id] ?? Building2;
               const badge = STATUS_BADGE[s.status];
               const BadgeIcon = badge.icon;
-              return (
-                <div
-                  key={s.id}
-                  id={s.id}
-                  className={`flex flex-col gap-3 rounded-xl border p-4 ${CARD_STYLES[s.status]}`}
-                >
+              const cardClass = `flex flex-col gap-3 rounded-xl border p-4 ${CARD_STYLES[s.status]}`;
+              const inner = (
+                <>
                   <div className="flex items-center justify-between gap-2">
                     <div
                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${ICON_BG[s.status]}`}
@@ -202,6 +199,19 @@ export default function ConstructorCRMPage() {
                       {s.description}
                     </p>
                   </div>
+                </>
+              );
+              return s.href ? (
+                <Link
+                  key={s.id}
+                  href={s.href}
+                  className={`${cardClass} hover:shadow-md transition-shadow`}
+                >
+                  {inner}
+                </Link>
+              ) : (
+                <div key={s.id} className={cardClass}>
+                  {inner}
                 </div>
               );
             })}
@@ -210,15 +220,12 @@ export default function ConstructorCRMPage() {
           {/* ── CTA ────────────────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center gap-4">
             <Link
-              href="/admin/constructor#empresa"
+              href="/admin/constructor/empresa"
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
             >
               <Building2 className="h-4 w-4" />
               Comenzar con Empresa
             </Link>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-              El formulario llega en Bloque 1C
-            </span>
           </div>
 
         </div>
