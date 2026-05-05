@@ -77,7 +77,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "documentos",
     step: 3,
     title: "Documentos fuente",
-    status: "current",
+    status: "done",
     description:
       "Subir Excel, PDF, Word, capturas y materiales actuales del negocio.",
     href: "/admin/constructor/documentos",
@@ -86,9 +86,10 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "diagnostico",
     step: 4,
     title: "Diagnóstico comercial",
-    status: "locked",
+    status: "current",
     description:
       "Analizar cómo vende la empresa, qué datos faltan y qué riesgos existen.",
+    href: "/admin/constructor/diagnostico",
   },
   {
     id: "proceso-pipeline",
