@@ -120,6 +120,7 @@ export function roleToLabel(role: string | null | undefined): string {
 /** Rutas protegidas por rol (middleware RBAC). pathname debe empezar con el segmento. */
 const PATH_ROLES: { prefix: string; allowed: RoleKey[] }[] = [
   { prefix: "/admin/configuracion", allowed: ["admin"] },
+  { prefix: "/admin/constructor", allowed: ["admin"] },
   { prefix: "/admin/ia", allowed: ["admin"] },
 
   // ✅ Operaciones: solo admin + operador

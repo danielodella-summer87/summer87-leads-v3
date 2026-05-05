@@ -106,7 +106,7 @@ export default function LicenciaTab() {
                 type="text"
                 value={tituloHeader}
                 onChange={(e) => setTituloHeader(e.target.value)}
-                placeholder="Ej: Cámara Costa"
+                placeholder="Ej: Summer87 Leads v3"
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 disabled={saving}
               />

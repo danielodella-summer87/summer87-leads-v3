@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { usePermissions } from "@/lib/rbac/usePermissions";
-import { 
-  FolderTree, 
-  GitBranch, 
-  CheckSquare, 
-  Sparkles, 
+import {
+  FolderTree,
+  GitBranch,
+  CheckSquare,
+  Sparkles,
   Users,
   Settings as SettingsIcon,
   LayoutDashboard,
@@ -17,7 +17,8 @@ import {
   CalendarDays,
   SlidersHorizontal,
   Calendar,
-  BookOpen
+  BookOpen,
+  Wrench,
 } from "lucide-react";
 
 // TODO: Conectar con el rol real del usuario desde autenticación
@@ -67,7 +68,7 @@ function SidebarItem({ label, href, icon: Icon, isActive = false }: Omit<Sidebar
 export default function Sidebar() {
   const pathname = usePathname();
   const { permissions } = usePermissions();
-  const [portalName, setPortalName] = useState("Cámara Costa");
+  const [portalName, setPortalName] = useState("Summer87 Leads v3");
   const [memberLabel, setMemberLabel] = useState("Socios");
 
   // Cargar nombre del portal y labels desde la configuración
@@ -103,6 +104,7 @@ export default function Sidebar() {
 
   const items: SidebarItem[] = [
     { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
+    { label: "Constructor CRM", href: "/admin/constructor", icon: Wrench, permission: "config.admin" },
     { label: "Iniciativas", href: "/admin/empresas", icon: Building2 },
     { label: memberLabel, href: "/admin/socios", icon: Users },
     { label: "Agenda", href: "/admin/agenda", icon: Calendar },
