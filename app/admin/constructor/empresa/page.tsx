@@ -23,7 +23,7 @@ type EmpresaForm = {
   // B. Rubro y vertical
   rubro: string;
   giro: string;
-  tipoCliente: string;
+  tiposCliente: string[];
   vertical: string;
   // C. Modelo comercial
   queVende: string;
@@ -45,7 +45,7 @@ const INITIAL_FORM: EmpresaForm = {
   redes: "",
   rubro: "",
   giro: "",
-  tipoCliente: "",
+  tiposCliente: [],
   vertical: "",
   queVende: "",
   fuentesProspectos: [],
@@ -71,7 +71,7 @@ const RUBROS = [
   "Otro",
 ];
 
-const TIPOS_CLIENTE = ["B2B", "B2C", "B2G", "Mixto"];
+const TIPOS_CLIENTE = ["B2B", "B2C", "B2G"];
 
 const FUENTES_PROSPECTOS = [
   "Web",
@@ -126,6 +126,15 @@ export default function EmpresaPage() {
       fuentesProspectos: prev.fuentesProspectos.includes(fuente)
         ? prev.fuentesProspectos.filter((f) => f !== fuente)
         : [...prev.fuentesProspectos, fuente],
+    }));
+  }
+
+  function toggleTipoCliente(tipo: string) {
+    setForm((prev) => ({
+      ...prev,
+      tiposCliente: prev.tiposCliente.includes(tipo)
+        ? prev.tiposCliente.filter((t) => t !== tipo)
+        : [...prev.tiposCliente, tipo],
     }));
   }
 
@@ -280,15 +289,18 @@ export default function EmpresaPage() {
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>Tipo de cliente principal</label>
+                  <label className={LABEL_CLASS}>
+                    Tipo de cliente principal
+                    <span className="ml-1 text-xs font-normal text-slate-400">(puede ser más de uno)</span>
+                  </label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {TIPOS_CLIENTE.map((tipo) => (
                       <button
                         key={tipo}
                         type="button"
-                        onClick={() => setField("tipoCliente", tipo)}
+                        onClick={() => toggleTipoCliente(tipo)}
                         className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
-                          form.tipoCliente === tipo
+                          form.tiposCliente.includes(tipo)
                             ? "border-slate-900 bg-slate-900 text-white"
                             : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                         }`}

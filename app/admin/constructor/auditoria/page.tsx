@@ -50,6 +50,7 @@ const PASOS_RESUMEN = [
     step: 1,
     title: "Empresa",
     icon: Building2,
+    href: "/admin/constructor/empresa",
     resumen:
       "Datos base configurados: rubro, giro, vertical y datos de contacto.",
   },
@@ -58,6 +59,7 @@ const PASOS_RESUMEN = [
     step: 2,
     title: "Cuestionario",
     icon: ClipboardList,
+    href: "/admin/constructor/cuestionario",
     resumen: "Modelo comercial relevado mediante cuestionario guiado.",
   },
   {
@@ -65,6 +67,7 @@ const PASOS_RESUMEN = [
     step: 3,
     title: "Documentos fuente",
     icon: FileText,
+    href: "/admin/constructor/documentos",
     resumen:
       "Materiales de referencia subidos o referenciados para contexto del CRM.",
   },
@@ -73,6 +76,7 @@ const PASOS_RESUMEN = [
     step: 4,
     title: "Diagnóstico comercial",
     icon: Search,
+    href: "/admin/constructor/diagnostico",
     resumen:
       "Proceso de venta analizado, gaps detectados y riesgos identificados.",
   },
@@ -81,24 +85,27 @@ const PASOS_RESUMEN = [
     step: 5,
     title: "Proceso y pipeline",
     icon: GitBranch,
+    href: "/admin/constructor/proceso-pipeline",
     resumen:
-      "Etapas, tareas, responsables y condiciones de avance definidos.",
+      "Pipeline diseñado visualmente: etapas, tareas y condiciones de avance. Pendiente de sincronización operativa.",
   },
   {
     id: "motores-ia",
     step: 6,
     title: "Motores IA",
     icon: Bot,
+    href: "/admin/constructor/motores-ia",
     resumen:
-      "Motores IA diseñados con etapa, input, output y reglas de validación.",
+      "Motores IA diseñados visualmente con etapa, input, output y reglas. Pendiente de conexión real.",
   },
   {
     id: "reportes",
     step: 7,
     title: "Reportes",
     icon: BarChart3,
+    href: "/admin/constructor/reportes",
     resumen:
-      "Reportes definidos por tipo, audiencia, frecuencia y reglas de distribución.",
+      "Reportes definidos visualmente por tipo, audiencia y frecuencia. Pendiente de conexión con datos reales.",
   },
 ];
 
@@ -133,30 +140,30 @@ const CHECKLIST_INICIAL: ItemChecklist[] = [
   },
   {
     id: "c5",
-    label: "Pipeline definido",
+    label: "Pipeline visual diseñado",
     descripcion:
-      "Todas las etapas del pipeline tienen responsable y condiciones de avance.",
-    checked: false,
+      "Etapas, tareas y condiciones de avance diseñadas en el Constructor. Pendiente de sincronización con el Kanban operativo (Fase 2).",
+    checked: true,
   },
   {
     id: "c6",
-    label: "Motores IA activados",
+    label: "Motores IA diseñados",
     descripcion:
-      "Al menos un motor IA activo por etapa crítica del pipeline.",
-    checked: false,
+      "Motores IA configurados visualmente por etapa. Pendiente de conexión con el motor real en Fase 2.",
+    checked: true,
   },
   {
     id: "c7",
-    label: "Reportes asignados",
+    label: "Reportes diseñados por audiencia",
     descripcion:
-      "Cada rol tiene al menos un reporte asignado con frecuencia definida.",
-    checked: false,
+      "Reportes definidos por tipo, audiencia y frecuencia. Pendiente de conexión con datos reales en Fase 2.",
+    checked: true,
   },
   {
     id: "c8",
-    label: "Reglas de validación humana definidas",
+    label: "Persistencia y conexión operativa",
     descripcion:
-      "Está claro qué outputs de IA requieren aprobación antes de usar.",
+      "Constructor conectado a Supabase y sincronizado con el CRM operativo — requerido para activación real (Fase 2).",
     checked: false,
   },
 ];
@@ -164,29 +171,38 @@ const CHECKLIST_INICIAL: ItemChecklist[] = [
 const RIESGOS_INICIALES: Riesgo[] = [
   {
     id: "rg1",
-    descripcion: "Pipeline sin responsables en todas las etapas.",
+    descripcion:
+      "No existe persistencia real — todos los datos del Constructor se pierden al recargar.",
     severidad: "alta",
     estado: "pendiente",
-    observacion: "",
+    observacion: "Bloqueante para activación. Se resuelve en Fase 2 con Supabase.",
   },
   {
     id: "rg2",
     descripcion:
-      "Motores IA sin reglas de validación humana para outputs de alto riesgo.",
-    severidad: "alta",
+      "Pipeline diseñado visualmente, pendiente de sincronización con el Kanban operativo.",
+    severidad: "media",
     estado: "pendiente",
     observacion: "",
   },
   {
     id: "rg3",
     descripcion:
-      "Reportes gerenciales sin audiencia o frecuencia asignada.",
+      "Motores IA diseñados pero sin ejecución real — reglas de validación humana pendientes de Fase 2.",
     severidad: "media",
     estado: "pendiente",
     observacion: "",
   },
   {
     id: "rg4",
+    descripcion:
+      "Reportes diseñados visualmente, pendiente de conexión con datos reales y distribución automática.",
+    severidad: "media",
+    estado: "pendiente",
+    observacion: "",
+  },
+  {
+    id: "rg5",
     descripcion:
       "Documentos fuente no actualizados en los últimos 6 meses.",
     severidad: "baja",
@@ -260,7 +276,7 @@ function PillSelect<T extends string>({
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function AuditoriaPage() {
-  const [score, setScore] = useState(72);
+  const [score, setScore] = useState(76);
   const [checklist, setChecklist] = useState<ItemChecklist[]>(CHECKLIST_INICIAL);
   const [riesgos, setRiesgos] = useState<Riesgo[]>(RIESGOS_INICIALES);
 
@@ -310,7 +326,7 @@ export default function AuditoriaPage() {
         "El CRM cumple con los criterios mínimos de configuración. Puede proceder a la activación cuando la persistencia esté conectada.",
     },
     revision: {
-      label: "Requiere revisión",
+      label: "Diseño aprobable — pendiente técnico de Fase 2",
       wrapperClass: "border-amber-200 bg-amber-50",
       textColor: "text-amber-800",
       subColor: "text-amber-700",
@@ -318,7 +334,7 @@ export default function AuditoriaPage() {
       icon: AlertTriangle,
       iconColor: "text-amber-600",
       descripcion:
-        "Hay ítems del checklist pendientes o riesgos sin resolver. Revisá los puntos marcados antes de activar el CRM.",
+        "El diseño visual del CRM está avanzado y es coherente. Lo que falta no es completar pantallas, sino conectar la persistencia real (Supabase), sincronizar el pipeline con el Kanban operativo y activar la auditoría IA. Estos ítems se resuelven en Fase 2.",
     },
     "no-listo": {
       label: "No listo para activar",
@@ -453,6 +469,12 @@ export default function AuditoriaPage() {
                     <p className="text-[11px] leading-relaxed text-slate-600">
                       {paso.resumen}
                     </p>
+                    <Link
+                      href={paso.href}
+                      className="mt-auto inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 hover:text-green-900 transition-colors"
+                    >
+                      Editar →
+                    </Link>
                   </div>
                 );
               })}

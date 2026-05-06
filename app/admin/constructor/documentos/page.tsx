@@ -181,7 +181,7 @@ export default function DocumentosPage() {
     importancia: "",
   });
   const [lista, setLista] = useState<DocumentoRegistrado[]>([]);
-  const [tipoSeleccionado, setTipoSeleccionado] = useState<TipoDocumento | null>(null);
+  const [tiposSeleccionados, setTiposSeleccionados] = useState<TipoDocumento[]>([]);
 
   function agregarDocumento() {
     if (!form.nombre.trim()) return;
@@ -254,19 +254,27 @@ export default function DocumentosPage() {
           <div className="mb-8">
             <SectionHeader letter="A" title="¿Qué tipos de documentos tenés?" />
             <p className="mb-4 text-xs text-slate-500">
-              Hacé clic en los tipos que aplican a tu negocio. Esto ayuda a entender qué
-              materiales existen y cuáles faltan.
+              Seleccioná todos los tipos que aplican a tu negocio. Podés marcar más de uno.
             </p>
+            {tiposSeleccionados.length > 0 && (
+              <p className="mb-3 text-[11px] text-slate-500">
+                <span className="font-semibold text-slate-700">{tiposSeleccionados.length}</span> tipo{tiposSeleccionados.length !== 1 ? "s" : ""} seleccionado{tiposSeleccionados.length !== 1 ? "s" : ""}
+              </p>
+            )}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {TIPO_DOCS.map((tipo) => {
                 const Icon = tipo.icon;
-                const isSelected = tipoSeleccionado === tipo.id;
+                const isSelected = tiposSeleccionados.includes(tipo.id);
                 return (
                   <button
                     key={tipo.id}
                     type="button"
                     onClick={() =>
-                      setTipoSeleccionado(isSelected ? null : tipo.id)
+                      setTiposSeleccionados((prev) =>
+                        prev.includes(tipo.id)
+                          ? prev.filter((t) => t !== tipo.id)
+                          : [...prev, tipo.id]
+                      )
                     }
                     className={[
                       "flex items-start gap-3 rounded-xl border p-3 text-left transition-all",

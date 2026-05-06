@@ -11,7 +11,7 @@ import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 type CuestionarioForm = {
   // A. Modelo comercial
   queVendeDetalle: string;
-  tipoVenta: string;
+  tiposVenta: string[];
   cicloVenta: string;
   ticketPromedio: string;
   // B. Clientes y decisores
@@ -24,7 +24,7 @@ type CuestionarioForm = {
   infoPrePropuesta: string[];
   queBloquea: string;
   // D. Propuesta y cierre
-  tipoPropuesta: string;
+  tiposPropuesta: string[];
   aprobadorInterno: string;
   condicionesGanado: string;
   motivosPerdida: string[];
@@ -40,7 +40,7 @@ type CuestionarioForm = {
 
 const INITIAL_FORM: CuestionarioForm = {
   queVendeDetalle: "",
-  tipoVenta: "",
+  tiposVenta: [],
   cicloVenta: "",
   ticketPromedio: "",
   tiposClienteObj: [],
@@ -50,7 +50,7 @@ const INITIAL_FORM: CuestionarioForm = {
   requiereDiagnostico: "",
   infoPrePropuesta: [],
   queBloquea: "",
-  tipoPropuesta: "",
+  tiposPropuesta: [],
   aprobadorInterno: "",
   condicionesGanado: "",
   motivosPerdida: [],
@@ -64,7 +64,16 @@ const INITIAL_FORM: CuestionarioForm = {
 
 // ─── Opciones ─────────────────────────────────────────────────────────────────
 
-const TIPOS_VENTA = ["Producto", "Servicio", "Proyecto", "Suscripción", "Mixto"];
+const TIPOS_VENTA = [
+  "Venta consultiva",
+  "Venta transaccional",
+  "Venta recurrente",
+  "Venta por proyecto",
+  "Venta por licitación",
+  "Venta por referidos",
+  "Venta inbound",
+  "Venta outbound",
+];
 
 const CICLOS_VENTA = [
   "Menos de 7 días",
@@ -111,11 +120,14 @@ const INFO_PRE_PROPUESTA = [
 ];
 
 const TIPOS_PROPUESTA = [
-  "Cotización simple",
-  "Propuesta comercial",
-  "Propuesta técnica + comercial",
-  "Contrato",
-  "Depende del servicio",
+  "Propuesta estándar",
+  "Propuesta personalizada",
+  "Cotización rápida",
+  "Cotización técnica",
+  "Aprobación por dirección",
+  "Requiere contrato",
+  "Requiere visita previa",
+  "Requiere negociación",
 ];
 
 const MOTIVOS_PERDIDA = [
@@ -249,12 +261,21 @@ function CheckGroup({
 
 export default function CuestionarioPage() {
   const [form, setForm] = useState<CuestionarioForm>(INITIAL_FORM);
+  const [segmentosCustom, setSegmentosCustom] = useState<string[]>([]);
+  const [segmentoInput, setSegmentoInput] = useState("");
 
   function setField<K extends keyof CuestionarioForm>(
     key: K,
     value: CuestionarioForm[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function agregarSegmento() {
+    const s = segmentoInput.trim();
+    if (!s) return;
+    setSegmentosCustom((prev) => [...prev, s]);
+    setSegmentoInput("");
   }
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "cuestionario");
@@ -335,11 +356,14 @@ export default function CuestionarioPage() {
                 </div>
 
                 <div>
-                  <label className={LABEL_CLASS}>Tipo de venta principal</label>
-                  <PillGroup
+                  <label className={LABEL_CLASS}>
+                    Tipo de venta principal
+                    <span className="ml-1 text-xs font-normal text-slate-400">(puede ser más de uno)</span>
+                  </label>
+                  <CheckGroup
                     options={TIPOS_VENTA}
-                    value={form.tipoVenta}
-                    onChange={(v) => setField("tipoVenta", v)}
+                    value={form.tiposVenta}
+                    onChange={(v) => setField("tiposVenta", v)}
                   />
                 </div>
 
@@ -378,6 +402,54 @@ export default function CuestionarioPage() {
                     value={form.tiposClienteObj}
                     onChange={(v) => setField("tiposClienteObj", v)}
                   />
+                </div>
+
+                <div>
+                  <label className={LABEL_CLASS}>
+                    Segmentos o verticales específicas
+                    <span className="ml-1 text-xs font-normal text-slate-400">(opcional — agregá los que apliquen)</span>
+                  </label>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 focus:border-slate-400 focus:outline-none"
+                      placeholder="Ej: rentadoras de autos, automotoras, colegios, pymes industriales…"
+                      value={segmentoInput}
+                      onChange={(e) => setSegmentoInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); agregarSegmento(); }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={agregarSegmento}
+                      disabled={!segmentoInput.trim()}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                  {segmentosCustom.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {segmentosCustom.map((s) => (
+                        <span
+                          key={s}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-900 bg-slate-900 px-3 py-1 text-xs font-medium text-white"
+                        >
+                          {s}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSegmentosCustom((prev) => prev.filter((x) => x !== s))
+                            }
+                            className="ml-0.5 text-slate-300 hover:text-white"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -472,11 +544,14 @@ export default function CuestionarioPage() {
               <div className="space-y-5">
 
                 <div>
-                  <label className={LABEL_CLASS}>Tipo de propuesta</label>
-                  <PillGroup
+                  <label className={LABEL_CLASS}>
+                    Tipo de propuesta / cierre
+                    <span className="ml-1 text-xs font-normal text-slate-400">(puede ser más de uno)</span>
+                  </label>
+                  <CheckGroup
                     options={TIPOS_PROPUESTA}
-                    value={form.tipoPropuesta}
-                    onChange={(v) => setField("tipoPropuesta", v)}
+                    value={form.tiposPropuesta}
+                    onChange={(v) => setField("tiposPropuesta", v)}
                   />
                 </div>
 

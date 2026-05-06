@@ -263,8 +263,10 @@ export default function ProcesoPipelinePage() {
             <SectionHeader letter="A" title="Proceso comercial vs. Pipeline / Kanban" />
             <p className="mb-4 text-xs text-slate-500">
               Son dos representaciones del mismo trabajo comercial. El proceso define el{" "}
-              <span className="font-semibold text-slate-700">cómo profundo</span>; el pipeline define
-              el <span className="font-semibold text-slate-700">qué visible</span> en el tablero.
+              <span className="font-semibold text-slate-700">cómo interno</span> de la empresa;
+              el pipeline define el <span className="font-semibold text-slate-700">qué visible</span>{" "}
+              en el tablero del CRM. No todo lo que existe en el proceso interno debe convertirse
+              en una columna del Kanban.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
@@ -315,6 +317,57 @@ export default function ProcesoPipelinePage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+            </div>
+
+            {/* Ejemplo práctico */}
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Ejemplo práctico
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-slate-700">
+                    Proceso interno (5 pasos)
+                  </p>
+                  <ol className="space-y-1 text-xs text-slate-600">
+                    {[
+                      "Recibir y registrar el lead",
+                      "Validar datos de contacto",
+                      "Asignar responsable y origen",
+                      "Solicitar documentación técnica",
+                      "Coordinar visita o reunión",
+                    ].map((item, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">
+                          {i + 1}
+                        </span>
+                        {item}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold text-blue-700">
+                    Pipeline visual (3 columnas)
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {["Nuevo", "Calificación", "Visita agendada"].map((col, i, arr) => (
+                      <div key={col} className="flex items-center gap-2">
+                        <span className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                          {col}
+                        </span>
+                        {i < arr.length - 1 && (
+                          <ArrowRight className="h-3 w-3 shrink-0 text-slate-400" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+                    Los 5 pasos internos se consolidan en 3 columnas operativas. El vendedor mueve
+                    el lead entre columnas; el sistema verifica las condiciones internas.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
