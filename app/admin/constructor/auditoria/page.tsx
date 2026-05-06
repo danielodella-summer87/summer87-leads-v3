@@ -352,11 +352,13 @@ export default function AuditoriaPage() {
   const cfg = DICTAMEN_CONFIG[dictamen];
   const DictamenIcon = cfg.icon;
 
-  const hoy = new Date().toLocaleDateString("es-AR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const [hoy] = useState(() =>
+    new Date().toLocaleDateString("es-AR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  );
 
   return (
     <PageContainer>
