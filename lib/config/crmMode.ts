@@ -104,7 +104,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "motores-ia",
     step: 6,
     title: "Motores IA",
-    status: "current",
+    status: "done",
     description:
       "Diseñar qué motores IA necesita el CRM y en qué etapa actuarán.",
     href: "/admin/constructor/motores-ia",
@@ -113,9 +113,10 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "reportes",
     step: 7,
     title: "Reportes",
-    status: "locked",
+    status: "current",
     description:
       "Definir reportes, métricas, filtros, frecuencia y audiencias.",
+    href: "/admin/constructor/reportes",
   },
   {
     id: "auditoria",
