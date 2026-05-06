@@ -279,6 +279,7 @@ export default function AuditoriaPage() {
   const [score, setScore] = useState(76);
   const [checklist, setChecklist] = useState<ItemChecklist[]>(CHECKLIST_INICIAL);
   const [riesgos, setRiesgos] = useState<Riesgo[]>(RIESGOS_INICIALES);
+  const [showValidationReport, setShowValidationReport] = useState(false);
 
   function toggleCheck(id: string) {
     setChecklist((prev) =>
@@ -894,6 +895,96 @@ export default function AuditoriaPage() {
             </div>
           </div>
 
+          {/* ── Reporte Maestro de Validación CRM ───────────────────────── */}
+          {showValidationReport && (
+            <div className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/30 p-6">
+
+              {/* Encabezado */}
+              <div className="mb-5">
+                <div className="mb-1 flex items-center gap-2">
+                  <ClipboardCheck className="h-5 w-5 text-indigo-600" />
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Reporte Maestro de Validación CRM
+                  </h2>
+                </div>
+                <p className="text-xs leading-relaxed text-slate-500">
+                  Documento consultivo para revisar con el cliente antes de activar
+                  el CRM operativo.
+                </p>
+              </div>
+
+              {/* Métricas clave */}
+              <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+                  <p
+                    className={[
+                      "text-3xl font-bold tabular-nums",
+                      score >= 80
+                        ? "text-green-600"
+                        : score >= 55
+                        ? "text-amber-600"
+                        : "text-red-600",
+                    ].join(" ")}
+                  >
+                    {score}
+                    <span className="ml-0.5 text-base text-slate-300">/100</span>
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-500">
+                    Score de preparación
+                  </p>
+                </div>
+                <div className={`rounded-xl border p-4 text-center ${cfg.wrapperClass}`}>
+                  <p className={`text-sm font-bold leading-tight ${cfg.textColor}`}>
+                    {cfg.label}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500">Dictamen</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+                  <p className="text-3xl font-bold tabular-nums text-slate-800">
+                    {totalChecked}
+                    <span className="ml-0.5 text-base text-slate-300">
+                      /{checklist.length}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-500">
+                    Ítems completados
+                  </p>
+                </div>
+                <div
+                  className={[
+                    "rounded-xl border p-4 text-center",
+                    riesgosAltos > 0
+                      ? "border-red-200 bg-red-50"
+                      : "border-green-200 bg-green-50",
+                  ].join(" ")}
+                >
+                  <p
+                    className={[
+                      "text-3xl font-bold tabular-nums",
+                      riesgosAltos > 0 ? "text-red-600" : "text-green-600",
+                    ].join(" ")}
+                  >
+                    {riesgosAltos}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-500">
+                    Riesgos altos pendientes
+                  </p>
+                </div>
+              </div>
+
+              {/* Aviso fase PDF */}
+              <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                <p className="text-xs leading-relaxed text-blue-700">
+                  <span className="font-semibold">Fase futura:</span>{" "}
+                  esta sección podrá exportarse a PDF como entregable consultivo
+                  para el cliente.
+                </p>
+              </div>
+
+            </div>
+          )}
+
           {/* ── G: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap gap-2">
@@ -913,18 +1004,35 @@ export default function AuditoriaPage() {
               </Link>
             </div>
 
-            <div className="flex flex-col items-end gap-1">
-              <button
-                type="button"
-                disabled
-                className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-6 py-3 text-sm font-semibold text-white opacity-60"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Activar CRM
-              </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowValidationReport((prev) => !prev)}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors",
+                    showValidationReport
+                      ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <FileText className="h-4 w-4" />
+                  {showValidationReport
+                    ? "Ocultar reporte"
+                    : "Ver reporte de validación"}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-6 py-2.5 text-sm font-semibold text-white opacity-60"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Activar CRM
+                </button>
+              </div>
               <span className="max-w-xs text-right text-[11px] text-slate-400">
-                Disponible en Fase 2 — requiere persistencia, auditoría real y
-                aprobación.
+                Activar CRM disponible en Fase 2 — requiere persistencia, auditoría
+                real y aprobación.
               </span>
             </div>
           </div>
