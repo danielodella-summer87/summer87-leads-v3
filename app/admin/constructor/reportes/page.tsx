@@ -820,18 +820,12 @@ export default function ReportesPage() {
               </Link>
             </div>
 
-            <div className="flex flex-col items-end gap-1">
-              <button
-                type="button"
-                disabled
-                className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-6 py-3 text-sm font-semibold text-white opacity-60"
-              >
-                Continuar a Auditoría final
-              </button>
-              <span className="text-[11px] text-slate-400">
-                Disponible en Bloque 1J
-              </span>
-            </div>
+            <Link
+              href="/admin/constructor/auditoria"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+            >
+              Continuar a Auditoría final
+            </Link>
           </div>
 
         </div>

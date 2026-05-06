@@ -113,7 +113,7 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "reportes",
     step: 7,
     title: "Reportes",
-    status: "current",
+    status: "done",
     description:
       "Definir reportes, métricas, filtros, frecuencia y audiencias.",
     href: "/admin/constructor/reportes",
@@ -122,9 +122,10 @@ export const CRM_SETUP_STEPS: CRMSetupStep[] = [
     id: "auditoria",
     step: 8,
     title: "Auditoría final",
-    status: "locked",
+    status: "current",
     description:
       "Generar el Reporte Maestro y validar si el CRM está listo para activarse.",
+    href: "/admin/constructor/auditoria",
   },
 ];
 
