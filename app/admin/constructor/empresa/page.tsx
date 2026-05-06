@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -115,6 +115,53 @@ function SectionHeader({ letter, title }: { letter: string; title: string }) {
 
 export default function EmpresaPage() {
   const [form, setForm] = useState<EmpresaForm>(INITIAL_FORM);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/constructor/setup", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { data?: { empresa?: unknown } | null }) => {
+        const empresa = json?.data?.empresa;
+        if (
+          empresa &&
+          typeof empresa === "object" &&
+          !Array.isArray(empresa) &&
+          Object.keys(empresa).length > 0
+        ) {
+          setForm({ ...INITIAL_FORM, ...(empresa as Partial<EmpresaForm>) });
+        }
+      })
+      .catch(() => {
+        // GET falló — el formulario queda con defaults y el usuario puede completarlo igual
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+    try {
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "empresa", mark_completed: true, data: form }),
+      });
+      const json = (await res.json()) as { data?: unknown; error?: string | null };
+      if (!res.ok || json.error) {
+        setSaveError(json.error ?? "Error al guardar");
+      } else {
+        setSaveMessage("Configuración guardada correctamente.");
+      }
+    } catch {
+      setSaveError("Error de red al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function setField<K extends keyof EmpresaForm>(key: K, value: EmpresaForm[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -144,14 +191,15 @@ export default function EmpresaPage() {
     <PageContainer>
       <div className="space-y-5">
 
-        {/* ── Aviso de no-persistencia ─────────────────────────────────────── */}
+        {/* ── Aviso de persistencia ─────────────────────────────────────── */}
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
           <p className="text-xs font-semibold text-amber-800">
-            Datos no guardados en este bloque
+            {loading
+              ? "Cargando configuración guardada..."
+              : "Este paso guarda la configuración en la base de datos"}
           </p>
           <p className="mt-0.5 text-xs text-amber-700">
-            Esta pantalla prepara la estructura del formulario. La persistencia
-            real se conectará en una fase posterior.
+            Usá <strong>Guardar configuración</strong> antes de avanzar al siguiente bloque.
           </p>
         </div>
 
@@ -458,16 +506,32 @@ export default function EmpresaPage() {
 
           {/* ── Acciones ─────────────────────────────────────────────────────── */}
           <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-6">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Guardando..." : "Guardar configuración"}
+            </button>
+
+            {saveMessage && (
+              <span className="text-xs font-medium text-green-700">{saveMessage}</span>
+            )}
+            {saveError && (
+              <span className="text-xs font-medium text-red-600">{saveError}</span>
+            )}
+
             <Link
               href="/admin/constructor/cuestionario"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              className="ml-auto inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-slate-900"
             >
               Continuar a Cuestionario
               <ChevronRight className="h-4 w-4" />
             </Link>
             <Link
               href="/admin/constructor"
-              className="ml-auto text-sm text-slate-400 hover:text-slate-700 transition-colors"
+              className="text-sm text-slate-400 hover:text-slate-700 transition-colors"
             >
               ← Volver al Constructor
             </Link>
