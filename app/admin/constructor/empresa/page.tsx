@@ -121,23 +121,67 @@ export default function EmpresaPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/constructor/setup", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((json: { data?: { empresa?: unknown } | null }) => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setLoading(true);
+      setSaveError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: { empresa?: unknown } | null;
+          error?: string | null;
+        } | null;
+
+        if (!res.ok) {
+          if (!cancelled) {
+            setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
         const empresa = json?.data?.empresa;
+
         if (
           empresa &&
           typeof empresa === "object" &&
           !Array.isArray(empresa) &&
           Object.keys(empresa).length > 0
         ) {
-          setForm({ ...INITIAL_FORM, ...(empresa as Partial<EmpresaForm>) });
+          if (!cancelled) {
+            const loaded = empresa as Partial<EmpresaForm>;
+            setForm({
+              ...INITIAL_FORM,
+              ...loaded,
+              tiposCliente: Array.isArray(loaded.tiposCliente)
+                ? loaded.tiposCliente
+                : INITIAL_FORM.tiposCliente,
+              fuentesProspectos: Array.isArray(loaded.fuentesProspectos)
+                ? loaded.fuentesProspectos
+                : INITIAL_FORM.fuentesProspectos,
+            });
+          }
         }
-      })
-      .catch(() => {
-        // GET falló — el formulario queda con defaults y el usuario puede completarlo igual
-      })
-      .finally(() => setLoading(false));
+      } catch {
+        if (!cancelled) {
+          setSaveError(
+            "No se pudo cargar la configuración guardada. Podés completar el formulario y guardar nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleSave() {
