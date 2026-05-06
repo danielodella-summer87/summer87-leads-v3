@@ -623,16 +623,13 @@ export default function CuestionarioPage() {
 
           {/* ── Acciones ─────────────────────────────────────────────────────── */}
           <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-6">
-            <button
-              disabled
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white opacity-40"
+            <Link
+              href="/admin/constructor/documentos"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
             >
               Continuar a Documentos fuente
               <ChevronRight className="h-4 w-4" />
-            </button>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-              Disponible en Bloque 1E
-            </span>
+            </Link>
             <div className="ml-auto flex items-center gap-4">
               <Link
                 href="/admin/constructor/empresa"

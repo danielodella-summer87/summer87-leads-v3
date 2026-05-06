@@ -446,16 +446,13 @@ export default function EmpresaPage() {
 
           {/* ── Acciones ─────────────────────────────────────────────────────── */}
           <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-6">
-            <button
-              disabled
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white opacity-40"
+            <Link
+              href="/admin/constructor/cuestionario"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
             >
               Continuar a Cuestionario
               <ChevronRight className="h-4 w-4" />
-            </button>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-              Disponible en Bloque 1D
-            </span>
+            </Link>
             <Link
               href="/admin/constructor"
               className="ml-auto text-sm text-slate-400 hover:text-slate-700 transition-colors"
