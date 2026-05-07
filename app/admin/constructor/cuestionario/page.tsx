@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -263,6 +263,92 @@ export default function CuestionarioPage() {
   const [form, setForm] = useState<CuestionarioForm>(INITIAL_FORM);
   const [segmentosCustom, setSegmentosCustom] = useState<string[]>([]);
   const [segmentoInput, setSegmentoInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setLoading(true);
+      setSaveError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: { cuestionario?: unknown } | null;
+          error?: string | null;
+        } | null;
+
+        if (!res.ok) {
+          if (!cancelled) {
+            setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        const cuestionario = json?.data?.cuestionario;
+
+        if (
+          cuestionario &&
+          typeof cuestionario === "object" &&
+          !Array.isArray(cuestionario) &&
+          Object.keys(cuestionario).length > 0
+        ) {
+          if (!cancelled) {
+            const loaded = cuestionario as Partial<CuestionarioForm>;
+            setForm({
+              ...INITIAL_FORM,
+              ...loaded,
+              tiposVenta: Array.isArray(loaded.tiposVenta)
+                ? loaded.tiposVenta
+                : INITIAL_FORM.tiposVenta,
+              tiposClienteObj: Array.isArray(loaded.tiposClienteObj)
+                ? loaded.tiposClienteObj
+                : INITIAL_FORM.tiposClienteObj,
+              decisores: Array.isArray(loaded.decisores)
+                ? loaded.decisores
+                : INITIAL_FORM.decisores,
+              infoPrePropuesta: Array.isArray(loaded.infoPrePropuesta)
+                ? loaded.infoPrePropuesta
+                : INITIAL_FORM.infoPrePropuesta,
+              tiposPropuesta: Array.isArray(loaded.tiposPropuesta)
+                ? loaded.tiposPropuesta
+                : INITIAL_FORM.tiposPropuesta,
+              motivosPerdida: Array.isArray(loaded.motivosPerdida)
+                ? loaded.motivosPerdida
+                : INITIAL_FORM.motivosPerdida,
+              metricasImportantes: Array.isArray(loaded.metricasImportantes)
+                ? loaded.metricasImportantes
+                : INITIAL_FORM.metricasImportantes,
+              dondeAyudarIA: Array.isArray(loaded.dondeAyudarIA)
+                ? loaded.dondeAyudarIA
+                : INITIAL_FORM.dondeAyudarIA,
+            });
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSaveError(
+            "No se pudo cargar la configuración guardada. Podés completar el formulario y guardar nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function setField<K extends keyof CuestionarioForm>(
     key: K,
@@ -278,20 +364,55 @@ export default function CuestionarioPage() {
     setSegmentoInput("");
   }
 
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          step: "cuestionario",
+          mark_completed: true,
+          data: form,
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as {
+        data?: unknown;
+        error?: string | null;
+      } | null;
+
+      if (!res.ok || json?.error) {
+        setSaveError(json?.error ?? "Error al guardar");
+      } else {
+        setSaveMessage("Cuestionario guardado correctamente.");
+      }
+    } catch {
+      setSaveError("Error de red al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const step = CRM_SETUP_STEPS.find((s) => s.id === "cuestionario");
 
   return (
     <PageContainer>
       <div className="space-y-5">
 
-        {/* ── Aviso de no-persistencia ─────────────────────────────────────── */}
+        {/* ── Aviso de persistencia ───────────────────────────────────────── */}
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
           <p className="text-xs font-semibold text-amber-800">
-            Datos no guardados en este bloque
+            {loading
+              ? "Cargando configuración guardada..."
+              : "Este paso guarda el cuestionario en la base de datos"}
           </p>
           <p className="mt-0.5 text-xs text-amber-700">
-            Esta pantalla prepara la estructura del futuro cuestionario. La
-            persistencia y el análisis IA se conectarán en una fase posterior.
+            Usá <strong>Guardar cuestionario</strong> antes de avanzar al
+            siguiente bloque.
           </p>
         </div>
 
@@ -698,13 +819,32 @@ export default function CuestionarioPage() {
 
           {/* ── Acciones ─────────────────────────────────────────────────────── */}
           <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-6">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Guardando..." : "Guardar cuestionario"}
+            </button>
+
             <Link
               href="/admin/constructor/documentos"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
             >
               Continuar a Documentos fuente
               <ChevronRight className="h-4 w-4" />
             </Link>
+            {saveMessage && (
+              <span className="text-xs font-medium text-green-700">
+                {saveMessage}
+              </span>
+            )}
+            {saveError && (
+              <span className="text-xs font-medium text-red-600">
+                {saveError}
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-4">
               <Link
                 href="/admin/constructor/empresa"
