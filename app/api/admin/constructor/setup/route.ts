@@ -3,6 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
+// TEMPORAL PROTOTIPO:
+// Permite leer/guardar la configuración del Constructor CRM sin exigir config.update.
+// Motivo: estamos diseñando y validando el flujo de Constructor persistente.
+// Revertir a false o reemplazar por permisos reales antes de activar CRM operativo.
+const CONSTRUCTOR_SETUP_PROTOTYPE_MODE = true;
+
 function supabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -45,6 +51,17 @@ function nextStep(current: StepKey): StepKey {
   return STEP_ORDER[idx + 1];
 }
 
+function requireConstructorSetupAccess() {
+  if (CONSTRUCTOR_SETUP_PROTOTYPE_MODE) return null;
+
+  // TODO: reemplazar por requirePermission("config.update") o el permiso real
+  // del Constructor cuando se cierre el modo prototipo.
+  return NextResponse.json(
+    { data: null, error: "Permisos reales del Constructor pendientes de conectar." } satisfies ApiResp<null>,
+    { status: 403 }
+  );
+}
+
 /**
  * GET /api/admin/constructor/setup
  * Devuelve la fila completa de crm_setup_config (1 por instancia).
@@ -52,9 +69,8 @@ function nextStep(current: StepKey): StepKey {
  */
 export async function GET() {
   try {
-    // TEMPORAL PROTOTIPO:
-    // Durante el diseño del Constructor CRM se permite leer/guardar setup sin exigir config.update.
-    // Revertir cuando el flujo de permisos del Constructor quede definido.
+    const accessError = requireConstructorSetupAccess();
+    if (accessError) return accessError;
 
     const sb = supabaseAdmin();
     const { data: row, error } = await sb
@@ -97,9 +113,8 @@ export async function GET() {
  */
 export async function PATCH(req: NextRequest) {
   try {
-    // TEMPORAL PROTOTIPO:
-    // Durante el diseño del Constructor CRM se permite leer/guardar setup sin exigir config.update.
-    // Revertir cuando el flujo de permisos del Constructor quede definido.
+    const accessError = requireConstructorSetupAccess();
+    if (accessError) return accessError;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
