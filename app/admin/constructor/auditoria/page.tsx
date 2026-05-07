@@ -972,6 +972,70 @@ export default function AuditoriaPage() {
                 </div>
               </div>
 
+              {/* Resumen ejecutivo */}
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
+                  Resumen ejecutivo
+                </p>
+                <p className="mb-4 text-sm leading-relaxed text-slate-600">
+                  Este reporte resume el estado inicial de configuración del CRM
+                  y permite validar con el cliente si la información cargada es
+                  suficiente para avanzar hacia una etapa operativa.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Estado general
+                    </p>
+                    <p className={`mt-1 text-xs font-bold ${cfg.textColor}`}>
+                      {cfg.label}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-400">
+                      Preparación actual
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-blue-700">
+                      {score}/100
+                    </p>
+                  </div>
+                  <div
+                    className={[
+                      "rounded-lg border px-3 py-2.5",
+                      riesgosAltos > 0
+                        ? "border-amber-100 bg-amber-50"
+                        : "border-green-100 bg-green-50",
+                    ].join(" ")}
+                  >
+                    <p
+                      className={[
+                        "text-[10px] font-semibold uppercase tracking-wide",
+                        riesgosAltos > 0 ? "text-amber-500" : "text-green-500",
+                      ].join(" ")}
+                    >
+                      Riesgo principal
+                    </p>
+                    <p
+                      className={[
+                        "mt-1 text-xs font-bold",
+                        riesgosAltos > 0 ? "text-amber-700" : "text-green-700",
+                      ].join(" ")}
+                    >
+                      {riesgosAltos > 0
+                        ? "Existen riesgos altos pendientes"
+                        : "No hay riesgos altos pendientes"}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5 text-xs font-semibold leading-relaxed text-indigo-700">
+                  {score >= 80
+                    ? "Recomendación: avanzar a validación final con el cliente."
+                    : score >= 55
+                    ? "Recomendación: revisar pendientes antes de activar el CRM."
+                    : "Recomendación: no activar todavía; completar información crítica primero."}
+                </p>
+              </div>
+
               {/* Aviso fase PDF */}
               <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
