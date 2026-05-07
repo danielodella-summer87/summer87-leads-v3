@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { requirePermission } from "@/lib/rbac/requirePermission";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +13,6 @@ function supabaseAdmin() {
 }
 
 type ApiResp<T> = { data?: T | null; error?: string | null };
-
-async function allowDevOrRequire(req: NextRequest, perm: string) {
-  if (process.env.NODE_ENV !== "production") return { id: "dev" };
-  return await requirePermission(req, perm);
-}
 
 // Closed mapping prevents SQL column name injection from request body
 const STEP_TO_COLUMN = {
@@ -56,15 +50,11 @@ function nextStep(current: StepKey): StepKey {
  * Devuelve la fila completa de crm_setup_config (1 por instancia).
  * 404 si la tabla está vacía (instancia sin seed).
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const user = await allowDevOrRequire(req, "config.read");
-    if (!user) {
-      return NextResponse.json(
-        { data: null, error: "No autorizado" } satisfies ApiResp<null>,
-        { status: 403 }
-      );
-    }
+    // TEMPORAL PROTOTIPO:
+    // Durante el diseño del Constructor CRM se permite leer/guardar setup sin exigir config.update.
+    // Revertir cuando el flujo de permisos del Constructor quede definido.
 
     const sb = supabaseAdmin();
     const { data: row, error } = await sb
@@ -107,13 +97,9 @@ export async function GET(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const user = await allowDevOrRequire(req, "config.update");
-    if (!user) {
-      return NextResponse.json(
-        { data: null, error: "No autorizado" } satisfies ApiResp<null>,
-        { status: 403 }
-      );
-    }
+    // TEMPORAL PROTOTIPO:
+    // Durante el diseño del Constructor CRM se permite leer/guardar setup sin exigir config.update.
+    // Revertir cuando el flujo de permisos del Constructor quede definido.
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
