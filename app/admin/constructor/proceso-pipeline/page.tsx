@@ -50,6 +50,24 @@ type ReglasValidacion = {
   tareasAutomaticas: string;
 };
 
+type SetupRecord = Record<string, unknown>;
+
+type LocalSuggestion = {
+  id: string;
+  targetField:
+    | "etapas"
+    | "columnas"
+    | "condicionesAvance"
+    | "decisionesHumanas"
+    | "validaciones"
+    | "reglas"
+    | "general";
+  title: string;
+  description: string;
+  actionLabel?: string;
+  apply?: () => void;
+};
+
 type ProcesoPipelinePayload = {
   etapas: EtapaProceso[];
   columnas: ColumnaKanban[];
@@ -135,6 +153,266 @@ const COLUMNAS_INICIALES: ColumnaKanban[] = [
   { id: "k8", nombre: "Perdido", tipo: "perdida", criterioEntrada: "Cliente descartó la propuesta o no respondió", criterioSalida: "—", slaDias: "" },
 ];
 
+const ETAPAS_ASISTENTE: EtapaProceso[] = [
+  {
+    id: "asistente-etapa-lead-recibido",
+    nombre: "Lead recibido",
+    objetivo: "Registrar la oportunidad y validar datos iniciales.",
+    responsable: "SDR / Vendedor",
+    tareas: "Crear ficha, registrar origen, asignar responsable",
+    condicionAvance: "Datos mínimos cargados y responsable asignado",
+    requiereValidacionHumana: false,
+  },
+  {
+    id: "asistente-etapa-calificacion",
+    nombre: "Calificación",
+    objetivo: "Confirmar si la oportunidad cumple el perfil comercial.",
+    responsable: "SDR / Vendedor",
+    tareas: "Relevar necesidad, presupuesto, decisor y urgencia",
+    condicionAvance: "Lead calificado con próximo paso definido",
+    requiereValidacionHumana: false,
+  },
+  {
+    id: "asistente-etapa-diagnostico-reunion",
+    nombre: "Diagnóstico / reunión",
+    objetivo: "Entender necesidad, alcance y criterios de decisión.",
+    responsable: "Vendedor / Técnico",
+    tareas: "Coordinar reunión, tomar notas, validar requerimientos",
+    condicionAvance: "Diagnóstico registrado y necesidad validada",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-etapa-propuesta-enviada",
+    nombre: "Propuesta enviada",
+    objetivo: "Enviar propuesta comercial y confirmar recepción.",
+    responsable: "Vendedor / Gerente comercial",
+    tareas: "Preparar propuesta, revisar, enviar y registrar fecha",
+    condicionAvance: "Propuesta enviada y próxima acción definida",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-etapa-seguimiento",
+    nombre: "Seguimiento",
+    objetivo: "Evitar oportunidades frías y sostener el avance comercial.",
+    responsable: "Vendedor",
+    tareas: "Registrar contacto, definir próximo paso, actualizar fecha",
+    condicionAvance: "Cliente responde o se define siguiente acción",
+    requiereValidacionHumana: false,
+  },
+  {
+    id: "asistente-etapa-negociacion",
+    nombre: "Negociación",
+    objetivo: "Resolver objeciones y acordar condiciones.",
+    responsable: "Vendedor / Gerente comercial",
+    tareas: "Registrar objeciones, ajustar condiciones, validar descuentos",
+    condicionAvance: "Condiciones acordadas o decisión del cliente registrada",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-etapa-ganado",
+    nombre: "Ganado",
+    objetivo: "Confirmar cierre y preparar entrega inicial.",
+    responsable: "Vendedor / Administración",
+    tareas: "Registrar contrato, pago u orden de compra",
+    condicionAvance: "Venta confirmada y handoff preparado",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-etapa-perdido",
+    nombre: "Perdido",
+    objetivo: "Registrar motivo de pérdida para aprendizaje comercial.",
+    responsable: "Vendedor",
+    tareas: "Cargar motivo, etapa de pérdida y observaciones",
+    condicionAvance: "Motivo de pérdida documentado",
+    requiereValidacionHumana: true,
+  },
+];
+
+const ETAPAS_EDUCACION_ASISTENTE: EtapaProceso[] = [
+  {
+    id: "asistente-educacion-lead-recibido",
+    nombre: "Lead recibido",
+    objetivo: "Registrar la consulta educativa y su origen.",
+    responsable: "Admisiones / Comercial",
+    tareas: "Cargar datos, origen, programa de interés y responsable",
+    condicionAvance: "Consulta registrada con datos mínimos y responsable asignado",
+    requiereValidacionHumana: false,
+  },
+  {
+    id: "asistente-educacion-consulta-inicial",
+    nombre: "Consulta inicial",
+    objetivo: "Entender interés, perfil y necesidad del estudiante o institución.",
+    responsable: "Admisiones / Asesor educativo",
+    tareas: "Responder consulta, relevar programa, modalidad, presupuesto y timing",
+    condicionAvance: "Interés validado y próximo paso definido",
+    requiereValidacionHumana: false,
+  },
+  {
+    id: "asistente-educacion-diagnostico-academico",
+    nombre: "Diagnóstico académico / reunión",
+    objetivo: "Validar encaje académico, requisitos y decisión de compra.",
+    responsable: "Asesor educativo / Coordinación académica",
+    tareas: "Coordinar reunión, validar requisitos, documentar necesidades",
+    condicionAvance: "Diagnóstico o reunión validada con información suficiente",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-educacion-propuesta",
+    nombre: "Propuesta educativa",
+    objetivo: "Presentar programa, condiciones, inversión y próximos pasos.",
+    responsable: "Admisiones / Comercial",
+    tareas: "Enviar propuesta, registrar condiciones y confirmar recepción",
+    condicionAvance: "Propuesta enviada y seguimiento agendado",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-educacion-seguimiento",
+    nombre: "Seguimiento",
+    objetivo: "Evitar consultas frías y resolver dudas antes del cierre.",
+    responsable: "Admisiones / Comercial",
+    tareas: "Registrar contacto, resolver objeciones y actualizar fecha de seguimiento",
+    condicionAvance: "Respuesta del interesado o decisión registrada",
+    requiereValidacionHumana: false,
+  },
+  {
+    id: "asistente-educacion-inscripcion",
+    nombre: "Inscripción / cierre",
+    objetivo: "Confirmar inscripción, pago, contrato o documentación requerida.",
+    responsable: "Admisiones / Administración",
+    tareas: "Validar documentación, pago y confirmación final",
+    condicionAvance: "Inscripción confirmada o cierre documentado",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-educacion-onboarding",
+    nombre: "Onboarding / inicio",
+    objetivo: "Acompañar el inicio del estudiante, grupo o institución.",
+    responsable: "Académico / Operaciones",
+    tareas: "Enviar bienvenida, acceso, calendario y contacto responsable",
+    condicionAvance: "Inicio confirmado y handoff a operación académica",
+    requiereValidacionHumana: true,
+  },
+  {
+    id: "asistente-educacion-perdido",
+    nombre: "Perdido",
+    objetivo: "Registrar motivo de pérdida para mejorar admisiones.",
+    responsable: "Admisiones / Comercial",
+    tareas: "Cargar motivo, observación y etapa donde se perdió",
+    condicionAvance: "Motivo de pérdida registrado",
+    requiereValidacionHumana: true,
+  },
+];
+
+const COLUMNAS_ASISTENTE: ColumnaKanban[] = [
+  {
+    id: "asistente-columna-nuevo",
+    nombre: "Nuevo",
+    tipo: "inicial",
+    criterioEntrada: "Oportunidad creada o recibida por cualquier canal",
+    criterioSalida: "Primer contacto realizado o responsable asignado",
+    slaDias: "1",
+  },
+  {
+    id: "asistente-columna-en-contacto",
+    nombre: "En contacto",
+    tipo: "activa",
+    criterioEntrada: "Lead contactado o intento de contacto iniciado",
+    criterioSalida: "Necesidad y próximos pasos identificados",
+    slaDias: "3",
+  },
+  {
+    id: "asistente-columna-calificado",
+    nombre: "Calificado",
+    tipo: "activa",
+    criterioEntrada: "Lead cumple criterios mínimos de calificación",
+    criterioSalida: "Diagnóstico, reunión o propuesta definidos",
+    slaDias: "5",
+  },
+  {
+    id: "asistente-columna-propuesta",
+    nombre: "Propuesta",
+    tipo: "activa",
+    criterioEntrada: "Propuesta preparada o enviada al cliente",
+    criterioSalida: "Cliente responde o se agenda seguimiento",
+    slaDias: "7",
+  },
+  {
+    id: "asistente-columna-negociacion",
+    nombre: "Negociación",
+    tipo: "activa",
+    criterioEntrada: "Cliente evalúa o negocia condiciones",
+    criterioSalida: "Acuerdo alcanzado o pérdida registrada",
+    slaDias: "10",
+  },
+  {
+    id: "asistente-columna-ganado",
+    nombre: "Ganado",
+    tipo: "ganada",
+    criterioEntrada: "Venta confirmada por contrato, pedido o pago",
+    criterioSalida: "Handoff a entrega, implementación u operaciones",
+    slaDias: "",
+  },
+  {
+    id: "asistente-columna-perdido",
+    nombre: "Perdido",
+    tipo: "perdida",
+    criterioEntrada: "Cliente descarta, no responde o el equipo descalifica",
+    criterioSalida: "Motivo de pérdida registrado",
+    slaDias: "",
+  },
+];
+
+const ETAPA_PERDIDO_ASISTENTE =
+  ETAPAS_ASISTENTE.find((etapa) => etapa.nombre === "Perdido")!;
+const COLUMNA_PERDIDO_ASISTENTE =
+  COLUMNAS_ASISTENTE.find((columna) => columna.nombre === "Perdido")!;
+const ETAPA_SEGUIMIENTO_ASISTENTE =
+  ETAPAS_ASISTENTE.find((etapa) => etapa.nombre === "Seguimiento")!;
+const ETAPA_DIAGNOSTICO_ASISTENTE =
+  ETAPAS_ASISTENTE.find((etapa) => etapa.nombre === "Diagnóstico / reunión")!;
+const COLUMNA_SEGUIMIENTO_ASISTENTE: ColumnaKanban = {
+  id: "asistente-columna-seguimiento",
+  nombre: "Seguimiento",
+  tipo: "activa",
+  criterioEntrada: "Propuesta enviada o contacto pendiente de respuesta",
+  criterioSalida: "Cliente responde, avanza a negociación o se marca perdido",
+  slaDias: "5",
+};
+const ETAPA_ONBOARDING_ASISTENTE: EtapaProceso = {
+  id: "asistente-etapa-onboarding",
+  nombre: "Onboarding / entrega inicial",
+  objetivo: "Asegurar transición ordenada después del cierre ganado.",
+  responsable: "Operaciones / Implementación",
+  tareas: "Coordinar entrega, recopilar datos finales y confirmar inicio",
+  condicionAvance: "Cliente recibido por el equipo de entrega u operaciones",
+  requiereValidacionHumana: true,
+};
+const COLUMNA_ONBOARDING_ASISTENTE: ColumnaKanban = {
+  id: "asistente-columna-onboarding",
+  nombre: "Onboarding / entrega inicial",
+  tipo: "activa",
+  criterioEntrada: "Oportunidad marcada como ganada",
+  criterioSalida: "Entrega inicial, implementación u onboarding iniciado",
+  slaDias: "7",
+};
+
+const CONDICIONES_AVANCE_SUGERIDAS =
+  "Para avanzar una oportunidad debe tener responsable, próxima acción, fecha de seguimiento y criterio de salida cumplido.";
+
+const DECISIONES_HUMANAS_SUGERIDAS =
+  "Revisión humana obligatoria para descuentos, propuestas finales, oportunidades de alto valor y cierre como perdido.";
+
+const REGLAS_MINIMAS_CALIDAD_SUGERIDAS = {
+  condicionesAvance:
+    "Responsable obligatorio, próxima acción obligatoria, fecha de seguimiento obligatoria y criterio de salida cumplido.",
+  decisionesHumanas:
+    "Validación humana antes de propuesta final, descuentos especiales, oportunidades de alto valor y cierres perdidos.",
+  alertasSistema:
+    "Alertar oportunidades sin próxima acción, sin fecha de seguimiento o frías por falta de actividad.",
+  tareasAutomaticas:
+    "Crear tarea de seguimiento al avanzar de etapa y solicitar motivo obligatorio si se marca perdido.",
+};
+
 const TIPOS_COLUMNA: { value: TipoColumna; label: string; className: string }[] = [
   { value: "inicial", label: "Inicial", className: "border-slate-200 bg-slate-100 text-slate-600" },
   { value: "activa", label: "Activa", className: "border-blue-200 bg-blue-50 text-blue-700" },
@@ -147,8 +425,24 @@ const TIPO_COLUMNA_VALUES = new Set<TipoColumna>(
   TIPOS_COLUMNA.map((tipo) => tipo.value)
 );
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is SetupRecord {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asRecord(value: unknown): SetupRecord {
+  return isRecord(value) ? value : {};
+}
+
+function textIncludes(value: unknown, terms: string[]): boolean {
+  const text = String(value ?? "").toLowerCase();
+  return terms.some((term) => text.includes(term.toLowerCase()));
+}
+
+function arrayOrTextIncludes(value: unknown, terms: string[]): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => textIncludes(item, terms));
+  }
+  return textIncludes(value, terms);
 }
 
 function asString(value: unknown): string {
@@ -210,6 +504,56 @@ function normalizeReglas(value: unknown): ReglasValidacion {
   };
 }
 
+function hasTextMatch(items: unknown[], terms: string[]) {
+  return items.some((item) => {
+    const text =
+      typeof item === "string"
+        ? item
+        : item && typeof item === "object"
+        ? String(
+            (item as SetupRecord).nombre ??
+              (item as SetupRecord).title ??
+              (item as SetupRecord).label ??
+              ""
+          )
+        : "";
+
+    return terms.some((term) =>
+      text.toLowerCase().includes(term.toLowerCase())
+    );
+  });
+}
+
+function mergeEtapasByName(
+  current: EtapaProceso[],
+  additions: EtapaProceso[]
+): EtapaProceso[] {
+  return [
+    ...current,
+    ...additions.filter(
+      (addition) => !hasTextMatch(current, [addition.nombre])
+    ),
+  ];
+}
+
+function mergeColumnasByName(
+  current: ColumnaKanban[],
+  additions: ColumnaKanban[]
+): ColumnaKanban[] {
+  return [
+    ...current,
+    ...additions.filter(
+      (addition) => !hasTextMatch(current, [addition.nombre])
+    ),
+  ];
+}
+
+function appendTextIfMissing(current: string, addition: string) {
+  if (!current.trim()) return addition;
+  if (current.includes(addition)) return current;
+  return `${current}\n\n${addition}`;
+}
+
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wide";
@@ -249,6 +593,7 @@ export default function ProcesoPipelinePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,7 +610,7 @@ export default function ProcesoPipelinePage() {
         });
 
         const json = (await res.json().catch(() => null)) as {
-          data?: { proceso_pipeline?: unknown } | null;
+          data?: (SetupRecord & { proceso_pipeline?: unknown }) | null;
           error?: string | null;
         } | null;
 
@@ -281,6 +626,10 @@ export default function ProcesoPipelinePage() {
             setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
           }
           return;
+        }
+
+        if (!cancelled) {
+          setConstructorContext(asRecord(json?.data));
         }
 
         const procesoPipeline = json?.data?.proceso_pipeline;
@@ -399,6 +748,322 @@ export default function ProcesoPipelinePage() {
     value: ReglasValidacion[K]
   ) {
     setReglas((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const empresaContext = asRecord(constructorContext?.empresa);
+  const cuestionarioContext = asRecord(constructorContext?.cuestionario);
+  const diagnosticoContext = asRecord(constructorContext?.diagnostico);
+
+  const businessContext = {
+    esEducacion:
+      textIncludes(empresaContext.rubro, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]) ||
+      textIncludes(empresaContext.giro, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]) ||
+      textIncludes(empresaContext.vertical, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]),
+    ventaConsultiva:
+      arrayOrTextIncludes(cuestionarioContext.tiposVenta, ["consultiva"]) ||
+      textIncludes(cuestionarioContext.procesoActual, [
+        "diagnóstico",
+        "diagnostico",
+        "reunión",
+        "reunion",
+      ]),
+    requiereDiagnostico: textIncludes(cuestionarioContext.procesoActual, [
+      "diagnóstico",
+      "diagnostico",
+      "reunión",
+      "reunion",
+      "visita",
+    ]),
+    necesitaSeguimiento:
+      arrayOrTextIncludes(diagnosticoContext.riesgos, ["seguimiento"]) ||
+      textIncludes(cuestionarioContext.procesoActual, ["seguimiento"]),
+    riesgoTrazabilidad: arrayOrTextIncludes(diagnosticoContext.riesgos, [
+      "trazabilidad",
+      "información",
+      "informacion",
+      "pipeline",
+    ]),
+    necesitaValidacionHumana:
+      arrayOrTextIncludes(diagnosticoContext.riesgos, [
+        "dependencia",
+        "personas clave",
+        "validación",
+        "validacion",
+      ]) ||
+      arrayOrTextIncludes(cuestionarioContext.decisores, [
+        "dueño",
+        "fundador",
+        "gerente",
+      ]),
+  };
+
+  const hasPerdido = hasTextMatch([...etapas, ...columnas], ["perdido"]);
+  const hasSeguimiento = hasTextMatch([...etapas, ...columnas], ["seguimiento"]);
+  const hasDiagnosticoReunion = hasTextMatch(
+    etapas,
+    ["diagnóstico", "diagnostico", "reunión", "reunion", "visita"]
+  );
+  const hasGanado = hasTextMatch([...etapas, ...columnas], ["ganado"]);
+  const hasOnboarding = hasTextMatch(
+    [...etapas, ...columnas],
+    ["onboarding", "implementación", "implementacion", "entrega"]
+  );
+  const hasColumnasClave = [
+    ["nuevo"],
+    ["contacto"],
+    ["calificado"],
+    ["propuesta"],
+    ["negociación", "negociacion"],
+    ["ganado"],
+    ["perdido"],
+  ].every((terms) =>
+    hasTextMatch(columnas, terms)
+  );
+  const reglasVacias =
+    !reglas.condicionesAvance.trim() &&
+    !reglas.decisionesHumanas.trim() &&
+    !reglas.documentosPorEtapa.trim() &&
+    !reglas.alertasSistema.trim() &&
+    !reglas.tareasAutomaticas.trim();
+  const reglasIncompletas =
+    reglasVacias ||
+    !reglas.condicionesAvance.toLowerCase().includes("responsable") ||
+    !reglas.condicionesAvance.toLowerCase().includes("seguimiento") ||
+    !reglas.decisionesHumanas.toLowerCase().includes("propuesta");
+  const condicionesAvanceSugeridas = businessContext.ventaConsultiva
+    ? `${CONDICIONES_AVANCE_SUGERIDAS}\n\nEn ventas consultivas, no avanzar a propuesta sin diagnóstico o reunión validada.`
+    : CONDICIONES_AVANCE_SUGERIDAS;
+  const decisionesHumanasSugeridas = businessContext.necesitaValidacionHumana
+    ? `${DECISIONES_HUMANAS_SUGERIDAS}\n\nEste negocio parece requerir validación humana en decisiones clave.`
+    : DECISIONES_HUMANAS_SUGERIDAS;
+
+  const localSuggestions: LocalSuggestion[] = [];
+
+  if (etapas.length < 5) {
+    localSuggestions.push({
+      id: "etapas-pocas",
+      targetField: "etapas",
+      title: businessContext.esEducacion
+        ? "Podés partir de un proceso educativo típico"
+        : "Podés partir de una estructura comercial típica",
+      description: businessContext.esEducacion
+        ? "Lead recibido, Consulta inicial, Diagnóstico académico / reunión, Propuesta educativa, Seguimiento, Inscripción / cierre, Onboarding / inicio y Perdido."
+        : "Lead recibido, Calificación, Diagnóstico / reunión, Propuesta enviada, Seguimiento, Negociación, Ganado y Perdido.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setEtapas((prev) =>
+          mergeEtapasByName(
+            prev,
+            businessContext.esEducacion
+              ? ETAPAS_EDUCACION_ASISTENTE
+              : ETAPAS_ASISTENTE
+          )
+        ),
+    });
+  }
+
+  if (columnas.length < 5 || !hasColumnasClave) {
+    localSuggestions.push({
+      id: "columnas-pocas",
+      targetField: "columnas",
+      title: "Podés partir de columnas visuales mínimas",
+      description:
+        "Nuevo, En contacto, Calificado, Propuesta, Negociación, Ganado y Perdido.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setColumnas((prev) => mergeColumnasByName(prev, COLUMNAS_ASISTENTE)),
+    });
+  }
+
+  if (
+    (businessContext.ventaConsultiva || businessContext.requiereDiagnostico) &&
+    !hasDiagnosticoReunion
+  ) {
+    localSuggestions.push({
+      id: "falta-diagnostico-reunion",
+      targetField: "etapas",
+      title: "El contexto sugiere agregar Diagnóstico / reunión",
+      description:
+        "El Cuestionario indica venta consultiva, reunión, visita o diagnóstico antes de propuesta.",
+      actionLabel: "Agregar Diagnóstico / reunión",
+      apply: () =>
+        setEtapas((prev) =>
+          mergeEtapasByName(prev, [ETAPA_DIAGNOSTICO_ASISTENTE])
+        ),
+    });
+  }
+
+  if (!hasPerdido) {
+    localSuggestions.push({
+      id: "falta-perdido",
+      targetField: "columnas",
+      title: "Falta una etapa o columna Perdido",
+      description:
+        "Sin etapa de pérdida no se pueden medir motivos de pérdida ni mejorar el proceso.",
+      actionLabel: "Agregar Perdido",
+      apply: () => {
+        setEtapas((prev) => mergeEtapasByName(prev, [ETAPA_PERDIDO_ASISTENTE]));
+        setColumnas((prev) =>
+          mergeColumnasByName(prev, [COLUMNA_PERDIDO_ASISTENTE])
+        );
+      },
+    });
+  }
+
+  if (!hasSeguimiento) {
+    localSuggestions.push({
+      id: "falta-seguimiento",
+      targetField: "etapas",
+      title: businessContext.necesitaSeguimiento
+        ? "El contexto sugiere reforzar Seguimiento"
+        : "Falta una etapa de Seguimiento",
+      description: businessContext.necesitaSeguimiento
+        ? "Diagnóstico o Cuestionario mencionan seguimiento; esta etapa ayuda a evitar oportunidades frías."
+        : "Una etapa de seguimiento ayuda a evitar oportunidades frías.",
+      actionLabel: "Agregar Seguimiento",
+      apply: () => {
+        setEtapas((prev) =>
+          mergeEtapasByName(prev, [ETAPA_SEGUIMIENTO_ASISTENTE])
+        );
+        setColumnas((prev) =>
+          mergeColumnasByName(prev, [COLUMNA_SEGUIMIENTO_ASISTENTE])
+        );
+      },
+    });
+  }
+
+  if (hasGanado && !hasOnboarding) {
+    localSuggestions.push({
+      id: "falta-onboarding",
+      targetField: "etapas",
+      title: "Podés agregar una etapa posterior a Ganado",
+      description:
+        "Onboarding / implementación / entrega inicial ayuda a ordenar el traspaso después del cierre.",
+      actionLabel: "Agregar Onboarding",
+      apply: () => {
+        setEtapas((prev) =>
+          mergeEtapasByName(prev, [ETAPA_ONBOARDING_ASISTENTE])
+        );
+        setColumnas((prev) =>
+          mergeColumnasByName(prev, [COLUMNA_ONBOARDING_ASISTENTE])
+        );
+      },
+    });
+  }
+
+  if (!reglas.condicionesAvance.trim()) {
+    localSuggestions.push({
+      id: "condiciones-avance-vacias",
+      targetField: "condicionesAvance",
+      title: "Definí condiciones mínimas para avanzar",
+      description: businessContext.ventaConsultiva
+        ? "Además de responsable, próxima acción y fecha de seguimiento, en venta consultiva conviene exigir diagnóstico o reunión validada antes de propuesta."
+        : "Una oportunidad solo debe avanzar si tiene próximo paso definido, responsable asignado y fecha de seguimiento.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setRegla("condicionesAvance", condicionesAvanceSugeridas),
+    });
+  }
+
+  if (!reglas.decisionesHumanas.trim()) {
+    localSuggestions.push({
+      id: "decisiones-humanas-vacias",
+      targetField: "decisionesHumanas",
+      title: "Definí validaciones humanas obligatorias",
+      description: businessContext.necesitaValidacionHumana
+        ? "El contexto acumulado sugiere validación humana en decisiones clave: descuentos, propuestas finales, alto valor y cierre como perdido."
+        : "Validar manualmente descuentos, propuestas finales, oportunidades de alto valor y cierres perdidos.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setRegla("decisionesHumanas", decisionesHumanasSugeridas),
+    });
+  }
+
+  if (reglasIncompletas) {
+    localSuggestions.push({
+      id: "reglas-minimas-calidad",
+      targetField: "reglas",
+      title: "Podés completar reglas mínimas de calidad",
+      description: businessContext.riesgoTrazabilidad
+        ? "Como hay señales de riesgo de trazabilidad, conviene exigir responsable, próxima acción, fecha de seguimiento, motivo de pérdida y validación humana antes de propuesta final."
+        : "Responsable obligatorio, próxima acción, fecha de seguimiento, motivo obligatorio al perder y validación humana antes de propuesta final.",
+      actionLabel: "Aplicar reglas mínimas",
+      apply: () =>
+        setReglas((prev) => ({
+          ...prev,
+          condicionesAvance: appendTextIfMissing(
+            prev.condicionesAvance,
+            REGLAS_MINIMAS_CALIDAD_SUGERIDAS.condicionesAvance
+          ),
+          decisionesHumanas: appendTextIfMissing(
+            prev.decisionesHumanas,
+            REGLAS_MINIMAS_CALIDAD_SUGERIDAS.decisionesHumanas
+          ),
+          alertasSistema: appendTextIfMissing(
+            prev.alertasSistema,
+            REGLAS_MINIMAS_CALIDAD_SUGERIDAS.alertasSistema
+          ),
+          tareasAutomaticas: appendTextIfMissing(
+            prev.tareasAutomaticas,
+            REGLAS_MINIMAS_CALIDAD_SUGERIDAS.tareasAutomaticas
+          ),
+        })),
+    });
+  }
+
+  function renderFieldSuggestions(targetField: LocalSuggestion["targetField"]) {
+    const suggestions = localSuggestions.filter(
+      (suggestion) => suggestion.targetField === targetField
+    );
+    if (suggestions.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-[11px] text-slate-400">
+          Sugerencias basadas en Empresa, Cuestionario y Diagnóstico ya cargados.
+        </p>
+        {suggestions.map((suggestion) => (
+          <div
+            key={suggestion.id}
+            className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2"
+          >
+            <p className="text-[11px] font-semibold text-indigo-800">
+              {suggestion.title}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+              {suggestion.description}
+            </p>
+            {suggestion.apply && (
+              <button
+                type="button"
+                onClick={suggestion.apply}
+                className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+              >
+                {suggestion.actionLabel ?? "Aplicar sugerencia"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   const TIPO_COLUMNA_LABEL = Object.fromEntries(
@@ -700,6 +1365,7 @@ export default function ProcesoPipelinePage() {
             <p className="mt-2 text-[11px] text-slate-400">
               {etapas.length} etapas definidas — se guardan como configuración del Constructor.
             </p>
+            {renderFieldSuggestions("etapas")}
           </div>
 
           {/* ── C: Diseñador de pipeline/Kanban ──────────────────────────── */}
@@ -793,6 +1459,7 @@ export default function ProcesoPipelinePage() {
             <p className="mt-2 text-[11px] text-slate-400">
               {columnas.length} columnas definidas — se guardan como diseño visual. Sin drag and drop todavía.
             </p>
+            {renderFieldSuggestions("columnas")}
           </div>
 
           {/* ── D: Condiciones y validaciones ────────────────────────────── */}
@@ -814,6 +1481,7 @@ export default function ProcesoPipelinePage() {
                   onChange={(e) => setRegla("condicionesAvance", e.target.value)}
                   placeholder="Ej: Nombre, empresa, email y teléfono completos. Reunión registrada con notas…"
                 />
+                {renderFieldSuggestions("condicionesAvance")}
               </div>
 
               <div>
@@ -827,6 +1495,7 @@ export default function ProcesoPipelinePage() {
                   onChange={(e) => setRegla("decisionesHumanas", e.target.value)}
                   placeholder="Ej: Envío de propuesta, descuento mayor al 10%, cierre de contrato…"
                 />
+                {renderFieldSuggestions("decisionesHumanas")}
               </div>
 
               <div>
@@ -868,6 +1537,7 @@ export default function ProcesoPipelinePage() {
                 />
               </div>
             </div>
+            {renderFieldSuggestions("reglas")}
           </div>
 
           {/* ── E: Preview JSON ──────────────────────────────────────────── */}
