@@ -45,6 +45,22 @@ type ReglasUsoIA = {
   riesgosRevisar: string;
 };
 
+type SetupRecord = Record<string, unknown>;
+
+type LocalSuggestion = {
+  id: string;
+  targetField:
+    | "motores"
+    | "reglas"
+    | "validacionHumana"
+    | "inputsOutputs"
+    | "general";
+  title: string;
+  description: string;
+  actionLabel?: string;
+  apply?: () => void;
+};
+
 type MotoresIAPayload = {
   motores: MotorIA[];
   reglas: ReglasUsoIA;
@@ -198,8 +214,38 @@ const RIESGO_STYLES: Record<NivelRiesgo, string> = {
 const PRIORIDAD_VALUES = new Set<Prioridad>(["alta", "media", "baja"]);
 const RIESGO_VALUES = new Set<NivelRiesgo>(["bajo", "medio", "alto"]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is SetupRecord {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asRecord(value: unknown): SetupRecord {
+  return isRecord(value) ? value : {};
+}
+
+function textIncludes(value: unknown, terms: string[]): boolean {
+  const text = isRecord(value)
+    ? Object.values(value).map((item) => String(item ?? "")).join(" ").toLowerCase()
+    : String(value ?? "").toLowerCase();
+  return terms.some((term) => text.includes(term.toLowerCase()));
+}
+
+function arrayOrTextIncludes(value: unknown, terms: string[]): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => textIncludes(item, terms));
+  }
+  return textIncludes(value, terms);
+}
+
+function hasMotorNamed(items: unknown[], terms: string[]) {
+  return items.some((item) => {
+    const text = isRecord(item)
+      ? String(item.nombre ?? item.name ?? item.title ?? "")
+      : String(item ?? "");
+
+    return terms.some((term) =>
+      text.toLowerCase().includes(term.toLowerCase())
+    );
+  });
 }
 
 function asString(value: unknown): string {
@@ -257,6 +303,40 @@ function normalizeReglas(value: unknown): ReglasUsoIA {
     outputsReportes: asString(value.outputsReportes),
     riesgosRevisar: asString(value.riesgosRevisar),
   };
+}
+
+function createSuggestedMotor(params: {
+  id: string;
+  nombre: string;
+  etapa: string;
+  tipo: string;
+  objetivo: string;
+  input: string;
+  output: string;
+  requiereValidacionHumana?: boolean;
+  prioridad?: Prioridad;
+  riesgo?: NivelRiesgo;
+  activo?: boolean;
+}): MotorIA {
+  return {
+    id: params.id,
+    nombre: params.nombre,
+    etapa: params.etapa,
+    tipo: params.tipo,
+    objetivo: params.objetivo,
+    input: params.input,
+    output: params.output,
+    requiereValidacionHumana: params.requiereValidacionHumana ?? true,
+    prioridad: params.prioridad ?? "media",
+    riesgo: params.riesgo ?? "medio",
+    activo: params.activo ?? true,
+  };
+}
+
+function appendTextIfMissing(current: string, addition: string) {
+  if (!current.trim()) return addition;
+  if (current.includes(addition)) return current;
+  return `${current}\n\n${addition}`;
 }
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
@@ -319,6 +399,7 @@ export default function MotoresIAPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,7 +416,7 @@ export default function MotoresIAPage() {
         });
 
         const json = (await res.json().catch(() => null)) as {
-          data?: { motores_ia?: unknown } | null;
+          data?: (SetupRecord & { motores_ia?: unknown }) | null;
           error?: string | null;
         } | null;
 
@@ -351,6 +432,10 @@ export default function MotoresIAPage() {
             setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
           }
           return;
+        }
+
+        if (!cancelled) {
+          setConstructorContext(asRecord(json?.data));
         }
 
         const motoresIA = json?.data?.motores_ia;
@@ -451,6 +536,435 @@ export default function MotoresIAPage() {
     value: ReglasUsoIA[K]
   ) {
     setReglas((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function addSuggestedMotors(suggested: MotorIA[]) {
+    setMotores((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const existingNames = new Set(
+        current.map((motor) => String(motor.nombre ?? "").toLowerCase())
+      );
+      const next = suggested.filter(
+        (motor) => !existingNames.has(String(motor.nombre ?? "").toLowerCase())
+      );
+
+      return [...current, ...next];
+    });
+  }
+
+  const empresaContext = asRecord(constructorContext?.empresa);
+  const cuestionarioContext = asRecord(constructorContext?.cuestionario);
+  const diagnosticoContext = asRecord(constructorContext?.diagnostico);
+  const procesoPipelineContext = asRecord(constructorContext?.proceso_pipeline);
+
+  const businessContext = {
+    esEducacion:
+      textIncludes(empresaContext.rubro, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]) ||
+      textIncludes(empresaContext.giro, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]) ||
+      textIncludes(empresaContext.vertical, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]),
+    esLimpieza:
+      textIncludes(empresaContext.rubro, ["limpieza", "servicios"]) ||
+      textIncludes(empresaContext.giro, ["limpieza", "mantenimiento", "facility"]) ||
+      textIncludes(empresaContext.vertical, ["limpieza", "corporativa", "facility"]),
+    ventaConsultiva:
+      arrayOrTextIncludes(cuestionarioContext.tiposVenta, ["consultiva"]) ||
+      textIncludes(cuestionarioContext.procesoActual, [
+        "diagnóstico",
+        "diagnostico",
+        "reunión",
+        "reunion",
+        "visita",
+      ]),
+    requiereReunionVisita:
+      textIncludes(cuestionarioContext.procesoActual, [
+        "visita",
+        "reunión",
+        "reunion",
+        "diagnóstico",
+        "diagnostico",
+      ]) ||
+      arrayOrTextIncludes(cuestionarioContext.infoPrePropuesta, [
+        "visita",
+        "documentos técnicos",
+        "necesidad declarada",
+      ]),
+    necesitaSeguimiento:
+      arrayOrTextIncludes(diagnosticoContext.riesgos, ["seguimiento"]) ||
+      textIncludes(cuestionarioContext.procesoActual, ["seguimiento"]) ||
+      arrayOrTextIncludes(procesoPipelineContext.etapas, ["seguimiento"]),
+    riesgoTrazabilidad: arrayOrTextIncludes(diagnosticoContext.riesgos, [
+      "trazabilidad",
+      "información",
+      "informacion",
+      "pipeline",
+    ]),
+    necesitaReportes:
+      arrayOrTextIncludes(cuestionarioContext.metricasImportantes, [
+        "reporte",
+        "leads",
+        "conversión",
+        "conversion",
+        "ventas",
+        "monto",
+      ]) || arrayOrTextIncludes(diagnosticoContext.oportunidades, ["reportes"]),
+    necesitaValidacionHumana:
+      arrayOrTextIncludes(diagnosticoContext.riesgos, [
+        "dependencia",
+        "personas clave",
+        "validación",
+        "validacion",
+      ]) ||
+      arrayOrTextIncludes(cuestionarioContext.decisores, [
+        "dueño",
+        "fundador",
+        "gerente",
+      ]),
+    quiereIAPropuestas:
+      arrayOrTextIncludes(cuestionarioContext.dondeAyudarIA, [
+        "propuestas",
+        "armar propuestas",
+      ]) || textIncludes(cuestionarioContext.comentariosAdicionales, ["propuesta"]),
+    quiereIAProspectos:
+      arrayOrTextIncludes(cuestionarioContext.dondeAyudarIA, [
+        "investigar prospectos",
+        "prospectos",
+      ]) || textIncludes(cuestionarioContext.queVendeDetalle, ["B2B", "empresas"]),
+  };
+
+  const baseSuggestedMotors = [
+    createSuggestedMotor({
+      id: "asistente-motor-investigador-prospectos",
+      nombre: "Investigador de prospectos",
+      etapa: "Calificación inicial",
+      tipo: "Investigación",
+      objetivo: "Enriquecer el contexto del prospecto antes de priorizar la oportunidad.",
+      input: "Datos del prospecto, sitio web, rubro y necesidad declarada",
+      output: "Resumen del prospecto, señales de oportunidad y riesgos iniciales",
+      requiereValidacionHumana: true,
+      prioridad: "alta",
+      riesgo: "medio",
+    }),
+    createSuggestedMotor({
+      id: "asistente-motor-proximos-pasos",
+      nombre: "Recomendador de próximos pasos",
+      etapa: "Negociación",
+      tipo: "Recomendación",
+      objetivo: "Sugerir la siguiente acción comercial según el estado de la oportunidad.",
+      input: "Estado de oportunidad, historial, próxima acción y fecha de seguimiento",
+      output: "Sugerencia de próxima acción comercial",
+      requiereValidacionHumana: true,
+      prioridad: "media",
+      riesgo: "medio",
+    }),
+    createSuggestedMotor({
+      id: "asistente-motor-riesgos-comerciales",
+      nombre: "Detector de riesgos comerciales",
+      etapa: "Diagnóstico / evaluación",
+      tipo: "Análisis",
+      objetivo: "Detectar bloqueos antes de propuesta o cierre.",
+      input: "Respuestas del cliente, avance del pipeline, objeciones y documentos faltantes",
+      output: "Riesgos, bloqueos y alertas comerciales",
+      requiereValidacionHumana: true,
+      prioridad: "alta",
+      riesgo: "medio",
+    }),
+  ];
+
+  const propuestaMotor = createSuggestedMotor({
+    id: "asistente-motor-borrador-propuesta",
+    nombre: "Generador de borrador de propuesta",
+    etapa: "Propuesta / cotización",
+    tipo: "Generación",
+    objetivo: "Preparar un borrador de propuesta para revisión comercial.",
+    input: "Diagnóstico, necesidad, servicios, condiciones y documentos fuente",
+    output: "Borrador de propuesta para revisión humana",
+    requiereValidacionHumana: true,
+    prioridad: "alta",
+    riesgo: "alto",
+  });
+
+  const seguimientoMotor = createSuggestedMotor({
+    id: "asistente-motor-auditor-seguimiento",
+    nombre: "Auditor de seguimiento comercial",
+    etapa: "Negociación",
+    tipo: "Seguimiento",
+    objetivo: "Detectar oportunidades frías y falta de próximos pasos.",
+    input: "Fecha de último contacto, próxima acción y estado de oportunidad",
+    output: "Alertas de oportunidades frías y recomendaciones de seguimiento",
+    requiereValidacionHumana: true,
+    prioridad: "alta",
+    riesgo: "medio",
+  });
+
+  const reportesMotor = createSuggestedMotor({
+    id: "asistente-motor-reportes-comerciales",
+    nombre: "Generador de reportes comerciales",
+    etapa: "Transversal",
+    tipo: "Reporte",
+    objetivo: "Transformar datos comerciales en resúmenes de gestión.",
+    input: "Leads, etapas, conversiones, motivos de pérdida y montos",
+    output: "Resumen ejecutivo comercial y alertas de gestión",
+    requiereValidacionHumana: false,
+    prioridad: "media",
+    riesgo: "bajo",
+  });
+
+  const limpiezaMotors = [
+    createSuggestedMotor({
+      id: "asistente-motor-relevamiento-tecnico-limpieza",
+      nombre: "Motor de relevamiento técnico",
+      etapa: "Reunión / visita",
+      tipo: "Relevamiento",
+      objetivo: "Ordenar la información operativa necesaria antes de cotizar servicios de limpieza.",
+      input: "Tipo de servicio, metraje, frecuencia, horarios, insumos y cantidad de sedes",
+      output: "Checklist técnico para cotización",
+      requiereValidacionHumana: true,
+      prioridad: "alta",
+      riesgo: "medio",
+    }),
+    createSuggestedMotor({
+      id: "asistente-motor-checklist-cotizacion-limpieza",
+      nombre: "Motor de checklist de cotización",
+      etapa: "Propuesta / cotización",
+      tipo: "Validación",
+      objetivo: "Verificar datos mínimos antes de generar una cotización.",
+      input: "Datos operativos, frecuencia, personal requerido, insumos y condiciones",
+      output: "Puntos necesarios antes de cotizar",
+      requiereValidacionHumana: true,
+      prioridad: "alta",
+      riesgo: "medio",
+    }),
+  ];
+
+  const educacionMotors = [
+    createSuggestedMotor({
+      id: "asistente-motor-calificador-educativo",
+      nombre: "Calificador de interesados educativos",
+      etapa: "Calificación inicial",
+      tipo: "Calificación",
+      objetivo: "Evaluar fit del interesado antes de avanzar en admisiones.",
+      input: "Programa de interés, perfil del interesado, urgencia, presupuesto y modalidad",
+      output: "Nivel de fit y próximos pasos",
+      requiereValidacionHumana: true,
+      prioridad: "alta",
+      riesgo: "medio",
+    }),
+    createSuggestedMotor({
+      id: "asistente-motor-recomendador-programa",
+      nombre: "Recomendador de programa o curso",
+      etapa: "Diagnóstico / evaluación",
+      tipo: "Recomendación",
+      objetivo: "Sugerir programas educativos que podrían responder al objetivo del interesado.",
+      input: "Objetivo del interesado, nivel actual, disponibilidad y perfil",
+      output: "Sugerencia de programa/curso a validar",
+      requiereValidacionHumana: true,
+      prioridad: "media",
+      riesgo: "medio",
+    }),
+  ];
+
+  const validacionHumanaSugerida =
+    "Toda recomendación IA debe quedar como borrador hasta aprobación humana en propuesta, descuento, cierre ganado/perdido o comunicación final.";
+
+  const localSuggestions: LocalSuggestion[] = [];
+
+  if (motores.length < 3) {
+    localSuggestions.push({
+      id: "motores-base",
+      targetField: "motores",
+      title: "Podés partir de tres motores IA base",
+      description:
+        "Investigador de prospectos, Recomendador de próximos pasos y Detector de riesgos comerciales cubren el flujo mínimo.",
+      actionLabel: "Agregar motores base",
+      apply: () => addSuggestedMotors(baseSuggestedMotors),
+    });
+  }
+
+  if (
+    (businessContext.quiereIAPropuestas || businessContext.ventaConsultiva) &&
+    !hasMotorNamed(motores, ["generador de propuesta", "borrador de propuesta"])
+  ) {
+    localSuggestions.push({
+      id: "motor-borrador-propuesta",
+      targetField: "motores",
+      title: "El contexto sugiere un generador de borrador de propuesta",
+      description:
+        "La venta consultiva o el interés en propuestas requiere un output siempre revisado por humanos.",
+      actionLabel: "Agregar motor de propuesta",
+      apply: () => addSuggestedMotors([propuestaMotor]),
+    });
+  }
+
+  if (
+    businessContext.necesitaSeguimiento &&
+    !hasMotorNamed(motores, ["seguimiento"])
+  ) {
+    localSuggestions.push({
+      id: "motor-auditor-seguimiento",
+      targetField: "motores",
+      title: "El contexto sugiere auditar seguimiento comercial",
+      description:
+        "Hay señales de seguimiento en Diagnóstico, Cuestionario o Proceso/Pipeline.",
+      actionLabel: "Agregar auditor de seguimiento",
+      apply: () => addSuggestedMotors([seguimientoMotor]),
+    });
+  }
+
+  if (
+    businessContext.necesitaReportes &&
+    !hasMotorNamed(motores, ["reporte", "reportes"])
+  ) {
+    localSuggestions.push({
+      id: "motor-reportes-comerciales",
+      targetField: "motores",
+      title: "Podés sumar un generador de reportes comerciales",
+      description:
+        "Las métricas y oportunidades detectadas sugieren convertir datos del pipeline en resúmenes de gestión.",
+      actionLabel: "Agregar motor de reportes",
+      apply: () => addSuggestedMotors([reportesMotor]),
+    });
+  }
+
+  if (
+    businessContext.esLimpieza &&
+    !hasMotorNamed(motores, ["relevamiento técnico", "checklist de cotización"])
+  ) {
+    localSuggestions.push({
+      id: "motores-limpieza",
+      targetField: "motores",
+      title: "El rubro limpieza puede necesitar motores técnicos",
+      description:
+        "Relevamiento técnico y checklist de cotización ayudan a validar metraje, frecuencia, sedes, horarios e insumos.",
+      actionLabel: "Agregar motores de limpieza",
+      apply: () => addSuggestedMotors(limpiezaMotors),
+    });
+  }
+
+  if (
+    businessContext.esEducacion &&
+    !hasMotorNamed(motores, ["interesados educativos", "programa", "curso"])
+  ) {
+    localSuggestions.push({
+      id: "motores-educacion",
+      targetField: "motores",
+      title: "El rubro educación puede necesitar motores de admisiones",
+      description:
+        "Calificar interesados y recomendar programas/cursos ayuda a ordenar el proceso educativo.",
+      actionLabel: "Agregar motores educativos",
+      apply: () => addSuggestedMotors(educacionMotors),
+    });
+  }
+
+  if (
+    motores.some((motor) => !motor.input.trim() || !motor.output.trim()) ||
+    motores.length === 0
+  ) {
+    localSuggestions.push({
+      id: "inputs-outputs-incompletos",
+      targetField: "inputsOutputs",
+      title: "Revisá inputs y outputs antes de guardar",
+      description:
+        "Cada motor debería indicar qué datos usa y qué entrega para evitar configuraciones ambiguas.",
+    });
+  }
+
+  if (
+    businessContext.necesitaValidacionHumana &&
+    !reglas.motivosAprobacion.includes(validacionHumanaSugerida)
+  ) {
+    localSuggestions.push({
+      id: "regla-validacion-humana-contextual",
+      targetField: "validacionHumana",
+      title: "El contexto sugiere reforzar aprobación humana",
+      description: validacionHumanaSugerida,
+      actionLabel: "Aplicar regla",
+      apply: () =>
+        setReglas((prev) => ({
+          ...prev,
+          motivosAprobacion: appendTextIfMissing(
+            prev.motivosAprobacion,
+            validacionHumanaSugerida
+          ),
+          outputsBorrador: appendTextIfMissing(
+            prev.outputsBorrador,
+            "Propuestas, descuentos, cierres y comunicaciones finales deben quedar como borrador hasta aprobación humana."
+          ),
+        })),
+    });
+  }
+
+  if (
+    !reglas.outputsReportes.trim() &&
+    (businessContext.necesitaReportes || businessContext.riesgoTrazabilidad)
+  ) {
+    localSuggestions.push({
+      id: "reglas-reportes-contextuales",
+      targetField: "reglas",
+      title: "Podés definir outputs que alimenten reportes",
+      description:
+        "Scores, riesgos, motivos de pérdida, oportunidades frías y alertas de pipeline pueden alimentar reportes de gestión.",
+      actionLabel: "Aplicar regla de reportes",
+      apply: () =>
+        setRegla(
+          "outputsReportes",
+          "Scores de calificación, riesgos comerciales, motivos de pérdida, oportunidades frías y alertas de pipeline pueden alimentar reportes de gestión."
+        ),
+    });
+  }
+
+  function renderFieldSuggestions(targetField: LocalSuggestion["targetField"]) {
+    const suggestions = localSuggestions.filter(
+      (suggestion) => suggestion.targetField === targetField
+    );
+    if (suggestions.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-[11px] text-slate-400">
+          Sugerencias basadas en Empresa, Cuestionario, Diagnóstico y Proceso/Pipeline ya cargados.
+        </p>
+        {suggestions.map((suggestion) => (
+          <div
+            key={suggestion.id}
+            className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2"
+          >
+            <p className="text-[11px] font-semibold text-indigo-800">
+              {suggestion.title}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+              {suggestion.description}
+            </p>
+            {suggestion.apply && (
+              <button
+                type="button"
+                onClick={suggestion.apply}
+                className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+              >
+                {suggestion.actionLabel ?? "Aplicar sugerencia"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   // Derivar mapa de motores agrupados por etapa
@@ -763,6 +1277,8 @@ export default function MotoresIAPage() {
             <p className="mt-2 text-[11px] text-slate-400">
               {motores.length} motores definidos — se guardan como configuración del Constructor, sin ejecución.
             </p>
+            {renderFieldSuggestions("motores")}
+            {renderFieldSuggestions("inputsOutputs")}
           </div>
 
           {/* ── C: Mapa de motores por etapa ─────────────────────────────── */}
@@ -861,6 +1377,7 @@ export default function MotoresIAPage() {
                   onChange={(e) => setRegla("motivosAprobacion", e.target.value)}
                   placeholder="Ej: Generador de Propuesta siempre requiere revisión del vendedor…"
                 />
+                {renderFieldSuggestions("validacionHumana")}
               </div>
 
               <div>
@@ -902,6 +1419,7 @@ export default function MotoresIAPage() {
                 />
               </div>
             </div>
+            {renderFieldSuggestions("reglas")}
           </div>
 
           {/* ── E: Preview JSON ──────────────────────────────────────────── */}
