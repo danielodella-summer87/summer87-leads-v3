@@ -90,6 +90,18 @@ const OPCIONES_VISITA = ["Sí", "No", "Depende"];
 
 const OPCIONES_COTIZACION = ["Estándar", "Personalizada", "Mixta"];
 
+const EDUCACION_SEGMENTOS =
+  "Colegios privados, universidades, institutos técnicos, academias online y centros de capacitación.";
+
+const EDUCACION_SEGMENTOS_TEXT =
+  "Segmentos sugeridos para validar: Colegios privados, universidades, institutos técnicos, academias online y centros de capacitación.";
+
+const PROCESO_COMERCIAL_SUGERIDO =
+  "Lead recibido → calificación → diagnóstico → propuesta → seguimiento → cierre → onboarding.";
+
+const OBJETIVO_CRM_SUGERIDO =
+  "Centralizar información comercial, ordenar oportunidades, mejorar seguimiento y preparar automatizaciones futuras.";
+
 // ─── Helpers de estilo ────────────────────────────────────────────────────────
 
 const INPUT_CLASS =
@@ -229,6 +241,19 @@ export default function EmpresaPage() {
     }));
   }
 
+  const contextoRubro = `${form.rubro} ${form.giro} ${form.vertical}`.toLowerCase();
+  const shouldSuggestQuito = form.pais.trim().toLowerCase().includes("quito");
+  const shouldSuggestEducation =
+    (contextoRubro.includes("educación") ||
+      contextoRubro.includes("educativo") ||
+      contextoRubro.includes("colegio") ||
+      contextoRubro.includes("universidad")) &&
+    !form.vertical.includes(EDUCACION_SEGMENTOS_TEXT);
+  const shouldSuggestProceso =
+    form.comoTrabajaHoy.trim().length > 0 &&
+    form.comoTrabajaHoy.trim().length < 60;
+  const shouldSuggestObjetivo = form.queEsperaLograr.trim().length < 50;
+
   const step = CRM_SETUP_STEPS.find((s) => s.id === "empresa");
 
   return (
@@ -314,6 +339,29 @@ export default function EmpresaPage() {
                     placeholder="Ej: Ecuador"
                     className={INPUT_CLASS}
                   />
+                  {shouldSuggestQuito && (
+                    <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-indigo-800">
+                        Quito parece ser una ciudad/capital.
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+                        ¿Querés registrar Ecuador como país y Quito como ciudad?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            pais: "Ecuador",
+                            ciudad: prev.ciudad || "Quito",
+                          }))
+                        }
+                        className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+                      >
+                        Aplicar Ecuador + Quito
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>Ciudad / región</label>
@@ -367,6 +415,30 @@ export default function EmpresaPage() {
                         </option>
                       ))}
                     </select>
+                    {shouldSuggestEducation && (
+                      <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                        <p className="text-[11px] font-semibold text-indigo-800">
+                          Podés precisar la vertical educativa.
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+                          Segmentos sugeridos: {EDUCACION_SEGMENTOS}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              vertical: prev.vertical
+                                ? `${prev.vertical} · ${EDUCACION_SEGMENTOS_TEXT}`
+                                : EDUCACION_SEGMENTOS_TEXT,
+                            }))
+                          }
+                          className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+                        >
+                          Usar segmentos sugeridos
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className={LABEL_CLASS}>Giro / actividad específica</label>
@@ -518,6 +590,25 @@ export default function EmpresaPage() {
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
+                  {shouldSuggestProceso && (
+                    <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-indigo-800">
+                        El proceso actual puede quedar más estructurado.
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+                        Estructura sugerida: {PROCESO_COMERCIAL_SUGERIDO}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setField("comoTrabajaHoy", PROCESO_COMERCIAL_SUGERIDO)
+                        }
+                        className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+                      >
+                        Aplicar estructura sugerida
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>
@@ -530,6 +621,25 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {shouldSuggestObjetivo && (
+                    <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-indigo-800">
+                        Podés formular un objetivo más completo.
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+                        {OBJETIVO_CRM_SUGERIDO}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setField("queEsperaLograr", OBJETIVO_CRM_SUGERIDO)
+                        }
+                        className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+                      >
+                        Aplicar objetivo sugerido
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>
