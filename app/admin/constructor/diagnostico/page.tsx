@@ -58,6 +58,26 @@ type DiagnosticoForm = {
   preguntas: string[];
 };
 
+type LocalSuggestion = {
+  id: string;
+  targetField:
+    | "modeloComercial"
+    | "complejidad"
+    | "madurez"
+    | "dependenciaHumana"
+    | "comoVende"
+    | "riesgos"
+    | "oportunidades"
+    | "puntosCiegos"
+    | "recomendaciones"
+    | "preguntas"
+    | "general";
+  title: string;
+  description: string;
+  actionLabel?: string;
+  apply?: () => void;
+};
+
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const MODELOS_COMERCIALES: { value: ModeloComercial; label: string }[] = [
@@ -79,6 +99,11 @@ const ESTADOS_MATRIZ: { value: EstadoMatriz; label: string; className: string }[
 
 const RECOMENDACIONES_SUGERIDAS = [
   "Definir etapas comerciales antes de cargar leads",
+  "Definir criterios de avance",
+  "Asignar responsables por etapa",
+  "Medir motivos de pérdida",
+  "Crear reportes por rol",
+  "Definir validaciones humanas para IA",
   "Separar proceso profundo de Kanban visual",
   "Definir condiciones de avance por etapa",
   "Identificar tareas que requieren validación humana",
@@ -95,6 +120,47 @@ const PREGUNTAS_SUGERIDAS = [
   "¿Cuándo una oportunidad se considera perdida?",
   "¿Qué reportes necesita dirección cada semana?",
   "¿Qué tareas nunca debería decidir la IA sola?",
+];
+
+const MODELOS_COMERCIALES_SUGERIDOS =
+  "Modelos típicos: venta consultiva, venta transaccional, venta recurrente, venta por proyecto, venta institucional o venta B2B.";
+
+const COMPLEJIDAD_SUGERIDA =
+  "La complejidad debería evaluarse según decisores, duración del ciclo, personalización requerida, ticket promedio y documentación necesaria.";
+
+const MADUREZ_SUGERIDA =
+  "En ordenamiento: existen oportunidades y proceso comercial, pero falta estandarizar seguimiento, métricas y criterios de avance.";
+
+const DEPENDENCIA_HUMANA_SUGERIDA =
+  "Alta: el proceso depende de seguimiento manual, criterio comercial y validación humana en etapas clave.";
+
+const COMO_VENDE_SUGERIDO =
+  "La empresa recibe oportunidades, califica necesidad, realiza diagnóstico o reunión, prepara propuesta, hace seguimiento y cierra con validación humana.";
+
+const RIESGOS_SUGERIDOS =
+  "Falta de seguimiento sistemático.\nBaja trazabilidad del pipeline.\nDependencia de personas clave.\nPérdida de información comercial.\nCriterios de calificación poco claros.";
+
+const OPORTUNIDADES_SUGERIDAS =
+  "Automatizar seguimiento.\nMejorar calificación de oportunidades.\nOrdenar pipeline.\nGenerar reportes comerciales.\nUsar IA para próximos pasos.";
+
+const PUNTOS_CIEGOS_SUGERIDOS =
+  "Motivos de pérdida no medidos.\nOrigen real de leads poco claro.\nCliente ideal no suficientemente segmentado.\nOportunidades frías sin alerta.\nFalta de criterios para priorizar.";
+
+const RECOMENDACIONES_LOCAL_SUGERIDAS = [
+  "Definir etapas comerciales antes de cargar leads",
+  "Definir criterios de avance",
+  "Asignar responsables por etapa",
+  "Medir motivos de pérdida",
+  "Crear reportes por rol",
+  "Definir validaciones humanas para IA",
+];
+
+const PREGUNTAS_ABIERTAS_LOCAL_SUGERIDAS = [
+  "¿Quién toma la decisión final?",
+  "¿Qué datos se necesitan antes de cotizar?",
+  "¿Qué oportunidades se pierden por falta de seguimiento?",
+  "¿Qué reportes necesita dirección?",
+  "¿Qué decisiones no debería tomar la IA sola?",
 ];
 
 const INITIAL_FORM: DiagnosticoForm = {
@@ -178,6 +244,16 @@ function normalizeStringArray(value: unknown, fallback: string[] = []): string[]
   if (!Array.isArray(value)) return fallback;
   const items = value.filter((item): item is string => typeof item === "string");
   return items.length > 0 ? items : fallback;
+}
+
+function mergeUnique(current: string[], additions: string[]) {
+  return Array.from(new Set([...(Array.isArray(current) ? current : []), ...additions]));
+}
+
+function appendTextIfMissing(current: string, addition: string) {
+  if (!current.trim()) return addition;
+  if (current.includes(addition)) return current;
+  return `${current}\n\n${addition}`;
 }
 
 // ─── Estilos compartidos ──────────────────────────────────────────────────────
@@ -400,6 +476,168 @@ export default function DiagnosticoPage() {
     });
   }
 
+  const localSuggestions: LocalSuggestion[] = [];
+
+  if (!form.modeloComercial) {
+    localSuggestions.push({
+      id: "modelo-comercial-vacio",
+      targetField: "modeloComercial",
+      title: "Podés partir de un modelo comercial típico",
+      description: MODELOS_COMERCIALES_SUGERIDOS,
+      actionLabel: "Aplicar venta consultiva",
+      apply: () => setField("modeloComercial", "consultiva"),
+    });
+  }
+
+  if (!form.complejidad) {
+    localSuggestions.push({
+      id: "complejidad-vacia",
+      targetField: "complejidad",
+      title: "Criterios para evaluar complejidad comercial",
+      description: COMPLEJIDAD_SUGERIDA,
+    });
+  }
+
+  if (!form.madurez) {
+    localSuggestions.push({
+      id: "madurez-vacia",
+      targetField: "madurez",
+      title: "Podés iniciar con una madurez en desarrollo",
+      description: MADUREZ_SUGERIDA,
+      actionLabel: "Aplicar en desarrollo",
+      apply: () => setField("madurez", "en-desarrollo"),
+    });
+  }
+
+  if (!form.dependenciaHumana) {
+    localSuggestions.push({
+      id: "dependencia-humana-vacia",
+      targetField: "dependenciaHumana",
+      title: "Podés marcar una dependencia humana alta",
+      description: DEPENDENCIA_HUMANA_SUGERIDA,
+      actionLabel: "Aplicar alta dependencia",
+      apply: () => setField("dependenciaHumana", "alto"),
+    });
+  }
+
+  if (form.comoVende.trim().length > 0 && form.comoVende.trim().length < 80) {
+    localSuggestions.push({
+      id: "como-vende-corto",
+      targetField: "comoVende",
+      title: "La descripción de venta puede quedar más clara",
+      description: COMO_VENDE_SUGERIDO,
+      actionLabel: "Aplicar sugerencia",
+      apply: () => setField("comoVende", COMO_VENDE_SUGERIDO),
+    });
+  }
+
+  if (!form.riesgos.trim()) {
+    localSuggestions.push({
+      id: "riesgos-vacios",
+      targetField: "riesgos",
+      title: "Podés cargar riesgos comerciales típicos",
+      description:
+        "Falta de seguimiento, baja trazabilidad, dependencia de personas clave, pérdida de información y criterios poco claros.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () => setField("riesgos", appendTextIfMissing(form.riesgos, RIESGOS_SUGERIDOS)),
+    });
+  }
+
+  if (!form.oportunidades.trim()) {
+    localSuggestions.push({
+      id: "oportunidades-vacias",
+      targetField: "oportunidades",
+      title: "Podés registrar oportunidades de mejora",
+      description:
+        "Automatizar seguimiento, mejorar calificación, ordenar pipeline, generar reportes y usar IA para próximos pasos.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "oportunidades",
+          appendTextIfMissing(form.oportunidades, OPORTUNIDADES_SUGERIDAS)
+        ),
+    });
+  }
+
+  if (!form.puntosCiegos.trim()) {
+    localSuggestions.push({
+      id: "puntos-ciegos-vacios",
+      targetField: "puntosCiegos",
+      title: "Podés identificar puntos ciegos frecuentes",
+      description:
+        "Motivos de pérdida no medidos, origen real poco claro, cliente ideal poco segmentado y oportunidades frías sin alerta.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "puntosCiegos",
+          appendTextIfMissing(form.puntosCiegos, PUNTOS_CIEGOS_SUGERIDOS)
+        ),
+    });
+  }
+
+  if (form.recomendaciones.length === 0) {
+    localSuggestions.push({
+      id: "recomendaciones-vacias",
+      targetField: "recomendaciones",
+      title: "Podés iniciar con recomendaciones base",
+      description:
+        "Definir etapas, criterios de avance, responsables, métricas, reportes y reglas de intervención humana.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "recomendaciones",
+          mergeUnique(form.recomendaciones, RECOMENDACIONES_LOCAL_SUGERIDAS)
+        ),
+    });
+  }
+
+  if (form.preguntas.filter((pregunta) => pregunta.trim()).length === 0) {
+    localSuggestions.push({
+      id: "preguntas-vacias",
+      targetField: "preguntas",
+      title: "Podés partir de preguntas para validar con cliente",
+      description:
+        "Decisor final, datos antes de cotizar, pérdidas por seguimiento, reportes de dirección y límites de IA.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField("preguntas", mergeUnique(form.preguntas, PREGUNTAS_ABIERTAS_LOCAL_SUGERIDAS)),
+    });
+  }
+
+  function renderFieldSuggestions(targetField: LocalSuggestion["targetField"]) {
+    const suggestions = localSuggestions.filter(
+      (suggestion) => suggestion.targetField === targetField
+    );
+    if (suggestions.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-2">
+        {suggestions.map((suggestion) => (
+          <div
+            key={suggestion.id}
+            className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2"
+          >
+            <p className="text-[11px] font-semibold text-indigo-800">
+              {suggestion.title}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+              {suggestion.description}
+            </p>
+            {suggestion.apply && (
+              <button
+                type="button"
+                onClick={suggestion.apply}
+                className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+              >
+                {suggestion.actionLabel ?? "Aplicar sugerencia"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const MODELO_LABEL =
     MODELOS_COMERCIALES.find((m) => m.value === form.modeloComercial)?.label ??
     "Sin definir";
@@ -500,6 +738,7 @@ export default function DiagnosticoPage() {
                     </option>
                   ))}
                 </select>
+                {renderFieldSuggestions("modeloComercial")}
               </div>
 
               <div>
@@ -513,6 +752,7 @@ export default function DiagnosticoPage() {
                   value={form.complejidad}
                   onChange={(v) => setField("complejidad", v)}
                 />
+                {renderFieldSuggestions("complejidad")}
               </div>
 
               <div>
@@ -527,6 +767,7 @@ export default function DiagnosticoPage() {
                   value={form.madurez}
                   onChange={(v) => setField("madurez", v)}
                 />
+                {renderFieldSuggestions("madurez")}
               </div>
 
               <div className="sm:col-span-2">
@@ -540,6 +781,7 @@ export default function DiagnosticoPage() {
                   value={form.dependenciaHumana}
                   onChange={(v) => setField("dependenciaHumana", v)}
                 />
+                {renderFieldSuggestions("dependenciaHumana")}
               </div>
 
             </div>
@@ -564,6 +806,7 @@ export default function DiagnosticoPage() {
                   value={form.comoVende}
                   onChange={(e) => setField("comoVende", e.target.value)}
                 />
+                {renderFieldSuggestions("comoVende")}
               </div>
 
               <div>
@@ -580,6 +823,7 @@ export default function DiagnosticoPage() {
                   value={form.oportunidades}
                   onChange={(e) => setField("oportunidades", e.target.value)}
                 />
+                {renderFieldSuggestions("oportunidades")}
               </div>
 
               <div>
@@ -596,6 +840,7 @@ export default function DiagnosticoPage() {
                   value={form.riesgos}
                   onChange={(e) => setField("riesgos", e.target.value)}
                 />
+                {renderFieldSuggestions("riesgos")}
               </div>
 
               <div>
@@ -612,6 +857,7 @@ export default function DiagnosticoPage() {
                   value={form.puntosCiegos}
                   onChange={(e) => setField("puntosCiegos", e.target.value)}
                 />
+                {renderFieldSuggestions("puntosCiegos")}
               </div>
 
             </div>
@@ -687,6 +933,7 @@ export default function DiagnosticoPage() {
                 );
               })}
             </div>
+            {renderFieldSuggestions("recomendaciones")}
           </div>
 
           {/* ── D: Recomendaciones preliminares ──────────────────────────── */}
@@ -749,6 +996,7 @@ export default function DiagnosticoPage() {
               Estas preguntas se guardan como insumo para el diseño del proceso
               y pipeline.
             </p>
+            {renderFieldSuggestions("preguntas")}
           </div>
 
           {/* ── F: Vista previa del futuro output IA ─────────────────────── */}
