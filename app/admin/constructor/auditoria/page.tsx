@@ -1268,6 +1268,114 @@ export default function AuditoriaPage() {
                 </div>
               </div>
 
+              {/* Próxima acción recomendada */}
+              <div
+                className={[
+                  "mb-5 rounded-xl border p-5",
+                  score >= 80
+                    ? "border-green-200 bg-green-50"
+                    : score >= 55
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-red-200 bg-red-50",
+                ].join(" ")}
+              >
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {score >= 80 ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
+                  ) : score >= 55 ? (
+                    <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 shrink-0 text-red-600" />
+                  )}
+                  <p
+                    className={[
+                      "text-[10px] font-bold uppercase tracking-widest",
+                      score >= 80
+                        ? "text-green-700"
+                        : score >= 55
+                        ? "text-amber-700"
+                        : "text-red-700",
+                    ].join(" ")}
+                  >
+                    Próxima acción recomendada
+                  </p>
+                  <span
+                    className={[
+                      "ml-auto rounded-full border px-2.5 py-1 text-[10px] font-semibold",
+                      score >= 80
+                        ? "border-green-300 bg-white/70 text-green-700"
+                        : score >= 55
+                        ? "border-amber-300 bg-white/70 text-amber-700"
+                        : "border-red-300 bg-white/70 text-red-700",
+                    ].join(" ")}
+                  >
+                    {score >= 80
+                      ? "Listo para validar"
+                      : score >= 55
+                      ? "Revisión recomendada"
+                      : "Bloqueado"}
+                  </span>
+                </div>
+                <p
+                  className={[
+                    "mb-2 text-sm font-bold",
+                    score >= 80
+                      ? "text-green-900"
+                      : score >= 55
+                      ? "text-amber-900"
+                      : "text-red-900",
+                  ].join(" ")}
+                >
+                  {score >= 80
+                    ? "CRM listo para validación final con cliente."
+                    : score >= 55
+                    ? "Validar pendientes antes de activar el CRM."
+                    : "No activar todavía."}
+                </p>
+                <p
+                  className={[
+                    "mb-4 text-xs leading-relaxed",
+                    score >= 80
+                      ? "text-green-800"
+                      : score >= 55
+                      ? "text-amber-800"
+                      : "text-red-800",
+                  ].join(" ")}
+                >
+                  {score >= 80
+                    ? "El diseño visual del CRM tiene un nivel de preparación alto. El siguiente paso recomendado es revisar el reporte con el cliente, validar pendientes menores y confirmar si se puede avanzar hacia activación operativa."
+                    : score >= 55
+                    ? "El diseño es aprobable, pero todavía requiere revisión técnica o comercial antes de activar el CRM. Conviene usar este reporte para alinear expectativas, confirmar pendientes y definir responsables."
+                    : "La configuración todavía no tiene suficiente preparación para pasar a modo operativo. Es recomendable completar información crítica, revisar riesgos y volver a ejecutar la auditoría."}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg bg-white/70 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Score actual
+                    </p>
+                    <p className="mt-0.5 text-xs font-bold text-slate-800">
+                      {score}/100
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white/70 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Riesgos altos
+                    </p>
+                    <p className="mt-0.5 text-xs font-bold text-slate-800">
+                      {riesgosAltos}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white/70 px-3 py-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Checklist
+                    </p>
+                    <p className="mt-0.5 text-xs font-bold text-slate-800">
+                      {totalChecked}/{checklist.length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Aviso fase PDF */}
               <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
