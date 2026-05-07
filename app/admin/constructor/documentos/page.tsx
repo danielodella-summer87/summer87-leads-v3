@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -21,6 +21,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,14 @@ type DocumentoRegistrado = {
   usoActual: string;
   etapaComercial: string;
   importancia: ImportanciaDoc | "";
+};
+
+type DocumentoForm = Omit<DocumentoRegistrado, "id">;
+
+type DocumentosForm = {
+  form: DocumentoForm;
+  lista: DocumentoRegistrado[];
+  tiposSeleccionados: TipoDocumento[];
 };
 
 // ─── Catálogo de tipos de documento ──────────────────────────────────────────
@@ -149,6 +158,67 @@ const IMPORTANCIA_OPTIONS: { value: ImportanciaDoc; label: string; className: st
   { value: "baja", label: "Baja — Referencia adicional", className: "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100" },
 ];
 
+const INITIAL_FORM: DocumentoForm = {
+  nombre: "",
+  tipo: "",
+  usoActual: "",
+  etapaComercial: "",
+  importancia: "",
+};
+
+const INITIAL_DOCUMENTOS: DocumentosForm = {
+  form: INITIAL_FORM,
+  lista: [],
+  tiposSeleccionados: [],
+};
+
+const TIPO_DOC_IDS = new Set<TipoDocumento>(TIPO_DOCS.map((doc) => doc.id));
+const IMPORTANCIA_IDS = new Set<ImportanciaDoc>(
+  IMPORTANCIA_OPTIONS.map((opt) => opt.value)
+);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asTipoDocumento(value: unknown): TipoDocumento | "" {
+  return typeof value === "string" && TIPO_DOC_IDS.has(value as TipoDocumento)
+    ? (value as TipoDocumento)
+    : "";
+}
+
+function asImportancia(value: unknown): ImportanciaDoc | "" {
+  return typeof value === "string" && IMPORTANCIA_IDS.has(value as ImportanciaDoc)
+    ? (value as ImportanciaDoc)
+    : "";
+}
+
+function normalizeDocumentoForm(value: Record<string, unknown>): DocumentoForm {
+  return {
+    nombre: asString(value.nombre),
+    tipo: asTipoDocumento(value.tipo),
+    usoActual: asString(value.usoActual),
+    etapaComercial: asString(value.etapaComercial),
+    importancia: asImportancia(value.importancia),
+  };
+}
+
+function normalizeDocumentoRegistrado(
+  value: unknown,
+  index: number
+): DocumentoRegistrado | null {
+  if (!isRecord(value)) return null;
+  const form = normalizeDocumentoForm(value);
+  return {
+    id: asString(value.id) || `documento-${index}`,
+    ...form,
+  };
+}
+
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-xs font-semibold text-slate-600 mb-1";
@@ -173,15 +243,99 @@ function SectionHeader({ letter, title }: { letter: string; title: string }) {
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function DocumentosPage() {
-  const [form, setForm] = useState<Omit<DocumentoRegistrado, "id">>({
-    nombre: "",
-    tipo: "",
-    usoActual: "",
-    etapaComercial: "",
-    importancia: "",
-  });
-  const [lista, setLista] = useState<DocumentoRegistrado[]>([]);
-  const [tiposSeleccionados, setTiposSeleccionados] = useState<TipoDocumento[]>([]);
+  const [form, setForm] = useState<DocumentoForm>(INITIAL_FORM);
+  const [lista, setLista] = useState<DocumentoRegistrado[]>(INITIAL_DOCUMENTOS.lista);
+  const [tiposSeleccionados, setTiposSeleccionados] = useState<TipoDocumento[]>(
+    INITIAL_DOCUMENTOS.tiposSeleccionados
+  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setLoading(true);
+      setSaveError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: { documentos?: unknown } | null;
+          error?: string | null;
+        } | null;
+
+        if (res.redirected || !json) {
+          if (!cancelled) {
+            setSaveError("No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          if (!cancelled) {
+            setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        const documentos = json?.data?.documentos;
+
+        if (
+          documentos &&
+          typeof documentos === "object" &&
+          !Array.isArray(documentos) &&
+          Object.keys(documentos).length > 0
+        ) {
+          if (!cancelled) {
+            const loaded = documentos as Partial<DocumentosForm>;
+            const loadedRecord = documentos as Record<string, unknown>;
+
+            setForm(
+              isRecord(loadedRecord.form)
+                ? normalizeDocumentoForm(loadedRecord.form)
+                : INITIAL_FORM
+            );
+            setLista(
+              Array.isArray(loaded.lista)
+                ? loaded.lista
+                    .map((doc, index) => normalizeDocumentoRegistrado(doc, index))
+                    .filter((doc): doc is DocumentoRegistrado => doc !== null)
+                : INITIAL_DOCUMENTOS.lista
+            );
+            setTiposSeleccionados(
+              Array.isArray(loaded.tiposSeleccionados)
+                ? loaded.tiposSeleccionados.filter((tipo): tipo is TipoDocumento =>
+                    TIPO_DOC_IDS.has(tipo as TipoDocumento)
+                  )
+                : INITIAL_DOCUMENTOS.tiposSeleccionados
+            );
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSaveError(
+            "No se pudo cargar la configuración guardada. Podés completar los documentos y guardar nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function agregarDocumento() {
     if (!form.nombre.trim()) return;
@@ -190,11 +344,56 @@ export default function DocumentosPage() {
       ...form,
     };
     setLista((prev) => [...prev, nuevo]);
-    setForm({ nombre: "", tipo: "", usoActual: "", etapaComercial: "", importancia: "" });
+    setForm(INITIAL_FORM);
   }
 
   function quitarDocumento(id: string) {
     setLista((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    const payloadDocumentos: DocumentosForm = {
+      form,
+      lista,
+      tiposSeleccionados,
+    };
+
+    try {
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          step: "documentos",
+          mark_completed: true,
+          data: payloadDocumentos,
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as {
+        data?: unknown;
+        error?: string | null;
+      } | null;
+
+      if (res.redirected || !json) {
+        setSaveError("No se pudo guardar. Revisá que la sesión siga activa.");
+        return;
+      }
+
+      if (!res.ok || json?.error) {
+        setSaveError(json?.error ?? "Error al guardar");
+      } else {
+        setSaveMessage("Documentos guardados correctamente.");
+      }
+    } catch {
+      setSaveError("Error de red al guardar");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const TIPO_LABEL: Record<TipoDocumento, string> = Object.fromEntries(
@@ -206,6 +405,8 @@ export default function DocumentosPage() {
     media: "Media",
     baja: "Baja",
   };
+
+  const step = CRM_SETUP_STEPS.find((s) => s.id === "documentos");
 
   return (
     <PageContainer>
@@ -228,6 +429,19 @@ export default function DocumentosPage() {
           <span className="font-medium text-slate-800">Documentos fuente</span>
         </div>
 
+        {/* ── Aviso de persistencia ─────────────────────────────────────── */}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
+          <p className="text-xs font-semibold text-amber-800">
+            {loading
+              ? "Cargando documentos guardados..."
+              : "Este paso guarda los documentos fuente en la base de datos"}
+          </p>
+          <p className="mt-0.5 text-xs text-amber-700">
+            Usá <strong>Guardar documentos</strong> antes de avanzar al
+            siguiente bloque.
+          </p>
+        </div>
+
         {/* ── Card principal ──────────────────────────────────────────────── */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8">
 
@@ -236,16 +450,17 @@ export default function DocumentosPage() {
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                  Paso 3 de 8
+                  Paso {step?.step ?? 3} de {CRM_SETUP_STEPS.length}
                 </span>
               </div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Documentos fuente
+                {step?.title ?? "Documentos fuente"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                Registrá los materiales, archivos y recursos que ya existen en tu negocio.
-                No se suben archivos todavía — solo describís qué tenés para que el sistema
-                entienda con qué trabajar en el diagnóstico.
+                {step?.description ??
+                  "Registrá los materiales, archivos y recursos que ya existen en tu negocio."}
+                {" "}No se suben archivos todavía — solo describís qué tenés para que
+                el sistema entienda con qué trabajar en el diagnóstico.
               </p>
             </div>
           </div>
@@ -529,7 +744,8 @@ export default function DocumentosPage() {
               </div>
             )}
             <p className="mt-2 text-[11px] text-slate-400">
-              Esta lista es temporal — no se guarda. La persistencia se conectará en un bloque posterior.
+              Esta lista se guarda como referencia del Constructor. La carga real
+              de archivos se conectará en un bloque posterior.
             </p>
           </div>
 
@@ -603,6 +819,14 @@ export default function DocumentosPage() {
           {/* ── Navegación ──────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Guardar documentos"}
+              </button>
               <Link
                 href="/admin/constructor/cuestionario"
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
@@ -619,12 +843,24 @@ export default function DocumentosPage() {
               </Link>
             </div>
 
-            <Link
-              href="/admin/constructor/diagnostico"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
-            >
-              Continuar a Diagnóstico comercial
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {saveMessage && (
+                <span className="text-xs font-medium text-green-700">
+                  {saveMessage}
+                </span>
+              )}
+              {saveError && (
+                <span className="text-xs font-medium text-red-600">
+                  {saveError}
+                </span>
+              )}
+              <Link
+                href="/admin/constructor/diagnostico"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Continuar a Diagnóstico comercial
+              </Link>
+            </div>
           </div>
 
         </div>
