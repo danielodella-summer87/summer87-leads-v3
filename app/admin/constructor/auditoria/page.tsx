@@ -109,6 +109,110 @@ const PASOS_RESUMEN = [
   },
 ];
 
+const VALIDATION_REPORT_STEPS = [
+  {
+    id: "empresa",
+    step: 1,
+    title: "Empresa",
+    icon: Building2,
+    importance: "Obligatorio",
+    status: "Completo",
+    expected:
+      "Identidad, rubro, giro, vertical, país, ciudad, tipos de cliente y contexto general de negocio.",
+    usage:
+      "Se usará como contexto base para adaptar el CRM, los reportes y los motores de IA.",
+    tip: "Cuanto más precisa sea esta sección, mejores serán las recomendaciones automáticas del sistema.",
+  },
+  {
+    id: "cuestionario",
+    step: 2,
+    title: "Cuestionario comercial",
+    icon: ClipboardList,
+    importance: "Obligatorio",
+    status: "Completo",
+    expected:
+      "Modelo de venta, criterios comerciales, decisores, motivos de pérdida, métricas y necesidades de reportes.",
+    usage:
+      "Define cómo se califican leads, qué datos pedir, qué alertas generar y qué decisiones puede asistir la IA.",
+    tip: "Esta sección traduce la experiencia comercial del cliente en reglas operativas.",
+  },
+  {
+    id: "documentos",
+    step: 3,
+    title: "Documentos fuente",
+    icon: FileText,
+    importance: "Importante",
+    status: "Completo",
+    expected:
+      "Propuestas, catálogos, contratos, listas de precios, guiones, fichas técnicas y materiales comerciales.",
+    usage:
+      "Servirán como fuente para motores IA, propuestas, respuestas y validaciones comerciales.",
+    tip: "Si los documentos están desactualizados, la automatización puede repetir información incorrecta.",
+  },
+  {
+    id: "diagnostico",
+    step: 4,
+    title: "Diagnóstico comercial",
+    icon: Search,
+    importance: "Obligatorio",
+    status: "Completo",
+    expected: "Fortalezas, riesgos, oportunidades, puntos ciegos y madurez comercial.",
+    usage:
+      "Orienta recomendaciones, alertas, prioridades de automatización y diseño operativo.",
+    tip: "Permite justificar por qué se recomienda cierto pipeline, reporte o motor IA.",
+  },
+  {
+    id: "proceso-pipeline",
+    step: 5,
+    title: "Proceso y pipeline",
+    icon: GitBranch,
+    importance: "Obligatorio",
+    status: "Completo",
+    expected:
+      "Etapas comerciales, responsables, condiciones de avance, validaciones humanas y criterios de salida.",
+    usage: "Será la base del Kanban operativo y del seguimiento comercial.",
+    tip: "Un pipeline mal diseñado genera reportes poco confiables.",
+  },
+  {
+    id: "motores-ia",
+    step: 6,
+    title: "Motores IA",
+    icon: Bot,
+    importance: "Importante",
+    status: "Completo",
+    expected:
+      "Qué puede hacer la IA, en qué etapa actúa, qué input necesita, qué output produce y cuándo requiere validación humana.",
+    usage:
+      "Permitirá automatizar análisis, recomendaciones y apoyo comercial con control humano.",
+    tip: "No todo debe automatizarse; algunas decisiones deben seguir siendo humanas.",
+  },
+  {
+    id: "reportes",
+    step: 7,
+    title: "Reportes",
+    icon: BarChart3,
+    importance: "Importante",
+    status: "Completo",
+    expected: "Qué necesita ver dirección, ventas, administración o gerencia.",
+    usage:
+      "Define dashboards, reportes, alertas, métricas y seguimiento comercial.",
+    tip: "Sin métricas claras, el CRM se convierte en un registro y no en una herramienta de dirección.",
+  },
+  {
+    id: "auditoria-final",
+    step: 8,
+    title: "Auditoría final",
+    icon: ShieldCheck,
+    importance: "Obligatorio",
+    status: "En revisión",
+    expected:
+      "Validar si el CRM está listo para activarse o si tiene pendientes técnicos y comerciales.",
+    usage:
+      "Determina si el sistema puede pasar de modo configuración a modo operativo.",
+    tip: "Evita activar un CRM incompleto que luego genere errores o baja adopción.",
+  },
+];
+
 const CHECKLIST_INICIAL: ItemChecklist[] = [
   {
     id: "c1",
@@ -1034,6 +1138,93 @@ export default function AuditoriaPage() {
                     ? "Recomendación: revisar pendientes antes de activar el CRM."
                     : "Recomendación: no activar todavía; completar información crítica primero."}
                 </p>
+              </div>
+
+              {/* Estado por bloque */}
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
+                  Estado por bloque — 8 pasos del Constructor
+                </p>
+                <p className="mb-4 text-xs leading-relaxed text-slate-500">
+                  Cada tarjeta resume qué se validó, para qué se usará y qué
+                  debe revisar el cliente antes de activar el CRM.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {VALIDATION_REPORT_STEPS.map((step) => {
+                    const StepIcon = step.icon;
+
+                    return (
+                      <div
+                        key={step.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4"
+                      >
+                        <div className="mb-3 flex items-start gap-2">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                            <StepIcon className="h-4 w-4 text-slate-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Paso {step.step}
+                            </p>
+                            <p className="truncate text-xs font-bold text-slate-800">
+                              {step.title}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mb-3 flex flex-wrap gap-1.5">
+                          <span
+                            className={[
+                              "rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                              step.importance === "Obligatorio"
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700",
+                            ].join(" ")}
+                          >
+                            {step.importance}
+                          </span>
+                          <span
+                            className={[
+                              "rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                              step.status === "Completo"
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : "border-blue-200 bg-blue-50 text-blue-700",
+                            ].join(" ")}
+                          >
+                            {step.status}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="rounded-lg bg-slate-50 px-3 py-2">
+                            <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                              Qué se esperaba
+                            </p>
+                            <p className="text-[10px] leading-relaxed text-slate-600">
+                              {step.expected}
+                            </p>
+                          </div>
+                          <div className="rounded-lg bg-blue-50 px-3 py-2">
+                            <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-400">
+                              Cómo se usará
+                            </p>
+                            <p className="text-[10px] leading-relaxed text-blue-700">
+                              {step.usage}
+                            </p>
+                          </div>
+                          <div className="rounded-lg bg-amber-50 px-3 py-2">
+                            <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-500">
+                              Tip para el cliente
+                            </p>
+                            <p className="text-[10px] leading-relaxed text-amber-700">
+                              {step.tip}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Aviso fase PDF */}
