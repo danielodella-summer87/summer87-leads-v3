@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -14,6 +14,7 @@ import {
   ZapOff,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,11 @@ type ReglasReportes = {
   distribucion: string;
   formatoPreferido: string;
   alertasUmbral: string;
+};
+
+type ReportesPayload = {
+  reportes: ReporteSugerido[];
+  reglas: ReglasReportes;
 };
 
 // ─── Datos iniciales ──────────────────────────────────────────────────────────
@@ -161,6 +167,67 @@ const FRECUENCIA_STYLES: Record<Frecuencia, string> = {
   "bajo-demanda": "border-slate-200 bg-slate-100 text-slate-500",
 };
 
+const TIPO_REPORTE_VALUES = new Set<TipoReporte>(["operativo", "gerencial", "ia"]);
+const FRECUENCIA_VALUES = new Set<Frecuencia>(
+  FRECUENCIAS.map((frecuencia) => frecuencia.value)
+);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asBoolean(value: unknown): boolean {
+  return typeof value === "boolean" ? value : false;
+}
+
+function asTipoReporte(value: unknown): TipoReporte {
+  return typeof value === "string" && TIPO_REPORTE_VALUES.has(value as TipoReporte)
+    ? (value as TipoReporte)
+    : "operativo";
+}
+
+function asFrecuencia(value: unknown): Frecuencia {
+  return typeof value === "string" && FRECUENCIA_VALUES.has(value as Frecuencia)
+    ? (value as Frecuencia)
+    : "bajo-demanda";
+}
+
+function normalizeReporte(value: unknown, index: number): ReporteSugerido | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: asString(value.id) || `reporte-${index}`,
+    nombre: asString(value.nombre),
+    tipo: asTipoReporte(value.tipo),
+    audiencia: asString(value.audiencia),
+    metricas: asString(value.metricas),
+    filtros: asString(value.filtros),
+    frecuencia: asFrecuencia(value.frecuencia),
+    activo: asBoolean(value.activo),
+  };
+}
+
+function normalizeReglas(value: unknown): ReglasReportes {
+  if (!isRecord(value)) {
+    return {
+      generacionAutomatica: "",
+      distribucion: "",
+      formatoPreferido: "",
+      alertasUmbral: "",
+    };
+  }
+
+  return {
+    generacionAutomatica: asString(value.generacionAutomatica),
+    distribucion: asString(value.distribucion),
+    formatoPreferido: asString(value.formatoPreferido),
+    alertasUmbral: asString(value.alertasUmbral),
+  };
+}
+
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 function SectionHeader({ letter, title }: { letter: string; title: string }) {
@@ -217,6 +284,126 @@ export default function ReportesPage() {
     formatoPreferido: "",
     alertasUmbral: "",
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setLoading(true);
+      setSaveError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: { reportes?: unknown } | null;
+          error?: string | null;
+        } | null;
+
+        if (res.redirected || !json) {
+          if (!cancelled) {
+            setSaveError("La sesión no está autorizada para cargar.");
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          if (!cancelled) {
+            setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        const reportesSetup = json?.data?.reportes;
+
+        if (
+          reportesSetup &&
+          typeof reportesSetup === "object" &&
+          !Array.isArray(reportesSetup) &&
+          Object.keys(reportesSetup).length > 0
+        ) {
+          if (!cancelled) {
+            const loaded = reportesSetup as Partial<ReportesPayload>;
+
+            setReportes(
+              Array.isArray(loaded.reportes)
+                ? loaded.reportes
+                    .map((reporte, index) => normalizeReporte(reporte, index))
+                    .filter((reporte): reporte is ReporteSugerido => reporte !== null)
+                : REPORTES_INICIALES
+            );
+            setReglas(normalizeReglas(loaded.reglas));
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSaveError(
+            "No se pudo cargar la configuración guardada. Podés completar los reportes y guardar nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    const payloadReportes: ReportesPayload = {
+      reportes,
+      reglas,
+    };
+
+    try {
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          step: "reportes",
+          mark_completed: true,
+          data: payloadReportes,
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as {
+        data?: unknown;
+        error?: string | null;
+      } | null;
+
+      if (res.redirected || !json) {
+        setSaveError("La sesión no está autorizada para guardar.");
+        return;
+      }
+
+      if (!res.ok || json?.error) {
+        setSaveError(json?.error ?? "Error al guardar");
+      } else {
+        setSaveMessage("Reportes guardados correctamente.");
+      }
+    } catch {
+      setSaveError("Error de red al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function setReporte<K extends keyof ReporteSugerido>(
     id: string,
@@ -246,6 +433,7 @@ export default function ReportesPage() {
     gerencial: reportes.filter((r) => r.tipo === "gerencial").length,
     ia: reportes.filter((r) => r.tipo === "ia").length,
   };
+  const step = CRM_SETUP_STEPS.find((s) => s.id === "reportes");
 
   return (
     <PageContainer>
@@ -312,15 +500,16 @@ export default function ReportesPage() {
           <div className="mb-6">
             <div className="mb-2">
               <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                Paso 7 de 8
+                Paso {step?.step ?? 7} de {CRM_SETUP_STEPS.length}
               </span>
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              Reportes
+              {step?.title ?? "Reportes"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-              Definí qué reportes necesita el CRM, quién los consume, con qué
-              frecuencia se generan y qué reglas gobiernan su distribución.
+              {step?.description ??
+                "Definí qué reportes necesita el CRM, quién los consume, con qué frecuencia se generan y qué reglas gobiernan su distribución."}
+              {" "}Esta configuración no crea dashboards reales todavía.
             </p>
           </div>
 
@@ -329,12 +518,11 @@ export default function ReportesPage() {
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-xs leading-relaxed text-amber-700">
               <span className="font-semibold">
-                Bloque visual — sin persistencia ni reportes reales.
+                {loading
+                  ? "Cargando reportes guardados..."
+                  : "Este paso guarda la configuración visual de reportes."}
               </span>{" "}
-              Los reportes definidos aquí todavía no se ejecutan ni guardan.
-              Esta pantalla prepara la estructura del sistema de reporting. La
-              generación real y la persistencia se conectarán en una fase
-              posterior.
+              No crea dashboards reales ni conecta datos reales de ventas/leads todavía.
             </p>
           </div>
 
@@ -585,8 +773,7 @@ export default function ReportesPage() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-slate-400">
-              {reportes.length} reportes definidos — locales, sin persistencia
-              ni generación real.
+              {reportes.length} reportes definidos — se guardan como configuración del Constructor, sin generación real.
             </p>
           </div>
 
@@ -789,8 +976,8 @@ export default function ReportesPage() {
                         totalReportes: reportes.length,
                         reportesActivos: totalActivos,
                         porTipo: totalPorTipo,
-                        persistido: false,
-                        version: "⏳ pendiente — Bloque 2A",
+                        persistido: true,
+                        version: "Constructor CRM — configuración visual",
                       },
                     },
                     null,
@@ -800,6 +987,26 @@ export default function ReportesPage() {
               </pre>
             </div>
           </div>
+
+          {(loading || saveMessage || saveError) && (
+            <div className="mb-4 space-y-2">
+              {loading && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700">
+                  Cargando reportes guardados...
+                </div>
+              )}
+              {saveMessage && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-xs font-medium text-green-700">
+                  {saveMessage}
+                </div>
+              )}
+              {saveError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
+                  {saveError}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── F: Navegación ─────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
@@ -820,12 +1027,22 @@ export default function ReportesPage() {
               </Link>
             </div>
 
-            <Link
-              href="/admin/constructor/auditoria"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
-            >
-              Continuar a Auditoría final
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Guardar reportes"}
+              </button>
+              <Link
+                href="/admin/constructor/auditoria"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Continuar a Auditoría final
+              </Link>
+            </div>
           </div>
 
         </div>
