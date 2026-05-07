@@ -460,12 +460,6 @@ export default function AuditoriaPage() {
     );
   }
 
-  const totalChecked = checklist.filter((i) => i.checked).length;
-  const checklistPct = Math.round((totalChecked / checklist.length) * 100);
-  const riesgosAltos = riesgos.filter(
-    (r) => r.severidad === "alta" && r.estado === "pendiente"
-  ).length;
-  const riesgosMitigados = riesgos.filter((r) => r.estado === "mitigado").length;
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
     cuestionario: hasSetupData(setupData?.cuestionario),
@@ -477,6 +471,45 @@ export default function AuditoriaPage() {
   };
   const completedSetupSteps = Object.values(setupStepStatus).filter(Boolean).length;
   const totalSetupSteps = Object.keys(setupStepStatus).length;
+  const allSetupStepsCompleted =
+    totalSetupSteps > 0 && completedSetupSteps === totalSetupSteps;
+  const realSetupProgressPct =
+    totalSetupSteps > 0
+      ? Math.round((completedSetupSteps / totalSetupSteps) * 100)
+      : 0;
+  const auditChecklist = checklist.map((item) => {
+    if (item.id === "c8") {
+      return {
+        ...item,
+        checked: allSetupStepsCompleted,
+        descripcion: allSetupStepsCompleted
+          ? "Constructor conectado a Supabase y con los 7 pasos previos guardados correctamente."
+          : item.descripcion,
+      };
+    }
+
+    return item;
+  });
+  const auditRiesgos = riesgos.map((riesgo) => {
+    if (riesgo.id === "rg1" && allSetupStepsCompleted) {
+      return {
+        ...riesgo,
+        estado: "mitigado" as EstadoRiesgo,
+        severidad: "baja" as Severidad,
+        observacion:
+          "Mitigado para el Constructor: los 7 pasos previos ya guardan y cargan desde Supabase. Falta definir activación operativa final.",
+      };
+    }
+
+    return riesgo;
+  });
+  const effectiveScore = allSetupStepsCompleted ? Math.max(score, 85) : score;
+  const totalChecked = auditChecklist.filter((i) => i.checked).length;
+  const checklistPct = Math.round((totalChecked / auditChecklist.length) * 100);
+  const riesgosAltos = auditRiesgos.filter(
+    (r) => r.severidad === "alta" && r.estado === "pendiente"
+  ).length;
+  const riesgosMitigados = auditRiesgos.filter((r) => r.estado === "mitigado").length;
 
   function isSetupStepComplete(id: string): boolean {
     if (id === "proceso-pipeline") return setupStepStatus.procesoPipeline;
@@ -487,23 +520,26 @@ export default function AuditoriaPage() {
 
   // Dictamen calculado desde score + checklist + riesgos altos
   const dictamen: "listo" | "revision" | "no-listo" =
-    score >= 80 && checklistPct >= 85 && riesgosAltos === 0
+    effectiveScore >= 80 && checklistPct >= 85 && riesgosAltos === 0
       ? "listo"
-      : score >= 55 && checklistPct >= 50
+      : effectiveScore >= 55 && checklistPct >= 50
       ? "revision"
       : "no-listo";
 
   const DICTAMEN_CONFIG = {
     listo: {
-      label: "Listo para activar",
+      label: allSetupStepsCompleted
+        ? "Listo para validación final con cliente"
+        : "Listo para activar",
       wrapperClass: "border-green-200 bg-green-50",
       textColor: "text-green-800",
       subColor: "text-green-700",
       statBg: "bg-green-100/60",
       icon: CheckCircle2,
       iconColor: "text-green-600",
-      descripcion:
-        "El CRM cumple con los criterios mínimos de configuración. Puede proceder a la activación cuando la persistencia esté conectada.",
+      descripcion: allSetupStepsCompleted
+        ? "El Constructor ya tiene los 7 pasos previos guardados y cargando desde Supabase. Antes de activar el CRM operativo, se recomienda revisar el reporte maestro con el cliente y aprobar la configuración final."
+        : "El CRM cumple con los criterios mínimos de configuración. Puede proceder a la activación cuando la persistencia esté conectada.",
     },
     revision: {
       label: "Diseño aprobable — pendiente técnico de Fase 2",
@@ -612,8 +648,8 @@ export default function AuditoriaPage() {
                   ? "Cargando configuración guardada..."
                   : "Auditoría conectada al setup guardado en modo solo lectura."}
               </span>{" "}
-              El dictamen y el score siguen siendo locales. La auditoría real con
-              IA y la activación del CRM estarán disponibles en una fase posterior.
+              El score manual sigue siendo editable, pero la auditoría reconoce
+              cuando los 7 pasos previos ya cargan desde Supabase.
             </p>
           </div>
 
@@ -647,7 +683,8 @@ export default function AuditoriaPage() {
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-blue-700">
                   Esta métrica muestra presencia de datos guardados en los 7 pasos
-                  previos. No reemplaza el score manual ni el checklist local.
+                  previos. Si todos están completos, ajusta la lectura del
+                  checklist, riesgos y dictamen sin activar el CRM.
                 </p>
               </div>
             )}
@@ -746,8 +783,8 @@ export default function AuditoriaPage() {
             />
             <p className="mb-4 text-xs text-slate-500">
               Ajustá el score manualmente según tu evaluación del estado real de
-              la configuración. El dictamen se calcula combinando este score con
-              el checklist y los riesgos pendientes.
+              la configuración. Si el setup real está completo, la auditoría usa
+              un score efectivo mínimo para reflejar ese avance.
             </p>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
               <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
@@ -758,37 +795,45 @@ export default function AuditoriaPage() {
                   <p
                     className={[
                       "text-5xl font-bold tabular-nums",
-                      score >= 80
+                      effectiveScore >= 80
                         ? "text-green-600"
-                        : score >= 55
+                        : effectiveScore >= 55
                         ? "text-amber-600"
                         : "text-red-600",
                     ].join(" ")}
                   >
-                    {score}
+                    {effectiveScore}
                     <span className="ml-1 text-xl text-slate-400">/100</span>
                   </p>
+                  {effectiveScore !== score && (
+                    <p className="mt-1 text-[11px] font-medium text-green-700">
+                      Score manual: {score}/100 · setup real completo
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span
                     className={[
                       "rounded-full border px-3 py-1 text-xs font-semibold",
-                      score >= 80
+                      effectiveScore >= 80
                         ? "border-green-200 bg-green-50 text-green-700"
-                        : score >= 55
+                        : effectiveScore >= 55
                         ? "border-amber-200 bg-amber-50 text-amber-700"
                         : "border-red-200 bg-red-50 text-red-700",
                     ].join(" ")}
                   >
-                    {score >= 80
+                    {effectiveScore >= 80
                       ? "Preparación alta"
-                      : score >= 55
+                      : effectiveScore >= 55
                       ? "Preparación media"
                       : "Preparación baja"}
                   </span>
                   <p className="text-[11px] text-slate-400">
-                    Checklist: {totalChecked}/{checklist.length} ítems (
+                    Checklist: {totalChecked}/{auditChecklist.length} ítems (
                     {checklistPct}%)
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Setup real: {realSetupProgressPct}%
                   </p>
                 </div>
               </div>
@@ -817,7 +862,7 @@ export default function AuditoriaPage() {
               los que ya están completos según tu criterio.
             </p>
             <div className="space-y-2">
-              {checklist.map((item) => (
+              {auditChecklist.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -851,7 +896,7 @@ export default function AuditoriaPage() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-slate-400">
-              {totalChecked} de {checklist.length} ítems completados (
+              {totalChecked} de {auditChecklist.length} ítems completados (
               {checklistPct}%)
             </p>
           </div>
@@ -865,7 +910,7 @@ export default function AuditoriaPage() {
               observaciones.
             </p>
             <div className="space-y-3">
-              {riesgos.map((riesgo, index) => (
+              {auditRiesgos.map((riesgo, index) => (
                 <div
                   key={riesgo.id}
                   className="overflow-hidden rounded-xl border border-slate-200 bg-white"
@@ -949,9 +994,8 @@ export default function AuditoriaPage() {
           <div className="mb-8">
             <SectionHeader letter="E" title="Dictamen preliminar" />
             <p className="mb-4 text-xs text-slate-500">
-              Calculado en tiempo real desde el score, el checklist y los
-              riesgos pendientes. No refleja auditoría IA real — es una
-              evaluación local estimada.
+              Calculado desde el score efectivo, el checklist auditado y los
+              riesgos actuales. No activa el CRM ni ejecuta auditoría IA real.
             </p>
             <div className={`rounded-2xl border p-6 ${cfg.wrapperClass}`}>
               <div className="mb-3 flex items-center gap-3">
@@ -967,7 +1011,7 @@ export default function AuditoriaPage() {
               </p>
               <div className="mt-4 grid grid-cols-3 gap-3">
                 {[
-                  { label: "Score", value: `${score}/100` },
+                  { label: "Score", value: `${effectiveScore}/100` },
                   { label: "Checklist", value: `${checklistPct}%` },
                   {
                     label: "Riesgos altos",
@@ -999,7 +1043,8 @@ export default function AuditoriaPage() {
               <p className="text-xs leading-relaxed text-blue-700">
                 <span className="font-semibold">Vista previa local.</span>{" "}
                 El Reporte Maestro real será generado por el motor de auditoría
-                IA en Fase 2. Este preview usa el estado local de esta pantalla.
+                IA en una fase posterior. Este preview combina el estado local
+                con la lectura real del setup.
               </p>
             </div>
 
@@ -1030,10 +1075,10 @@ export default function AuditoriaPage() {
                       {cfg.label}
                     </span>
                     . Score de preparación:{" "}
-                    <span className="font-semibold">{score}/100</span>.
+                    <span className="font-semibold">{effectiveScore}/100</span>.
                     Checklist:{" "}
                     <span className="font-semibold">
-                      {totalChecked}/{checklist.length} ítems ({checklistPct}%)
+                      {totalChecked}/{auditChecklist.length} ítems ({checklistPct}%)
                     </span>
                     .
                   </p>
@@ -1082,7 +1127,7 @@ export default function AuditoriaPage() {
                     Checklist de activación
                   </p>
                   <div className="space-y-1">
-                    {checklist.map((item) => (
+                    {auditChecklist.map((item) => (
                       <div
                         key={item.id}
                         className="flex items-center gap-2 text-xs"
@@ -1112,7 +1157,7 @@ export default function AuditoriaPage() {
                     Riesgos identificados
                   </p>
                   <div className="space-y-1.5">
-                    {riesgos.map((r) => (
+                    {auditRiesgos.map((r) => (
                       <div
                         key={r.id}
                         className="flex flex-wrap items-start gap-2 text-xs"
@@ -1185,14 +1230,14 @@ export default function AuditoriaPage() {
                   <p
                     className={[
                       "text-3xl font-bold tabular-nums",
-                      score >= 80
+                      effectiveScore >= 80
                         ? "text-green-600"
-                        : score >= 55
+                        : effectiveScore >= 55
                         ? "text-amber-600"
                         : "text-red-600",
                     ].join(" ")}
                   >
-                    {score}
+                    {effectiveScore}
                     <span className="ml-0.5 text-base text-slate-300">/100</span>
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-500">
@@ -1209,7 +1254,7 @@ export default function AuditoriaPage() {
                   <p className="text-3xl font-bold tabular-nums text-slate-800">
                     {totalChecked}
                     <span className="ml-0.5 text-base text-slate-300">
-                      /{checklist.length}
+                      /{auditChecklist.length}
                     </span>
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-500">
@@ -1278,7 +1323,7 @@ export default function AuditoriaPage() {
                       Preparación actual
                     </p>
                     <p className="mt-1 text-xs font-bold text-blue-700">
-                      {score}/100
+                      {effectiveScore}/100
                     </p>
                   </div>
                   <div
@@ -1310,9 +1355,11 @@ export default function AuditoriaPage() {
                   </div>
                 </div>
                 <p className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2.5 text-xs font-semibold leading-relaxed text-indigo-700">
-                  {score >= 80
+                  {allSetupStepsCompleted
+                    ? "Recomendación: revisar y aprobar el Reporte Maestro con el cliente antes de activar el CRM operativo."
+                    : effectiveScore >= 80
                     ? "Recomendación: avanzar a validación final con el cliente."
-                    : score >= 55
+                    : effectiveScore >= 55
                     ? "Recomendación: revisar pendientes antes de activar el CRM."
                     : "Recomendación: no activar todavía; completar información crítica primero."}
                 </p>
@@ -1458,17 +1505,17 @@ export default function AuditoriaPage() {
               <div
                 className={[
                   "mb-5 rounded-xl border p-5",
-                  score >= 80
+                  effectiveScore >= 80
                     ? "border-green-200 bg-green-50"
-                    : score >= 55
+                    : effectiveScore >= 55
                     ? "border-amber-200 bg-amber-50"
                     : "border-red-200 bg-red-50",
                 ].join(" ")}
               >
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {score >= 80 ? (
+                  {effectiveScore >= 80 ? (
                     <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
-                  ) : score >= 55 ? (
+                  ) : effectiveScore >= 55 ? (
                     <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
                   ) : (
                     <XCircle className="h-5 w-5 shrink-0 text-red-600" />
@@ -1476,9 +1523,9 @@ export default function AuditoriaPage() {
                   <p
                     className={[
                       "text-[10px] font-bold uppercase tracking-widest",
-                      score >= 80
+                      effectiveScore >= 80
                         ? "text-green-700"
-                        : score >= 55
+                        : effectiveScore >= 55
                         ? "text-amber-700"
                         : "text-red-700",
                     ].join(" ")}
@@ -1488,16 +1535,16 @@ export default function AuditoriaPage() {
                   <span
                     className={[
                       "ml-auto rounded-full border px-2.5 py-1 text-[10px] font-semibold",
-                      score >= 80
+                      effectiveScore >= 80
                         ? "border-green-300 bg-white/70 text-green-700"
-                        : score >= 55
+                        : effectiveScore >= 55
                         ? "border-amber-300 bg-white/70 text-amber-700"
                         : "border-red-300 bg-white/70 text-red-700",
                     ].join(" ")}
                   >
-                    {score >= 80
+                    {effectiveScore >= 80
                       ? "Listo para validar"
-                      : score >= 55
+                      : effectiveScore >= 55
                       ? "Revisión recomendada"
                       : "Bloqueado"}
                   </span>
@@ -1505,32 +1552,36 @@ export default function AuditoriaPage() {
                 <p
                   className={[
                     "mb-2 text-sm font-bold",
-                    score >= 80
+                    effectiveScore >= 80
                       ? "text-green-900"
-                      : score >= 55
+                      : effectiveScore >= 55
                       ? "text-amber-900"
                       : "text-red-900",
                   ].join(" ")}
                 >
-                  {score >= 80
+                  {allSetupStepsCompleted
+                    ? "Listo para validación final con cliente."
+                    : effectiveScore >= 80
                     ? "CRM listo para validación final con cliente."
-                    : score >= 55
+                    : effectiveScore >= 55
                     ? "Validar pendientes antes de activar el CRM."
                     : "No activar todavía."}
                 </p>
                 <p
                   className={[
                     "mb-4 text-xs leading-relaxed",
-                    score >= 80
+                    effectiveScore >= 80
                       ? "text-green-800"
-                      : score >= 55
+                      : effectiveScore >= 55
                       ? "text-amber-800"
                       : "text-red-800",
                   ].join(" ")}
                 >
-                  {score >= 80
+                  {allSetupStepsCompleted
+                    ? "Revisar y aprobar el Reporte Maestro con el cliente antes de activar el CRM operativo. La activación sigue deshabilitada hasta definir el flujo final de aprobación."
+                    : effectiveScore >= 80
                     ? "El diseño visual del CRM tiene un nivel de preparación alto. El siguiente paso recomendado es revisar el reporte con el cliente, validar pendientes menores y confirmar si se puede avanzar hacia activación operativa."
-                    : score >= 55
+                    : effectiveScore >= 55
                     ? "El diseño es aprobable, pero todavía requiere revisión técnica o comercial antes de activar el CRM. Conviene usar este reporte para alinear expectativas, confirmar pendientes y definir responsables."
                     : "La configuración todavía no tiene suficiente preparación para pasar a modo operativo. Es recomendable completar información crítica, revisar riesgos y volver a ejecutar la auditoría."}
                 </p>
@@ -1540,7 +1591,7 @@ export default function AuditoriaPage() {
                       Score actual
                     </p>
                     <p className="mt-0.5 text-xs font-bold text-slate-800">
-                      {score}/100
+                      {effectiveScore}/100
                     </p>
                   </div>
                   <div className="rounded-lg bg-white/70 px-3 py-2">
@@ -1556,7 +1607,7 @@ export default function AuditoriaPage() {
                       Checklist
                     </p>
                     <p className="mt-0.5 text-xs font-bold text-slate-800">
-                      {totalChecked}/{checklist.length}
+                      {totalChecked}/{auditChecklist.length}
                     </p>
                   </div>
                 </div>
@@ -1621,8 +1672,8 @@ export default function AuditoriaPage() {
                 </button>
               </div>
               <span className="max-w-xs text-right text-[11px] text-slate-400">
-                Activar CRM disponible en Fase 2 — requiere persistencia, auditoría
-                real y aprobación.
+                Activar CRM disponible en fase posterior — requiere aprobación
+                final y definición del flujo operativo.
               </span>
             </div>
           </div>
