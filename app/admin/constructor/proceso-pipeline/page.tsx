@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -17,6 +17,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,12 @@ type ReglasValidacion = {
   documentosPorEtapa: string;
   alertasSistema: string;
   tareasAutomaticas: string;
+};
+
+type ProcesoPipelinePayload = {
+  etapas: EtapaProceso[];
+  columnas: ColumnaKanban[];
+  reglas: ReglasValidacion;
 };
 
 // ─── Datos iniciales ──────────────────────────────────────────────────────────
@@ -136,6 +143,73 @@ const TIPOS_COLUMNA: { value: TipoColumna; label: string; className: string }[] 
   { value: "perdida", label: "Perdida", className: "border-red-200 bg-red-50 text-red-700" },
 ];
 
+const TIPO_COLUMNA_VALUES = new Set<TipoColumna>(
+  TIPOS_COLUMNA.map((tipo) => tipo.value)
+);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asBoolean(value: unknown): boolean {
+  return typeof value === "boolean" ? value : false;
+}
+
+function asTipoColumna(value: unknown): TipoColumna {
+  return typeof value === "string" && TIPO_COLUMNA_VALUES.has(value as TipoColumna)
+    ? (value as TipoColumna)
+    : "";
+}
+
+function normalizeEtapa(value: unknown, index: number): EtapaProceso | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: asString(value.id) || `etapa-${index}`,
+    nombre: asString(value.nombre),
+    objetivo: asString(value.objetivo),
+    responsable: asString(value.responsable),
+    tareas: asString(value.tareas),
+    condicionAvance: asString(value.condicionAvance),
+    requiereValidacionHumana: asBoolean(value.requiereValidacionHumana),
+  };
+}
+
+function normalizeColumna(value: unknown, index: number): ColumnaKanban | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: asString(value.id) || `columna-${index}`,
+    nombre: asString(value.nombre),
+    tipo: asTipoColumna(value.tipo),
+    criterioEntrada: asString(value.criterioEntrada),
+    criterioSalida: asString(value.criterioSalida),
+    slaDias: asString(value.slaDias),
+  };
+}
+
+function normalizeReglas(value: unknown): ReglasValidacion {
+  if (!isRecord(value)) {
+    return {
+      condicionesAvance: "",
+      decisionesHumanas: "",
+      documentosPorEtapa: "",
+      alertasSistema: "",
+      tareasAutomaticas: "",
+    };
+  }
+
+  return {
+    condicionesAvance: asString(value.condicionesAvance),
+    decisionesHumanas: asString(value.decisionesHumanas),
+    documentosPorEtapa: asString(value.documentosPorEtapa),
+    alertasSistema: asString(value.alertasSistema),
+    tareasAutomaticas: asString(value.tareasAutomaticas),
+  };
+}
+
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wide";
@@ -171,6 +245,134 @@ export default function ProcesoPipelinePage() {
     alertasSistema: "",
     tareasAutomaticas: "",
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setLoading(true);
+      setSaveError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: { proceso_pipeline?: unknown } | null;
+          error?: string | null;
+        } | null;
+
+        if (res.redirected || !json) {
+          if (!cancelled) {
+            setSaveError("La sesión no está autorizada para cargar.");
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          if (!cancelled) {
+            setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        const procesoPipeline = json?.data?.proceso_pipeline;
+
+        if (
+          procesoPipeline &&
+          typeof procesoPipeline === "object" &&
+          !Array.isArray(procesoPipeline) &&
+          Object.keys(procesoPipeline).length > 0
+        ) {
+          if (!cancelled) {
+            const loaded = procesoPipeline as Partial<ProcesoPipelinePayload>;
+
+            setEtapas(
+              Array.isArray(loaded.etapas)
+                ? loaded.etapas
+                    .map((etapa, index) => normalizeEtapa(etapa, index))
+                    .filter((etapa): etapa is EtapaProceso => etapa !== null)
+                : ETAPAS_INICIALES
+            );
+            setColumnas(
+              Array.isArray(loaded.columnas)
+                ? loaded.columnas
+                    .map((columna, index) => normalizeColumna(columna, index))
+                    .filter((columna): columna is ColumnaKanban => columna !== null)
+                : COLUMNAS_INICIALES
+            );
+            setReglas(normalizeReglas(loaded.reglas));
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSaveError(
+            "No se pudo cargar la configuración guardada. Podés completar el proceso y guardar nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    const payloadProcesoPipeline: ProcesoPipelinePayload = {
+      etapas,
+      columnas,
+      reglas,
+    };
+
+    try {
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          step: "proceso-pipeline",
+          mark_completed: true,
+          data: payloadProcesoPipeline,
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as {
+        data?: unknown;
+        error?: string | null;
+      } | null;
+
+      if (res.redirected || !json) {
+        setSaveError("La sesión no está autorizada para guardar.");
+        return;
+      }
+
+      if (!res.ok || json?.error) {
+        setSaveError(json?.error ?? "Error al guardar");
+      } else {
+        setSaveMessage("Proceso y pipeline guardado correctamente.");
+      }
+    } catch {
+      setSaveError("Error de red al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function setEtapa<K extends keyof EtapaProceso>(
     id: string,
@@ -207,6 +409,8 @@ export default function ProcesoPipelinePage() {
     TIPOS_COLUMNA.map((t) => [t.value, t.className])
   ) as Record<TipoColumna, string>;
 
+  const step = CRM_SETUP_STEPS.find((s) => s.id === "proceso-pipeline");
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -235,15 +439,16 @@ export default function ProcesoPipelinePage() {
           <div className="mb-6">
             <div className="mb-2">
               <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                Paso 5 de 8
+                Paso {step?.step ?? 5} de {CRM_SETUP_STEPS.length}
               </span>
             </div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              Proceso y pipeline
+              {step?.title ?? "Proceso y pipeline"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-              Diseñá cómo trabaja comercialmente la empresa por dentro y cómo se verá ese
-              proceso en el tablero operativo del CRM.
+              {step?.description ??
+                "Diseñá cómo trabaja comercialmente la empresa por dentro y cómo se verá ese proceso en el tablero operativo del CRM."}
+              {" "}Esta configuración todavía no sincroniza con el Kanban operativo.
             </p>
           </div>
 
@@ -251,10 +456,12 @@ export default function ProcesoPipelinePage() {
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-xs leading-relaxed text-amber-700">
-              <span className="font-semibold">Bloque visual — sin persistencia.</span>{" "}
-              En este bloque los datos todavía no se guardan. Esta pantalla prepara la estructura
-              del futuro diseñador de procesos y pipeline. La persistencia se conectará en una
-              fase posterior.
+              <span className="font-semibold">
+                {loading
+                  ? "Cargando proceso y pipeline guardado..."
+                  : "Este paso guarda la configuración visual del Constructor."}
+              </span>{" "}
+              No crea ni sincroniza etapas reales del Kanban operativo todavía.
             </p>
           </div>
 
@@ -491,7 +698,7 @@ export default function ProcesoPipelinePage() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-slate-400">
-              {etapas.length} etapas definidas — locales, sin persistencia.
+              {etapas.length} etapas definidas — se guardan como configuración del Constructor.
             </p>
           </div>
 
@@ -584,7 +791,7 @@ export default function ProcesoPipelinePage() {
               })}
             </div>
             <p className="mt-2 text-[11px] text-slate-400">
-              {columnas.length} columnas definidas — locales, sin persistencia. Sin drag and drop todavía.
+              {columnas.length} columnas definidas — se guardan como diseño visual. Sin drag and drop todavía.
             </p>
           </div>
 
@@ -716,8 +923,8 @@ export default function ProcesoPipelinePage() {
                         totalEtapas: etapas.length,
                         totalColumnas: columnas.length,
                         etapasConValidacionHumana: etapas.filter((e) => e.requiereValidacionHumana).length,
-                        persistido: false,
-                        version: "⏳ pendiente — Bloque 2A",
+                        persistido: true,
+                        version: "Constructor CRM — configuración visual",
                       },
                     },
                     null,
@@ -727,6 +934,26 @@ export default function ProcesoPipelinePage() {
               </pre>
             </div>
           </div>
+
+          {(loading || saveMessage || saveError) && (
+            <div className="mb-4 space-y-2">
+              {loading && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700">
+                  Cargando proceso y pipeline guardado...
+                </div>
+              )}
+              {saveMessage && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-xs font-medium text-green-700">
+                  {saveMessage}
+                </div>
+              )}
+              {saveError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
+                  {saveError}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── F: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
@@ -747,12 +974,22 @@ export default function ProcesoPipelinePage() {
               </Link>
             </div>
 
-            <Link
-              href="/admin/constructor/motores-ia"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
-            >
-              Continuar a Motores IA
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Guardar proceso y pipeline"}
+              </button>
+              <Link
+                href="/admin/constructor/motores-ia"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Continuar a Motores IA
+              </Link>
+            </div>
           </div>
 
         </div>
