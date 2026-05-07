@@ -44,6 +44,24 @@ type ReglasReportes = {
   alertasUmbral: string;
 };
 
+type SetupRecord = Record<string, unknown>;
+
+type LocalSuggestion = {
+  id: string;
+  targetField:
+    | "reportes"
+    | "metricas"
+    | "frecuencia"
+    | "alertas"
+    | "distribucion"
+    | "reglas"
+    | "general";
+  title: string;
+  description: string;
+  actionLabel?: string;
+  apply?: () => void;
+};
+
 type ReportesPayload = {
   reportes: ReporteSugerido[];
   reglas: ReglasReportes;
@@ -172,8 +190,38 @@ const FRECUENCIA_VALUES = new Set<Frecuencia>(
   FRECUENCIAS.map((frecuencia) => frecuencia.value)
 );
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is SetupRecord {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asRecord(value: unknown): SetupRecord {
+  return isRecord(value) ? value : {};
+}
+
+function textIncludes(value: unknown, terms: string[]): boolean {
+  const text = isRecord(value)
+    ? Object.values(value).map((item) => String(item ?? "")).join(" ").toLowerCase()
+    : String(value ?? "").toLowerCase();
+  return terms.some((term) => text.includes(term.toLowerCase()));
+}
+
+function arrayOrTextIncludes(value: unknown, terms: string[]): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => textIncludes(item, terms));
+  }
+  return textIncludes(value, terms);
+}
+
+function hasReportNamed(items: unknown[], terms: string[]) {
+  return items.some((item) => {
+    const text = isRecord(item)
+      ? String(item.nombre ?? item.name ?? item.title ?? "")
+      : String(item ?? "");
+
+    return terms.some((term) =>
+      text.toLowerCase().includes(term.toLowerCase())
+    );
+  });
 }
 
 function asString(value: unknown): string {
@@ -226,6 +274,34 @@ function normalizeReglas(value: unknown): ReglasReportes {
     formatoPreferido: asString(value.formatoPreferido),
     alertasUmbral: asString(value.alertasUmbral),
   };
+}
+
+function createSuggestedReport(params: {
+  id: string;
+  nombre: string;
+  tipo?: TipoReporte;
+  audiencia: string;
+  metricas: string[];
+  filtros?: string;
+  frecuencia: Frecuencia;
+  activo?: boolean;
+}): ReporteSugerido {
+  return {
+    id: params.id,
+    nombre: params.nombre,
+    tipo: params.tipo ?? "operativo",
+    audiencia: params.audiencia,
+    metricas: params.metricas.join(", "),
+    filtros: params.filtros ?? "Período, responsable, etapa",
+    frecuencia: params.frecuencia,
+    activo: params.activo ?? true,
+  };
+}
+
+function appendTextIfMissing(current: string, addition: string) {
+  if (!current.trim()) return addition;
+  if (current.includes(addition)) return current;
+  return `${current}\n\n${addition}`;
 }
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
@@ -288,6 +364,7 @@ export default function ReportesPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -304,7 +381,7 @@ export default function ReportesPage() {
         });
 
         const json = (await res.json().catch(() => null)) as {
-          data?: { reportes?: unknown } | null;
+          data?: (SetupRecord & { reportes?: unknown }) | null;
           error?: string | null;
         } | null;
 
@@ -320,6 +397,10 @@ export default function ReportesPage() {
             setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
           }
           return;
+        }
+
+        if (!cancelled) {
+          setConstructorContext(asRecord(json?.data));
         }
 
         const reportesSetup = json?.data?.reportes;
@@ -420,6 +501,528 @@ export default function ReportesPage() {
     value: ReglasReportes[K]
   ) {
     setReglas((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function addSuggestedReports(suggested: ReporteSugerido[]) {
+    setReportes((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const existingNames = new Set(
+        current.map((report) => String(report.nombre ?? "").toLowerCase())
+      );
+      const next = suggested.filter(
+        (report) => !existingNames.has(String(report.nombre ?? "").toLowerCase())
+      );
+
+      return [...current, ...next];
+    });
+  }
+
+  const empresaContext = asRecord(constructorContext?.empresa);
+  const cuestionarioContext = asRecord(constructorContext?.cuestionario);
+  const diagnosticoContext = asRecord(constructorContext?.diagnostico);
+  const procesoPipelineContext = asRecord(constructorContext?.proceso_pipeline);
+  const motoresIAContext = asRecord(constructorContext?.motores_ia);
+
+  const businessContext = {
+    esEducacion:
+      textIncludes(empresaContext.rubro, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]) ||
+      textIncludes(empresaContext.giro, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]) ||
+      textIncludes(empresaContext.vertical, [
+        "educación",
+        "educacion",
+        "colegio",
+        "universidad",
+        "academia",
+      ]),
+    esLimpieza:
+      textIncludes(empresaContext.rubro, ["limpieza", "servicios"]) ||
+      textIncludes(empresaContext.giro, ["limpieza", "mantenimiento", "facility"]) ||
+      textIncludes(empresaContext.vertical, ["limpieza", "corporativa", "facility"]),
+    ventaConsultiva:
+      arrayOrTextIncludes(cuestionarioContext.tiposVenta, ["consultiva"]) ||
+      textIncludes(cuestionarioContext.procesoActual, [
+        "diagnóstico",
+        "diagnostico",
+        "reunión",
+        "reunion",
+        "visita",
+      ]),
+    necesitaSeguimiento:
+      arrayOrTextIncludes(diagnosticoContext.riesgos, ["seguimiento"]) ||
+      arrayOrTextIncludes(procesoPipelineContext.etapas, ["seguimiento"]) ||
+      arrayOrTextIncludes(procesoPipelineContext.columnas, ["seguimiento"]),
+    necesitaMedirPerdidas:
+      arrayOrTextIncludes(cuestionarioContext.motivosPerdida, [
+        "precio",
+        "competencia",
+        "presupuesto",
+        "respuesta",
+      ]) ||
+      arrayOrTextIncludes(procesoPipelineContext.etapas, ["perdido"]) ||
+      arrayOrTextIncludes(procesoPipelineContext.columnas, ["perdido"]),
+    necesitaTrazabilidad:
+      arrayOrTextIncludes(diagnosticoContext.riesgos, [
+        "trazabilidad",
+        "información",
+        "informacion",
+        "pipeline",
+      ]) ||
+      arrayOrTextIncludes(diagnosticoContext.puntosCiegos, [
+        "origen",
+        "leads",
+        "motivos de pérdida",
+        "motivos de perdida",
+      ]),
+    necesitaReportesDireccion:
+      textIncludes(cuestionarioContext.necesidadesDireccion, [
+        "dirección",
+        "direccion",
+        "gerencia",
+        "ventas",
+        "semana",
+      ]) ||
+      textIncludes(cuestionarioContext.queVerDireccion, [
+        "dirección",
+        "direccion",
+        "gerencia",
+        "ventas",
+        "semana",
+      ]) ||
+      arrayOrTextIncludes(cuestionarioContext.metricasImportantes, [
+        "leads",
+        "conversión",
+        "conversion",
+        "ventas",
+        "monto",
+        "cierre",
+      ]),
+    tieneMotoresIA: arrayOrTextIncludes(motoresIAContext.motores, [
+      "prospectos",
+      "seguimiento",
+      "riesgos",
+      "propuesta",
+      "reportes",
+      "auditor",
+    ]),
+    requiereValidacionHumana:
+      arrayOrTextIncludes(motoresIAContext.motores, ["validación", "validacion"]) ||
+      arrayOrTextIncludes(diagnosticoContext.riesgos, [
+        "dependencia",
+        "personas clave",
+        "validación",
+        "validacion",
+      ]),
+  };
+
+  const baseSuggestedReports = [
+    createSuggestedReport({
+      id: "asistente-reporte-ejecutivo-comercial",
+      nombre: "Reporte ejecutivo comercial",
+      tipo: "gerencial",
+      audiencia: "Dirección",
+      frecuencia: "semanal",
+      metricas: [
+        "leads nuevos",
+        "oportunidades activas",
+        "monto cotizado",
+        "monto cerrado",
+        "tasa de conversión",
+      ],
+      filtros: "Período, vertical, responsable comercial",
+    }),
+    createSuggestedReport({
+      id: "asistente-reporte-pipeline",
+      nombre: "Reporte de pipeline",
+      tipo: "operativo",
+      audiencia: "Supervisor comercial",
+      frecuencia: "semanal",
+      metricas: [
+        "oportunidades por etapa",
+        "oportunidades sin próxima acción",
+        "oportunidades frías",
+        "avance por responsable",
+      ],
+      filtros: "Etapa, responsable, antigüedad, próxima acción",
+    }),
+    createSuggestedReport({
+      id: "asistente-reporte-perdidas",
+      nombre: "Reporte de pérdidas",
+      tipo: "gerencial",
+      audiencia: "Gerente de ventas",
+      frecuencia: "mensual",
+      metricas: [
+        "motivos de pérdida",
+        "monto perdido",
+        "etapa de pérdida",
+        "competencia",
+        "falta de presupuesto",
+      ],
+      filtros: "Período, etapa, motivo de pérdida, responsable",
+    }),
+  ];
+
+  const seguimientoReport = createSuggestedReport({
+    id: "asistente-reporte-seguimiento-comercial",
+    nombre: "Reporte de seguimiento comercial",
+    tipo: "operativo",
+    audiencia: "Supervisor comercial",
+    frecuencia: "diaria",
+    metricas: [
+      "oportunidades sin próxima acción",
+      "último contacto",
+      "fecha de seguimiento vencida",
+      "responsable",
+    ],
+    filtros: "Responsable, fecha de seguimiento, etapa, días sin actividad",
+  });
+
+  const propuestasReport = createSuggestedReport({
+    id: "asistente-reporte-propuestas-diagnosticos",
+    nombre: "Reporte de propuestas y diagnósticos",
+    tipo: "gerencial",
+    audiencia: "Gerente de ventas",
+    frecuencia: "semanal",
+    metricas: [
+      "diagnósticos realizados",
+      "propuestas enviadas",
+      "propuestas pendientes",
+      "tasa de aprobación",
+    ],
+    filtros: "Período, responsable, etapa, estado de propuesta",
+  });
+
+  const limpiezaReports = [
+    createSuggestedReport({
+      id: "asistente-reporte-cotizaciones-operativas",
+      nombre: "Reporte de cotizaciones operativas",
+      tipo: "gerencial",
+      audiencia: "Operaciones",
+      frecuencia: "semanal",
+      metricas: [
+        "visitas técnicas",
+        "cotizaciones pendientes",
+        "servicios cotizados",
+        "frecuencia del servicio",
+        "sedes relevadas",
+      ],
+      filtros: "Servicio, sede, estado de cotización, responsable",
+    }),
+    createSuggestedReport({
+      id: "asistente-reporte-inicio-servicio",
+      nombre: "Reporte de inicio de servicio",
+      tipo: "operativo",
+      audiencia: "Operaciones",
+      frecuencia: "semanal",
+      metricas: [
+        "servicios ganados",
+        "fecha de inicio",
+        "personal requerido",
+        "insumos",
+        "pendientes operativos",
+      ],
+      filtros: "Cliente, fecha de inicio, sede, responsable operativo",
+    }),
+  ];
+
+  const educacionReports = [
+    createSuggestedReport({
+      id: "asistente-reporte-interesados-inscripciones",
+      nombre: "Reporte de interesados e inscripciones",
+      tipo: "gerencial",
+      audiencia: "Dirección",
+      frecuencia: "semanal",
+      metricas: [
+        "interesados nuevos",
+        "entrevistas realizadas",
+        "propuestas educativas enviadas",
+        "inscripciones confirmadas",
+      ],
+      filtros: "Programa, origen, etapa de admisión, asesor",
+    }),
+    createSuggestedReport({
+      id: "asistente-reporte-seguimiento-admisiones",
+      nombre: "Reporte de seguimiento de admisiones",
+      tipo: "operativo",
+      audiencia: "Supervisor comercial",
+      frecuencia: "diaria",
+      metricas: [
+        "interesados sin seguimiento",
+        "etapa de inscripción",
+        "objeciones",
+        "próxima acción",
+      ],
+      filtros: "Programa, asesor, etapa, fecha de próxima acción",
+    }),
+  ];
+
+  const actividadIAReport = createSuggestedReport({
+    id: "asistente-reporte-actividad-ia",
+    nombre: "Reporte de actividad IA",
+    tipo: "ia",
+    audiencia: "Dirección",
+    frecuencia: "semanal",
+    metricas: [
+      "sugerencias generadas",
+      "sugerencias aceptadas",
+      "sugerencias ignoradas",
+      "alertas de riesgo detectadas",
+    ],
+    filtros: "Motor IA, etapa, responsable, período",
+  });
+
+  const alertasSugeridas =
+    "Oportunidad sin próxima acción.\nOportunidad sin seguimiento por más de X días.\nPropuesta enviada sin respuesta.\nOportunidad marcada perdida sin motivo.\nOportunidad de alto valor sin revisión humana.";
+
+  const distribucionSugerida =
+    "Dirección recibe resumen ejecutivo semanal.\nComercial recibe pipeline semanal.\nOperaciones recibe ganados/implementación.\nAdministración recibe reportes de facturación/cobranza si aplica.";
+
+  const generacionSugerida =
+    "Reporte ejecutivo comercial semanal para dirección.\nReporte de pipeline semanal para equipo comercial.\nReporte de seguimiento diario para oportunidades sin próxima acción.\nReporte mensual de pérdidas para revisar motivos y monto perdido.";
+
+  const reglasVacias =
+    !reglas.generacionAutomatica.trim() &&
+    !reglas.distribucion.trim() &&
+    !reglas.formatoPreferido.trim() &&
+    !reglas.alertasUmbral.trim();
+
+  const localSuggestions: LocalSuggestion[] = [];
+
+  if (reportes.length < 3) {
+    localSuggestions.push({
+      id: "reportes-base",
+      targetField: "reportes",
+      title: "Podés partir de reportes comerciales mínimos",
+      description:
+        "Reporte ejecutivo comercial, Reporte de pipeline y Reporte de pérdidas cubren dirección, equipo comercial y aprendizaje de cierres perdidos.",
+      actionLabel: "Agregar reportes base",
+      apply: () => addSuggestedReports(baseSuggestedReports),
+    });
+  }
+
+  if (
+    businessContext.necesitaReportesDireccion &&
+    !hasReportNamed(reportes, ["ejecutivo comercial", "dashboard ejecutivo"])
+  ) {
+    localSuggestions.push({
+      id: "reporte-direccion-contextual",
+      targetField: "frecuencia",
+      title: "Dirección parece necesitar un resumen semanal",
+      description:
+        "El Cuestionario menciona métricas comerciales o necesidades de dirección; conviene un reporte ejecutivo semanal.",
+      actionLabel: "Agregar reporte ejecutivo",
+      apply: () => addSuggestedReports([baseSuggestedReports[0]]),
+    });
+  }
+
+  if (
+    businessContext.necesitaSeguimiento &&
+    !hasReportNamed(reportes, ["seguimiento comercial"])
+  ) {
+    localSuggestions.push({
+      id: "reporte-seguimiento-contextual",
+      targetField: "reportes",
+      title: "El contexto sugiere un reporte de seguimiento",
+      description:
+        "Diagnóstico, Proceso/Pipeline o columnas mencionan seguimiento; este reporte ayuda a detectar oportunidades frías.",
+      actionLabel: "Agregar reporte de seguimiento",
+      apply: () => addSuggestedReports([seguimientoReport]),
+    });
+  }
+
+  if (
+    businessContext.ventaConsultiva &&
+    !hasReportNamed(reportes, ["propuestas y diagnósticos", "propuestas y diagnosticos"])
+  ) {
+    localSuggestions.push({
+      id: "reporte-propuestas-diagnosticos",
+      targetField: "metricas",
+      title: "La venta consultiva necesita medir diagnósticos y propuestas",
+      description:
+        "Diagnósticos realizados, propuestas enviadas, pendientes y tasa de aprobación ayudan a controlar el ciclo consultivo.",
+      actionLabel: "Agregar reporte consultivo",
+      apply: () => addSuggestedReports([propuestasReport]),
+    });
+  }
+
+  if (
+    businessContext.necesitaMedirPerdidas &&
+    !hasReportNamed(reportes, ["pérdidas", "perdidas", "patrones de cierre perdido"])
+  ) {
+    localSuggestions.push({
+      id: "reporte-perdidas-contextual",
+      targetField: "metricas",
+      title: "Conviene medir pérdidas con más estructura",
+      description:
+        "Motivos de pérdida, monto perdido, etapa y competencia permiten corregir el proceso comercial.",
+      actionLabel: "Agregar reporte de pérdidas",
+      apply: () => addSuggestedReports([baseSuggestedReports[2]]),
+    });
+  }
+
+  if (
+    businessContext.esLimpieza &&
+    !hasReportNamed(reportes, ["cotizaciones operativas", "inicio de servicio"])
+  ) {
+    localSuggestions.push({
+      id: "reportes-limpieza",
+      targetField: "reportes",
+      title: "El rubro limpieza puede necesitar reportes operativos",
+      description:
+        "Cotizaciones operativas e inicio de servicio ayudan a coordinar visitas técnicas, sedes, insumos y personal.",
+      actionLabel: "Agregar reportes de limpieza",
+      apply: () => addSuggestedReports(limpiezaReports),
+    });
+  }
+
+  if (
+    businessContext.esEducacion &&
+    !hasReportNamed(reportes, ["interesados e inscripciones", "admisiones"])
+  ) {
+    localSuggestions.push({
+      id: "reportes-educacion",
+      targetField: "reportes",
+      title: "El rubro educación puede necesitar reportes de admisiones",
+      description:
+        "Interesados, entrevistas, propuestas educativas, inscripciones y seguimientos ayudan a controlar el proceso educativo.",
+      actionLabel: "Agregar reportes educativos",
+      apply: () => addSuggestedReports(educacionReports),
+    });
+  }
+
+  if (
+    businessContext.tieneMotoresIA &&
+    !hasReportNamed(reportes, ["actividad ia", "actividad de ia"])
+  ) {
+    localSuggestions.push({
+      id: "reporte-actividad-ia",
+      targetField: "reportes",
+      title: "Podés medir la actividad de los motores IA",
+      description:
+        "Si ya hay motores IA configurados, conviene medir sugerencias generadas, aceptadas, ignoradas y alertas de riesgo.",
+      actionLabel: "Agregar reporte de actividad IA",
+      apply: () => addSuggestedReports([actividadIAReport]),
+    });
+  }
+
+  if (reglasVacias || !reglas.generacionAutomatica.trim()) {
+    localSuggestions.push({
+      id: "reglas-generacion-reportes",
+      targetField: "reglas",
+      title: "Podés definir generación mínima de reportes",
+      description:
+        "Resumen ejecutivo semanal, pipeline semanal, seguimiento diario y pérdidas mensuales dan una cadencia inicial por rol.",
+      actionLabel: "Aplicar reglas de generación",
+      apply: () =>
+        setRegla(
+          "generacionAutomatica",
+          appendTextIfMissing(reglas.generacionAutomatica, generacionSugerida)
+        ),
+    });
+  }
+
+  if (reglasVacias || !reglas.alertasUmbral.trim()) {
+    localSuggestions.push({
+      id: "alertas-reportes-vacias",
+      targetField: "alertas",
+      title: businessContext.necesitaTrazabilidad
+        ? "El contexto sugiere alertas de trazabilidad"
+        : "Podés definir alertas comerciales mínimas",
+      description:
+        "Próxima acción, seguimiento vencido, propuesta sin respuesta, pérdida sin motivo y alto valor sin revisión humana.",
+      actionLabel: "Aplicar alertas sugeridas",
+      apply: () =>
+        setRegla(
+          "alertasUmbral",
+          appendTextIfMissing(reglas.alertasUmbral, alertasSugeridas)
+        ),
+    });
+  }
+
+  if (reglasVacias || !reglas.distribucion.trim()) {
+    localSuggestions.push({
+      id: "distribucion-reportes-vacia",
+      targetField: "distribucion",
+      title: "Podés definir distribución por audiencia",
+      description:
+        "Dirección, Comercial, Operaciones y Administración deberían recibir reportes distintos según su rol.",
+      actionLabel: "Aplicar distribución sugerida",
+      apply: () =>
+        setRegla(
+          "distribucion",
+          appendTextIfMissing(reglas.distribucion, distribucionSugerida)
+        ),
+    });
+  }
+
+  if (
+    businessContext.requiereValidacionHumana &&
+    !reglas.alertasUmbral.toLowerCase().includes("revisión humana")
+  ) {
+    localSuggestions.push({
+      id: "alerta-validacion-humana",
+      targetField: "alertas",
+      title: "El contexto sugiere alerta por revisión humana",
+      description:
+        "Si hay dependencia humana o motores de validación, las oportunidades de alto valor deberían requerir revisión antes de avanzar.",
+      actionLabel: "Agregar alerta de revisión humana",
+      apply: () =>
+        setRegla(
+          "alertasUmbral",
+          appendTextIfMissing(
+            reglas.alertasUmbral,
+            "Oportunidad de alto valor sin revisión humana."
+          )
+        ),
+    });
+  }
+
+  function renderFieldSuggestions(targetField: LocalSuggestion["targetField"]) {
+    const suggestions = localSuggestions.filter(
+      (suggestion) => suggestion.targetField === targetField
+    );
+    if (suggestions.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-[11px] text-slate-400">
+          Sugerencias basadas en Empresa, Cuestionario, Diagnóstico, Proceso/Pipeline y Motores IA ya cargados.
+        </p>
+        {suggestions.map((suggestion) => (
+          <div
+            key={suggestion.id}
+            className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2"
+          >
+            <p className="text-[11px] font-semibold text-indigo-800">
+              {suggestion.title}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+              {suggestion.description}
+            </p>
+            {suggestion.apply && (
+              <button
+                type="button"
+                onClick={suggestion.apply}
+                className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+              >
+                {suggestion.actionLabel ?? "Aplicar sugerencia"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   // Derivar matriz de audiencias
@@ -775,6 +1378,9 @@ export default function ReportesPage() {
             <p className="mt-2 text-[11px] text-slate-400">
               {reportes.length} reportes definidos — se guardan como configuración del Constructor, sin generación real.
             </p>
+            {renderFieldSuggestions("reportes")}
+            {renderFieldSuggestions("metricas")}
+            {renderFieldSuggestions("frecuencia")}
           </div>
 
           {/* ── C: Matriz por audiencia ───────────────────────────────────── */}
@@ -878,6 +1484,7 @@ export default function ReportesPage() {
                   }
                   placeholder="Ej: La bandeja de leads se actualiza en tiempo real. El dashboard ejecutivo se genera cada lunes…"
                 />
+                {renderFieldSuggestions("reglas")}
               </div>
 
               <div>
@@ -891,6 +1498,7 @@ export default function ReportesPage() {
                   onChange={(e) => setRegla("distribucion", e.target.value)}
                   placeholder="Ej: Los reportes gerenciales se envían por email. Los operativos están disponibles en el panel del vendedor…"
                 />
+                {renderFieldSuggestions("distribucion")}
               </div>
 
               <div>
@@ -919,6 +1527,7 @@ export default function ReportesPage() {
                   onChange={(e) => setRegla("alertasUmbral", e.target.value)}
                   placeholder="Ej: Alerta si un lead lleva más de 5 días sin actividad. Alerta si la tasa de conversión baja del 20%…"
                 />
+                {renderFieldSuggestions("alertas")}
               </div>
             </div>
           </div>
