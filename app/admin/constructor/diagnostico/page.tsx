@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -17,6 +17,7 @@ import {
   Code2,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,72 @@ const INITIAL_FORM: DiagnosticoForm = {
   preguntas: [...PREGUNTAS_SUGERIDAS],
 };
 
+const MODELO_VALUES = new Set<ModeloComercial>(
+  MODELOS_COMERCIALES.map((modelo) => modelo.value)
+);
+const COMPLEJIDAD_VALUES = new Set<Complejidad>(["baja", "media", "alta"]);
+const MADUREZ_VALUES = new Set<Madurez>([
+  "inicial",
+  "en-desarrollo",
+  "estructurada",
+  "avanzada",
+]);
+const DEPENDENCIA_VALUES = new Set<DependenciaHumana>(["bajo", "medio", "alto"]);
+const ESTADO_MATRIZ_VALUES = new Set<EstadoMatriz>(
+  ESTADOS_MATRIZ.map((estado) => estado.value)
+);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asModeloComercial(value: unknown): ModeloComercial {
+  return typeof value === "string" && MODELO_VALUES.has(value as ModeloComercial)
+    ? (value as ModeloComercial)
+    : "";
+}
+
+function asComplejidad(value: unknown): Complejidad {
+  return typeof value === "string" && COMPLEJIDAD_VALUES.has(value as Complejidad)
+    ? (value as Complejidad)
+    : "";
+}
+
+function asMadurez(value: unknown): Madurez {
+  return typeof value === "string" && MADUREZ_VALUES.has(value as Madurez)
+    ? (value as Madurez)
+    : "";
+}
+
+function asDependenciaHumana(value: unknown): DependenciaHumana {
+  return typeof value === "string" &&
+    DEPENDENCIA_VALUES.has(value as DependenciaHumana)
+    ? (value as DependenciaHumana)
+    : "";
+}
+
+function normalizeBloqueMatriz(value: unknown): BloqueMatriz {
+  if (!isRecord(value)) return { estado: "", nota: "" };
+  return {
+    estado:
+      typeof value.estado === "string" &&
+      ESTADO_MATRIZ_VALUES.has(value.estado as EstadoMatriz)
+        ? (value.estado as EstadoMatriz)
+        : "",
+    nota: asString(value.nota),
+  };
+}
+
+function normalizeStringArray(value: unknown, fallback: string[] = []): string[] {
+  if (!Array.isArray(value)) return fallback;
+  const items = value.filter((item): item is string => typeof item === "string");
+  return items.length > 0 ? items : fallback;
+}
+
 // ─── Estilos compartidos ──────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-xs font-semibold text-slate-600 mb-1";
@@ -168,6 +235,139 @@ function PillGroup<T extends string>({
 
 export default function DiagnosticoPage() {
   const [form, setForm] = useState<DiagnosticoForm>(INITIAL_FORM);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setLoading(true);
+      setSaveError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: { diagnostico?: unknown } | null;
+          error?: string | null;
+        } | null;
+
+        if (res.redirected || !json) {
+          if (!cancelled) {
+            setSaveError("No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        if (!res.ok) {
+          if (!cancelled) {
+            setSaveError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          }
+          return;
+        }
+
+        const diagnostico = json?.data?.diagnostico;
+
+        if (
+          diagnostico &&
+          typeof diagnostico === "object" &&
+          !Array.isArray(diagnostico) &&
+          Object.keys(diagnostico).length > 0
+        ) {
+          if (!cancelled) {
+            const loaded = diagnostico as Partial<DiagnosticoForm>;
+            const loadedRecord = diagnostico as Record<string, unknown>;
+
+            setForm({
+              ...INITIAL_FORM,
+              modeloComercial: asModeloComercial(loaded.modeloComercial),
+              complejidad: asComplejidad(loaded.complejidad),
+              madurez: asMadurez(loaded.madurez),
+              dependenciaHumana: asDependenciaHumana(loaded.dependenciaHumana),
+              comoVende: asString(loaded.comoVende),
+              oportunidades: asString(loaded.oportunidades),
+              riesgos: asString(loaded.riesgos),
+              puntosCiegos: asString(loaded.puntosCiegos),
+              matrizProceso: normalizeBloqueMatriz(loadedRecord.matrizProceso),
+              matrizDatos: normalizeBloqueMatriz(loadedRecord.matrizDatos),
+              matrizEquipo: normalizeBloqueMatriz(loadedRecord.matrizEquipo),
+              matrizAutomatizacion: normalizeBloqueMatriz(
+                loadedRecord.matrizAutomatizacion
+              ),
+              recomendaciones: normalizeStringArray(
+                loaded.recomendaciones,
+                INITIAL_FORM.recomendaciones
+              ),
+              preguntas: normalizeStringArray(
+                loaded.preguntas,
+                INITIAL_FORM.preguntas
+              ),
+            });
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSaveError(
+            "No se pudo cargar la configuración guardada. Podés completar el diagnóstico y guardar nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          step: "diagnostico",
+          mark_completed: true,
+          data: form,
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as {
+        data?: unknown;
+        error?: string | null;
+      } | null;
+
+      if (res.redirected || !json) {
+        setSaveError("La sesión no está autorizada para guardar.");
+        return;
+      }
+
+      if (!res.ok || json?.error) {
+        setSaveError(json?.error ?? "Error al guardar");
+      } else {
+        setSaveMessage("Diagnóstico guardado correctamente.");
+      }
+    } catch {
+      setSaveError("Error de red al guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function setField<K extends keyof DiagnosticoForm>(
     key: K,
@@ -203,6 +403,8 @@ export default function DiagnosticoPage() {
   const MODELO_LABEL =
     MODELOS_COMERCIALES.find((m) => m.value === form.modeloComercial)?.label ??
     "Sin definir";
+
+  const step = CRM_SETUP_STEPS.find((s) => s.id === "diagnostico");
 
   const matrizBlocks: {
     key: "matrizProceso" | "matrizDatos" | "matrizEquipo" | "matrizAutomatizacion";
@@ -248,16 +450,17 @@ export default function DiagnosticoPage() {
             <div>
               <div className="mb-2">
                 <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-                  Paso 4 de 8
+                  Paso {step?.step ?? 4} de {CRM_SETUP_STEPS.length}
                 </span>
               </div>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Diagnóstico comercial
+                {step?.title ?? "Diagnóstico comercial"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-                Prepará el diagnóstico que usará el sistema para entender cómo vende la empresa,
-                qué oportunidades existen, qué riesgos deben controlarse y qué partes del proceso
-                pueden asistirse con IA.
+                {step?.description ??
+                  "Prepará el diagnóstico que usará el sistema para entender cómo vende la empresa."}
+                {" "}También se registran oportunidades, riesgos y partes del
+                proceso que pueden asistirse con IA.
               </p>
             </div>
           </div>
@@ -266,9 +469,13 @@ export default function DiagnosticoPage() {
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-xs leading-relaxed text-amber-700">
-              <span className="font-semibold">Bloque visual — sin IA ni persistencia.</span>{" "}
-              En este bloque el diagnóstico todavía no se genera con IA ni se guarda. Esta pantalla
-              prepara la estructura del futuro motor de diagnóstico comercial.
+              <span className="font-semibold">
+                {loading
+                  ? "Cargando diagnóstico guardado..."
+                  : "Este paso guarda el diagnóstico comercial en la base de datos."}
+              </span>{" "}
+              El diagnóstico todavía no se genera con IA; esta pantalla prepara
+              la estructura del futuro motor de diagnóstico comercial.
             </p>
           </div>
 
@@ -539,7 +746,8 @@ export default function DiagnosticoPage() {
               ))}
             </div>
             <p className="mt-2 text-[11px] text-slate-400">
-              Estas preguntas son locales — no se guardan todavía.
+              Estas preguntas se guardan como insumo para el diseño del proceso
+              y pipeline.
             </p>
           </div>
 
@@ -607,6 +815,26 @@ export default function DiagnosticoPage() {
             </div>
           </div>
 
+          {(loading || saveMessage || saveError) && (
+            <div className="mb-4 space-y-2">
+              {loading && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700">
+                  Cargando diagnóstico guardado...
+                </div>
+              )}
+              {saveMessage && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-xs font-medium text-green-700">
+                  {saveMessage}
+                </div>
+              )}
+              {saveError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-600">
+                  {saveError}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Navegación ──────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap gap-2">
@@ -626,12 +854,22 @@ export default function DiagnosticoPage() {
               </Link>
             </div>
 
-            <Link
-              href="/admin/constructor/proceso-pipeline"
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
-            >
-              Continuar a Proceso y pipeline
-            </Link>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? "Guardando..." : "Guardar diagnóstico"}
+              </button>
+              <Link
+                href="/admin/constructor/proceso-pipeline"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Continuar a Proceso y pipeline
+              </Link>
+            </div>
           </div>
 
         </div>
