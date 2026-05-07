@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -332,6 +332,11 @@ const ESTADO_STYLES: Record<EstadoRiesgo, string> = {
 const TEXTAREA_CLASS =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 resize-none";
 
+function hasSetupData(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(value).length > 0;
+}
+
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 function SectionHeader({ letter, title }: { letter: string; title: string }) {
@@ -384,6 +389,58 @@ export default function AuditoriaPage() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>(CHECKLIST_INICIAL);
   const [riesgos, setRiesgos] = useState<Riesgo[]>(RIESGOS_INICIALES);
   const [showValidationReport, setShowValidationReport] = useState(false);
+  const [setupLoading, setSetupLoading] = useState(true);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupData, setSetupData] = useState<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSetup() {
+      setSetupLoading(true);
+      setSetupError(null);
+
+      try {
+        const res = await fetch("/api/admin/constructor/setup", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+
+        const json = (await res.json().catch(() => null)) as {
+          data?: Record<string, unknown> | null;
+          error?: string | null;
+        } | null;
+
+        if (cancelled) return;
+
+        if (res.redirected || !json) {
+          setSetupError("La sesión no está autorizada para cargar la auditoría.");
+          return;
+        }
+
+        if (!res.ok || json?.error) {
+          setSetupError(json?.error ?? "No se pudo cargar la configuración guardada.");
+          return;
+        }
+
+        setSetupData(json?.data ?? null);
+      } catch {
+        if (!cancelled) {
+          setSetupError("Error de red al cargar la auditoría.");
+        }
+      } finally {
+        if (!cancelled) {
+          setSetupLoading(false);
+        }
+      }
+    }
+
+    loadSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toggleCheck(id: string) {
     setChecklist((prev) =>
@@ -409,6 +466,24 @@ export default function AuditoriaPage() {
     (r) => r.severidad === "alta" && r.estado === "pendiente"
   ).length;
   const riesgosMitigados = riesgos.filter((r) => r.estado === "mitigado").length;
+  const setupStepStatus = {
+    empresa: hasSetupData(setupData?.empresa),
+    cuestionario: hasSetupData(setupData?.cuestionario),
+    documentos: hasSetupData(setupData?.documentos),
+    diagnostico: hasSetupData(setupData?.diagnostico),
+    procesoPipeline: hasSetupData(setupData?.proceso_pipeline),
+    motoresIA: hasSetupData(setupData?.motores_ia),
+    reportes: hasSetupData(setupData?.reportes),
+  };
+  const completedSetupSteps = Object.values(setupStepStatus).filter(Boolean).length;
+  const totalSetupSteps = Object.keys(setupStepStatus).length;
+
+  function isSetupStepComplete(id: string): boolean {
+    if (id === "proceso-pipeline") return setupStepStatus.procesoPipeline;
+    if (id === "motores-ia") return setupStepStatus.motoresIA;
+    if (id === "auditoria-final") return false;
+    return Boolean(setupStepStatus[id as keyof typeof setupStepStatus]);
+  }
 
   // Dictamen calculado desde score + checklist + riesgos altos
   const dictamen: "listo" | "revision" | "no-listo" =
@@ -533,12 +608,49 @@ export default function AuditoriaPage() {
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-xs leading-relaxed text-amber-700">
               <span className="font-semibold">
-                Bloque visual — sin auditoría IA real ni activación del CRM.
+                {setupLoading
+                  ? "Cargando configuración guardada..."
+                  : "Auditoría conectada al setup guardado en modo solo lectura."}
               </span>{" "}
-              El dictamen y el score son locales y no reflejan datos reales de Supabase. La
-              auditoría real con IA y la activación del CRM estarán disponibles en Fase 2,
-              cuando se conecte la persistencia y el motor de auditoría.
+              El dictamen y el score siguen siendo locales. La auditoría real con
+              IA y la activación del CRM estarán disponibles en una fase posterior.
             </p>
+          </div>
+
+          <div className="mb-8 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Configuración guardada
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-800">
+                {setupLoading
+                  ? "Cargando..."
+                  : `${completedSetupSteps}/${totalSetupSteps} pasos`}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Lectura desde `/api/admin/constructor/setup`; Auditoría no guarda datos todavía.
+              </p>
+            </div>
+            {setupError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-red-500">
+                  Error al cargar setup
+                </p>
+                <p className="mt-1 text-xs font-semibold text-red-700">
+                  {setupError}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500">
+                  Readiness de datos reales
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-blue-700">
+                  Esta métrica muestra presencia de datos guardados en los 7 pasos
+                  previos. No reemplaza el score manual ni el checklist local.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ── A: Resumen de los 7 pasos ────────────────────────────────── */}
@@ -554,31 +666,66 @@ export default function AuditoriaPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {PASOS_RESUMEN.map((paso) => {
                 const Icon = paso.icon;
+                const isComplete = isSetupStepComplete(paso.id);
                 return (
                   <div
                     key={paso.id}
-                    className="flex flex-col gap-2 rounded-xl border border-green-200 bg-green-50 p-4"
+                    className={[
+                      "flex flex-col gap-2 rounded-xl border p-4",
+                      isComplete
+                        ? "border-green-200 bg-green-50"
+                        : "border-slate-200 bg-white",
+                    ].join(" ")}
                   >
                     <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-green-600">
+                      <div
+                        className={[
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                          isComplete ? "bg-green-600" : "bg-slate-300",
+                        ].join(" ")}
+                      >
                         <Icon className="h-3.5 w-3.5 text-white" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[10px] text-green-600">
+                        <p
+                          className={[
+                            "text-[10px]",
+                            isComplete ? "text-green-600" : "text-slate-400",
+                          ].join(" ")}
+                        >
                           Paso {paso.step}
                         </p>
                         <p className="truncate text-xs font-semibold text-slate-800">
                           {paso.title}
                         </p>
                       </div>
-                      <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-green-500" />
+                      {isComplete ? (
+                        <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="ml-auto h-4 w-4 shrink-0 text-amber-500" />
+                      )}
                     </div>
                     <p className="text-[11px] leading-relaxed text-slate-600">
                       {paso.resumen}
                     </p>
+                    <span
+                      className={[
+                        "w-fit rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                        isComplete
+                          ? "border-green-200 bg-white/70 text-green-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700",
+                      ].join(" ")}
+                    >
+                      {isComplete ? "Completo" : "Pendiente"}
+                    </span>
                     <Link
                       href={paso.href}
-                      className="mt-auto inline-flex items-center gap-1 text-[11px] font-semibold text-green-700 hover:text-green-900 transition-colors"
+                      className={[
+                        "mt-auto inline-flex items-center gap-1 text-[11px] font-semibold transition-colors",
+                        isComplete
+                          ? "text-green-700 hover:text-green-900"
+                          : "text-slate-600 hover:text-slate-900",
+                      ].join(" ")}
                     >
                       Editar →
                     </Link>
@@ -587,8 +734,7 @@ export default function AuditoriaPage() {
               })}
             </div>
             <p className="mt-3 text-[11px] text-slate-400">
-              Los ítems marcados como completos reflejan el avance del
-              Constructor hasta este bloque.
+              Estado derivado de datos guardados: {completedSetupSteps}/{totalSetupSteps} pasos con configuración.
             </p>
           </div>
 
@@ -899,18 +1045,34 @@ export default function AuditoriaPage() {
                     Estado por bloque
                   </p>
                   <div className="space-y-1">
-                    {PASOS_RESUMEN.map((p) => (
-                      <div
-                        key={p.id}
-                        className="flex items-start gap-2 text-xs"
-                      >
-                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-500" />
-                        <span className="font-medium text-slate-700">
-                          Paso {p.step} — {p.title}:
-                        </span>
-                        <span className="text-slate-500">{p.resumen}</span>
-                      </div>
-                    ))}
+                    {PASOS_RESUMEN.map((p) => {
+                      const isComplete = isSetupStepComplete(p.id);
+                      return (
+                        <div
+                          key={p.id}
+                          className="flex items-start gap-2 text-xs"
+                        >
+                          {isComplete ? (
+                            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-500" />
+                          ) : (
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                          )}
+                          <span className="font-medium text-slate-700">
+                            Paso {p.step} — {p.title}:
+                          </span>
+                          <span className="text-slate-500">{p.resumen}</span>
+                          <span
+                            className={
+                              isComplete
+                                ? "ml-auto shrink-0 text-[10px] font-semibold text-green-600"
+                                : "ml-auto shrink-0 text-[10px] font-semibold text-amber-600"
+                            }
+                          >
+                            {isComplete ? "Completo" : "Pendiente"}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -992,8 +1154,8 @@ export default function AuditoriaPage() {
                 </div>
 
                 <p className="border-t border-slate-100 pt-3 text-[10px] text-slate-400">
-                  Generado localmente — sin persistencia — Preview del Reporte
-                  Maestro · Summer87 Leads v3
+                  Generado localmente — con lectura del setup guardado — Preview
+                  del Reporte Maestro · Summer87 Leads v3
                 </p>
               </div>
             </div>
@@ -1076,6 +1238,22 @@ export default function AuditoriaPage() {
                 </div>
               </div>
 
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Datos reales del setup
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {setupLoading
+                    ? "Cargando configuración guardada..."
+                    : `Configuración guardada: ${completedSetupSteps}/${totalSetupSteps} pasos previos con datos.`}
+                </p>
+                {setupError && (
+                  <p className="mt-1 text-xs font-semibold text-red-600">
+                    {setupError}
+                  </p>
+                )}
+              </div>
+
               {/* Resumen ejecutivo */}
               <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
@@ -1150,12 +1328,18 @@ export default function AuditoriaPage() {
                   debe revisar el cliente antes de activar el CRM.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {VALIDATION_REPORT_STEPS.map((step) => {
-                    const StepIcon = step.icon;
+                  {VALIDATION_REPORT_STEPS.map((validationStep) => {
+                    const StepIcon = validationStep.icon;
+                    const displayStatus =
+                      validationStep.id === "auditoria-final"
+                        ? "En revisión"
+                        : isSetupStepComplete(validationStep.id)
+                        ? "Completo"
+                        : "Pendiente";
 
                     return (
                       <div
-                        key={step.id}
+                        key={validationStep.id}
                         className="rounded-xl border border-slate-200 bg-white p-4"
                       >
                         <div className="mb-3 flex items-start gap-2">
@@ -1164,10 +1348,10 @@ export default function AuditoriaPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                              Paso {step.step}
+                              Paso {validationStep.step}
                             </p>
                             <p className="truncate text-xs font-bold text-slate-800">
-                              {step.title}
+                              {validationStep.title}
                             </p>
                           </div>
                         </div>
@@ -1176,22 +1360,24 @@ export default function AuditoriaPage() {
                           <span
                             className={[
                               "rounded-full border px-2 py-0.5 text-[9px] font-semibold",
-                              step.importance === "Obligatorio"
+                              validationStep.importance === "Obligatorio"
                                 ? "border-rose-200 bg-rose-50 text-rose-700"
                                 : "border-amber-200 bg-amber-50 text-amber-700",
                             ].join(" ")}
                           >
-                            {step.importance}
+                            {validationStep.importance}
                           </span>
                           <span
                             className={[
                               "rounded-full border px-2 py-0.5 text-[9px] font-semibold",
-                              step.status === "Completo"
+                              displayStatus === "Completo"
                                 ? "border-green-200 bg-green-50 text-green-700"
+                                : displayStatus === "Pendiente"
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
                                 : "border-blue-200 bg-blue-50 text-blue-700",
                             ].join(" ")}
                           >
-                            {step.status}
+                            {displayStatus}
                           </span>
                         </div>
 
@@ -1201,7 +1387,7 @@ export default function AuditoriaPage() {
                               Qué se esperaba
                             </p>
                             <p className="text-[10px] leading-relaxed text-slate-600">
-                              {step.expected}
+                              {validationStep.expected}
                             </p>
                           </div>
                           <div className="rounded-lg bg-blue-50 px-3 py-2">
@@ -1209,7 +1395,7 @@ export default function AuditoriaPage() {
                               Cómo se usará
                             </p>
                             <p className="text-[10px] leading-relaxed text-blue-700">
-                              {step.usage}
+                              {validationStep.usage}
                             </p>
                           </div>
                           <div className="rounded-lg bg-amber-50 px-3 py-2">
@@ -1217,7 +1403,7 @@ export default function AuditoriaPage() {
                               Tip para el cliente
                             </p>
                             <p className="text-[10px] leading-relaxed text-amber-700">
-                              {step.tip}
+                              {validationStep.tip}
                             </p>
                           </div>
                         </div>
