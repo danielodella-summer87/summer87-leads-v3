@@ -1227,6 +1227,47 @@ export default function AuditoriaPage() {
                 </div>
               </div>
 
+              {/* Checklist de validación con cliente */}
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
+                  Checklist de validación con cliente
+                </p>
+                <p className="mb-4 text-xs leading-relaxed text-slate-500">
+                  Usá esta lista como guía de revisión antes de dar por aprobado
+                  el diseño del CRM.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    "Revisar datos de empresa",
+                    "Validar cuestionario comercial",
+                    "Confirmar documentos fuente",
+                    "Revisar diagnóstico comercial",
+                    "Aprobar proceso y pipeline",
+                    "Validar motores IA",
+                    "Confirmar reportes necesarios",
+                    "Aprobar auditoría final",
+                  ].map((item) => (
+                    <div
+                      key={item}
+                      className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                      <span className="text-xs text-slate-700">{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
+                  <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-500">
+                    Uso recomendado
+                  </p>
+                  <p className="text-xs leading-relaxed text-blue-700">
+                    Este checklist no activa el CRM por sí solo. Sirve para
+                    alinear expectativas, detectar pendientes y confirmar que el
+                    cliente entiende cómo se usará cada bloque dentro del sistema.
+                  </p>
+                </div>
+              </div>
+
               {/* Aviso fase PDF */}
               <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
