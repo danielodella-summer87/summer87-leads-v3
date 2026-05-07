@@ -42,6 +42,12 @@ type Riesgo = {
   observacion: string;
 };
 
+type SetupRecord = Record<string, unknown>;
+type ValidationRow = {
+  question: string;
+  value: string;
+};
+
 // ─── Datos estáticos ──────────────────────────────────────────────────────────
 
 const PASOS_RESUMEN = [
@@ -337,6 +343,170 @@ function hasSetupData(value: unknown): boolean {
   return Object.keys(value).length > 0;
 }
 
+function formatReportValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "Sin respuesta registrada";
+  }
+
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "Sin respuesta registrada";
+
+    const items = value
+      .map((item) => {
+        const formatted = formatReportValue(item);
+        return formatted !== "Sin respuesta registrada" ? formatted : null;
+      })
+      .filter(Boolean);
+
+    return items.length > 0 ? items.join(", ") : "Sin respuesta registrada";
+  }
+
+  if (typeof value === "object") {
+    const record = value as SetupRecord;
+    const label =
+      record.nombre ??
+      record.name ??
+      record.title ??
+      record.titulo ??
+      record.label ??
+      record.descripcion ??
+      record.descripcionCorta ??
+      record.id;
+
+    if (typeof label === "string" && label.trim()) return label;
+
+    const details = Object.entries(record)
+      .map(([key, entryValue]) => {
+        const formatted = formatReportValue(entryValue);
+        return formatted !== "Sin respuesta registrada"
+          ? `${key}: ${formatted}`
+          : null;
+      })
+      .filter(Boolean);
+
+    return details.length > 0 ? details.join(" · ") : "Sin respuesta registrada";
+  }
+
+  return "Sin respuesta registrada";
+}
+
+function asRecord(value: unknown): SetupRecord {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as SetupRecord)
+    : {};
+}
+
+function getText(record: SetupRecord, key: string): string {
+  return formatReportValue(record[key]);
+}
+
+function getNestedText(record: SetupRecord, path: string[]): string {
+  let current: unknown = record;
+
+  for (const key of path) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return "Sin respuesta registrada";
+    }
+
+    current = (current as SetupRecord)[key];
+  }
+
+  return formatReportValue(current);
+}
+
+function firstAvailable(record: SetupRecord, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (value !== null && value !== undefined && value !== "") {
+      return formatReportValue(value);
+    }
+  }
+
+  return "Sin respuesta registrada";
+}
+
+function formatArrayFields(
+  record: SetupRecord,
+  key: string,
+  fieldKeys: string[]
+): string {
+  const value = record[key];
+  if (!Array.isArray(value) || value.length === 0) return "Sin respuesta registrada";
+
+  const items = value
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return formatReportValue(item);
+      }
+
+      const itemRecord = item as SetupRecord;
+      const values = fieldKeys
+        .map((fieldKey) => formatReportValue(itemRecord[fieldKey]))
+        .filter((text) => text !== "Sin respuesta registrada");
+
+      return values.length > 0 ? values.join(" / ") : "Sin respuesta registrada";
+    })
+    .filter((text) => text !== "Sin respuesta registrada");
+
+  return items.length > 0 ? items.join(", ") : "Sin respuesta registrada";
+}
+
+function row(question: string, value: unknown): ValidationRow {
+  return {
+    question,
+    value: formatReportValue(value),
+  };
+}
+
+function rowFromKeys(
+  question: string,
+  record: SetupRecord,
+  keys: string[]
+): ValidationRow {
+  return {
+    question,
+    value: firstAvailable(record, keys),
+  };
+}
+
+function formatArrayObjectFields(
+  value: unknown,
+  labelKey: string,
+  fields: string[]
+): string {
+  if (!Array.isArray(value) || value.length === 0) {
+    return "Sin respuesta registrada";
+  }
+
+  const items = value
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return formatReportValue(item);
+      }
+
+      const record = item as SetupRecord;
+      const label = formatReportValue(record[labelKey]);
+      const details = fields
+        .map((field) => {
+          const fieldValue = formatReportValue(record[field]);
+          return fieldValue !== "Sin respuesta registrada"
+            ? `${field}: ${fieldValue}`
+            : null;
+        })
+        .filter(Boolean)
+        .join(" · ");
+
+      if (label === "Sin respuesta registrada") return details;
+      return details ? `${label} - ${details}` : label;
+    })
+    .filter((text) => text && text !== "Sin respuesta registrada");
+
+  return items.length > 0 ? items.join("; ") : "Sin respuesta registrada";
+}
+
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 function SectionHeader({ letter, title }: { letter: string; title: string }) {
@@ -389,6 +559,7 @@ export default function AuditoriaPage() {
   const [checklist, setChecklist] = useState<ItemChecklist[]>(CHECKLIST_INICIAL);
   const [riesgos, setRiesgos] = useState<Riesgo[]>(RIESGOS_INICIALES);
   const [showValidationReport, setShowValidationReport] = useState(false);
+  const [showClientReport, setShowClientReport] = useState(false);
   const [setupLoading, setSetupLoading] = useState(true);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupData, setSetupData] = useState<Record<string, unknown> | null>(null);
@@ -460,6 +631,18 @@ export default function AuditoriaPage() {
     );
   }
 
+  function handlePrintClientReport() {
+    window.print();
+  }
+
+  const empresaSetup = asRecord(setupData?.empresa);
+  const cuestionarioSetup = asRecord(setupData?.cuestionario);
+  const documentosSetup = asRecord(setupData?.documentos);
+  const diagnosticoSetup = asRecord(setupData?.diagnostico);
+  const procesoPipelineSetup = asRecord(setupData?.proceso_pipeline);
+  const motoresIASetup = asRecord(setupData?.motores_ia);
+  const reportesSetup = asRecord(setupData?.reportes);
+
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
     cuestionario: hasSetupData(setupData?.cuestionario),
@@ -510,6 +693,435 @@ export default function AuditoriaPage() {
     (r) => r.severidad === "alta" && r.estado === "pendiente"
   ).length;
   const riesgosMitigados = auditRiesgos.filter((r) => r.estado === "mitigado").length;
+  const activationReadiness = {
+    setupCompleto: allSetupStepsCompleted,
+    checklistCompleto: auditChecklist.every((item) => item.checked),
+    sinRiesgosAltos: auditRiesgos.filter(
+      (r) => r.severidad === "alta" && r.estado === "pendiente"
+    ).length === 0,
+    modoPrototipo: true,
+    permisosRealesPendientes: true,
+    activacionPersistentePendiente: true,
+  };
+  const canPrepareActivation =
+    activationReadiness.setupCompleto &&
+    activationReadiness.checklistCompleto &&
+    activationReadiness.sinRiesgosAltos;
+  const canActivateCRM = false;
+  const activationConditions = [
+    {
+      label: "Setup del Constructor completo",
+      status: activationReadiness.setupCompleto ? "Cumplido" : "Pendiente",
+      complete: activationReadiness.setupCompleto,
+    },
+    {
+      label: "Checklist de auditoría completo",
+      status: activationReadiness.checklistCompleto ? "Cumplido" : "Pendiente",
+      complete: activationReadiness.checklistCompleto,
+    },
+    {
+      label: "Sin riesgos altos pendientes",
+      status: activationReadiness.sinRiesgosAltos ? "Cumplido" : "Pendiente",
+      complete: activationReadiness.sinRiesgosAltos,
+    },
+    {
+      label: "Reporte Maestro listo para validación",
+      status: canPrepareActivation ? "Cumplido" : "Pendiente",
+      complete: canPrepareActivation,
+    },
+    {
+      label: "Reemplazar modo prototipo por permisos reales",
+      status:
+        activationReadiness.modoPrototipo ||
+        activationReadiness.permisosRealesPendientes
+          ? "Prototipo"
+          : "Cumplido",
+      complete:
+        !activationReadiness.modoPrototipo &&
+        !activationReadiness.permisosRealesPendientes,
+    },
+    {
+      label: "Definir flujo operativo de activación",
+      status: "Pendiente",
+      complete: false,
+    },
+    {
+      label: "Persistir estado de activación del CRM",
+      status: activationReadiness.activacionPersistentePendiente
+        ? "Pendiente"
+        : "Cumplido",
+      complete: !activationReadiness.activacionPersistentePendiente,
+    },
+    {
+      label: "Aprobar con cliente antes de activar",
+      status: "Pendiente",
+      complete: false,
+    },
+  ];
+  const clientReportBlocks = [
+    {
+      id: "empresa",
+      title: "Empresa",
+      icon: Building2,
+      summary:
+        "Datos base de la organización, rubro, contexto y configuración inicial.",
+    },
+    {
+      id: "cuestionario",
+      title: "Cuestionario comercial",
+      icon: ClipboardList,
+      summary:
+        "Criterios comerciales, modelo de venta, decisores, métricas y necesidades.",
+    },
+    {
+      id: "documentos",
+      title: "Documentos fuente",
+      icon: FileText,
+      summary:
+        "Materiales fuente, referencias comerciales y documentación para alimentar el CRM.",
+    },
+    {
+      id: "diagnostico",
+      title: "Diagnóstico comercial",
+      icon: Search,
+      summary:
+        "Fortalezas, riesgos, oportunidades y madurez comercial.",
+    },
+    {
+      id: "proceso-pipeline",
+      title: "Proceso y pipeline",
+      icon: GitBranch,
+      summary:
+        "Etapas comerciales, condiciones de avance y estructura del pipeline.",
+    },
+    {
+      id: "motores-ia",
+      title: "Motores IA",
+      icon: Bot,
+      summary:
+        "Casos de uso IA, inputs, outputs y validaciones humanas.",
+    },
+    {
+      id: "reportes",
+      title: "Reportes",
+      icon: BarChart3,
+      summary:
+        "Métricas, audiencias, frecuencia y necesidades de seguimiento.",
+    },
+  ];
+  const clientValidationSections = [
+    {
+      id: "empresa",
+      title: "Empresa",
+      icon: Building2,
+      status: setupStepStatus.empresa,
+      rows: [
+        rowFromKeys("Nombre comercial", empresaSetup, [
+          "nombreComercial",
+          "nombre",
+          "empresa",
+        ]),
+        rowFromKeys("Nombre legal / razón social", empresaSetup, [
+          "nombreLegal",
+          "razonSocial",
+        ]),
+        row("Rubro", empresaSetup.rubro),
+        rowFromKeys("Giro o vertical", empresaSetup, ["giro", "vertical"]),
+        row("País", empresaSetup.pais),
+        row("Ciudad", empresaSetup.ciudad),
+        row("Tipos de cliente", empresaSetup.tiposCliente),
+        row("¿Qué vende la empresa?", empresaSetup.queVende),
+        row("¿Cómo llegan normalmente los prospectos?", empresaSetup.fuentesProspectos),
+        row("¿Requiere visita o reunión antes de cotizar?", empresaSetup.requiereVisita),
+        row("¿La propuesta o cotización es estándar o personalizada?", empresaSetup.tipoCotizacion),
+        row("¿Cómo trabaja hoy la empresa?", empresaSetup.comoTrabajaHoy),
+        row("¿Qué espera lograr con el CRM?", empresaSetup.queEsperaLograr),
+        row(
+          "¿Qué información debería analizar la IA cuando se active?",
+          empresaSetup.queDeberiaAnalizarIA
+        ),
+      ],
+    },
+    {
+      id: "cuestionario",
+      title: "Cuestionario comercial",
+      icon: ClipboardList,
+      status: setupStepStatus.cuestionario,
+      rows: [
+        row(
+          "¿Qué vende principalmente la empresa?",
+          cuestionarioSetup.queVendeDetalle
+        ),
+        row("Tipo de venta principal", cuestionarioSetup.tiposVenta),
+        row("Ciclo de venta estimado", cuestionarioSetup.cicloVenta),
+        row("Ticket promedio", cuestionarioSetup.ticketPromedio),
+        row("Tipo de cliente objetivo", cuestionarioSetup.tiposClienteObj),
+        rowFromKeys("Segmentos o verticales específicas", cuestionarioSetup, [
+          "segmentosCustom",
+          "segmentos",
+          "verticalesEspecificas",
+        ]),
+        row("¿Quién suele tomar la decisión de compra?", cuestionarioSetup.decisores),
+        row(
+          "Principales criterios para calificar un buen prospecto",
+          cuestionarioSetup.criteriosCalificacion
+        ),
+        row(
+          "¿Cómo es hoy el proceso desde que llega un prospecto hasta que se cierra?",
+          cuestionarioSetup.procesoActual
+        ),
+        rowFromKeys("¿Hay reunión, visita o diagnóstico antes de cotizar?", cuestionarioSetup, [
+          "requiereDiagnostico",
+          "requiereReunion",
+          "reunionAntesCotizar",
+          "visitaDiagnostico",
+        ]),
+        row(
+          "¿Qué información se necesita antes de armar una propuesta?",
+          cuestionarioSetup.infoPrePropuesta
+        ),
+        rowFromKeys(
+          "¿Qué bloquea normalmente el avance de una oportunidad?",
+          cuestionarioSetup,
+          ["queBloquea", "bloqueosAvance", "bloqueaAvance"]
+        ),
+        row("Tipo de propuesta / cierre", cuestionarioSetup.tiposPropuesta),
+        rowFromKeys(
+          "¿Quién aprueba internamente una propuesta antes de enviarla?",
+          cuestionarioSetup,
+          ["aprobadorInterno", "aprobadorPropuesta", "quienApruebaPropuesta"]
+        ),
+        rowFromKeys(
+          "¿Qué condiciones deben cumplirse para marcar una oportunidad como ganada?",
+          cuestionarioSetup,
+          ["condicionesGanado", "condicionesGanada", "condicionesCierre"]
+        ),
+        row("Motivos frecuentes de pérdida", cuestionarioSetup.motivosPerdida),
+        rowFromKeys("¿Qué necesita ver dirección o gerencia?", cuestionarioSetup, [
+          "queVerDireccion",
+          "necesidadesDireccion",
+          "reportesDireccion",
+        ]),
+        row("Frecuencia ideal de reportes", cuestionarioSetup.frecuenciaReportes),
+        row("Métricas importantes para el negocio", cuestionarioSetup.metricasImportantes),
+        rowFromKeys("¿Qué decisiones nunca debería tomar la IA sola?", cuestionarioSetup, [
+          "decisionesNoIA",
+          "decisionesHumanas",
+        ]),
+        row("¿Dónde te gustaría que la IA ayude primero?", cuestionarioSetup.dondeAyudarIA),
+        row(
+          "Comentarios adicionales para diseñar el CRM",
+          cuestionarioSetup.comentariosAdicionales
+        ),
+      ],
+    },
+    {
+      id: "documentos",
+      title: "Documentos fuente",
+      icon: FileText,
+      status: setupStepStatus.documentos,
+      rows: [
+        row("Tipos de documentos seleccionados", documentosSetup.tiposSeleccionados),
+        row(
+          "Documentos registrados",
+          formatArrayObjectFields(documentosSetup.lista, "nombre", [])
+        ),
+        row(
+          "Importancia de documentos registrados",
+          formatArrayObjectFields(documentosSetup.lista, "nombre", ["importancia"])
+        ),
+        row(
+          "Uso actual de los documentos",
+          formatArrayObjectFields(documentosSetup.lista, "nombre", ["usoActual"])
+        ),
+        row(
+          "Tipo documental",
+          formatArrayObjectFields(documentosSetup.lista, "nombre", ["tipo"])
+        ),
+        row(
+          "Etapa comercial asociada",
+          formatArrayObjectFields(documentosSetup.lista, "nombre", ["etapaComercial"])
+        ),
+      ],
+    },
+    {
+      id: "diagnostico",
+      title: "Diagnóstico comercial",
+      icon: Search,
+      status: setupStepStatus.diagnostico,
+      rows: [
+        row("Modelo comercial detectado", diagnosticoSetup.modeloComercial),
+        row("Complejidad comercial", diagnosticoSetup.complejidad),
+        row("Madurez comercial actual", diagnosticoSetup.madurez),
+        row("Nivel de dependencia humana", diagnosticoSetup.dependenciaHumana),
+        row("¿Cómo parece vender hoy la empresa?", diagnosticoSetup.comoVende),
+        row("Principales riesgos comerciales", diagnosticoSetup.riesgos),
+        row("Principales oportunidades detectadas", diagnosticoSetup.oportunidades),
+        row("Puntos ciegos o información faltante", diagnosticoSetup.puntosCiegos),
+        row("Recomendaciones preliminares", diagnosticoSetup.recomendaciones),
+        row(
+          "Preguntas abiertas para completar antes de diseñar el proceso",
+          diagnosticoSetup.preguntas
+        ),
+      ],
+    },
+    {
+      id: "proceso-pipeline",
+      title: "Proceso y pipeline",
+      icon: GitBranch,
+      status: setupStepStatus.procesoPipeline,
+      rows: [
+        row(
+          "Etapas comerciales definidas",
+          formatArrayObjectFields(procesoPipelineSetup.etapas, "nombre", [
+            "objetivo",
+            "responsable",
+          ])
+        ),
+        row(
+          "Columnas del pipeline",
+          formatArrayObjectFields(procesoPipelineSetup.columnas, "nombre", [
+            "tipo",
+            "criterioEntrada",
+            "criterioSalida",
+            "slaDias",
+          ])
+        ),
+        row(
+          "Condiciones de avance",
+          getNestedText(procesoPipelineSetup, ["reglas", "condicionesAvance"])
+        ),
+        row(
+          "Decisiones humanas requeridas",
+          getNestedText(procesoPipelineSetup, ["reglas", "decisionesHumanas"])
+        ),
+        rowFromKeys("Validaciones antes de avanzar", asRecord(procesoPipelineSetup.reglas), [
+          "validaciones",
+          "documentosPorEtapa",
+          "alertasSistema",
+        ]),
+        rowFromKeys("Pendientes operativos", asRecord(procesoPipelineSetup.reglas), [
+          "pendientes",
+          "tareasAutomaticas",
+        ]),
+      ],
+    },
+    {
+      id: "motores-ia",
+      title: "Motores IA",
+      icon: Bot,
+      status: setupStepStatus.motoresIA,
+      rows: [
+        row(
+          "Motores IA definidos",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", [])
+        ),
+        row(
+          "Etapa donde actúa cada motor",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", ["etapa"])
+        ),
+        row(
+          "Input necesario",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", ["input"])
+        ),
+        row(
+          "Output esperado",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", ["output"])
+        ),
+        row(
+          "Requiere validación humana",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", [
+            "requiereValidacionHumana",
+          ])
+        ),
+        row(
+          "Prioridad",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", ["prioridad"])
+        ),
+        row(
+          "Riesgo",
+          formatArrayObjectFields(motoresIASetup.motores, "nombre", ["riesgo"])
+        ),
+        row(
+          "Reglas generales",
+          [
+            getNestedText(motoresIASetup, ["reglas", "motoresAutomaticos"]),
+            getNestedText(motoresIASetup, ["reglas", "motivosAprobacion"]),
+            getNestedText(motoresIASetup, ["reglas", "outputsBorrador"]),
+            getNestedText(motoresIASetup, ["reglas", "outputsReportes"]),
+            getNestedText(motoresIASetup, ["reglas", "riesgosRevisar"]),
+          ].filter((value) => value !== "Sin respuesta registrada")
+        ),
+      ],
+    },
+    {
+      id: "reportes",
+      title: "Reportes",
+      icon: BarChart3,
+      status: setupStepStatus.reportes,
+      rows: [
+        row(
+          "Reportes definidos",
+          formatArrayObjectFields(reportesSetup.reportes, "nombre", [])
+        ),
+        row(
+          "Audiencia",
+          formatArrayObjectFields(reportesSetup.reportes, "nombre", ["audiencia"])
+        ),
+        row(
+          "Frecuencia",
+          formatArrayObjectFields(reportesSetup.reportes, "nombre", ["frecuencia"])
+        ),
+        row(
+          "Métricas",
+          formatArrayObjectFields(reportesSetup.reportes, "nombre", ["metricas"])
+        ),
+        row(
+          "Alertas por umbral",
+          getNestedText(reportesSetup, ["reglas", "alertasUmbral"])
+        ),
+        row(
+          "Distribución",
+          getNestedText(reportesSetup, ["reglas", "distribucion"])
+        ),
+      ],
+    },
+    {
+      id: "auditoria-final",
+      title: "Auditoría final",
+      icon: ShieldCheck,
+      status: allSetupStepsCompleted,
+      rows: [
+        row(
+          "Configuración guardada",
+          `${completedSetupSteps}/${totalSetupSteps} pasos · ${realSetupProgressPct}%`
+        ),
+        row(
+          "Checklist de activación",
+          `${totalChecked}/${auditChecklist.length} ítems · ${checklistPct}%`
+        ),
+        row("Score efectivo", `${effectiveScore}/100`),
+        row(
+          "Riesgos altos pendientes",
+          riesgosAltos === 0
+            ? "Sin riesgos altos pendientes"
+            : `${riesgosAltos} riesgo${riesgosAltos !== 1 ? "s" : ""} alto${riesgosAltos !== 1 ? "s" : ""}`
+        ),
+        row(
+          "Dictamen",
+          allSetupStepsCompleted
+            ? "Listo para validación final con cliente"
+            : effectiveScore >= 55
+            ? "Requiere revisión"
+            : "No listo para activar"
+        ),
+        row(
+          "Próxima acción recomendada",
+          "Revisar y aprobar el Reporte Maestro con el cliente antes de activar el CRM operativo."
+        ),
+      ],
+    },
+  ];
 
   function isSetupStepComplete(id: string): boolean {
     if (id === "proceso-pipeline") return setupStepStatus.procesoPipeline;
@@ -568,13 +1180,7 @@ export default function AuditoriaPage() {
   const cfg = DICTAMEN_CONFIG[dictamen];
   const DictamenIcon = cfg.icon;
 
-  const [hoy] = useState(() =>
-    new Date().toLocaleDateString("es-AR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
-  );
+  const hoy = "Fecha de revisión";
 
   return (
     <PageContainer>
@@ -1206,6 +1812,261 @@ export default function AuditoriaPage() {
             </div>
           </div>
 
+          {/* ── Informe para cliente ──────────────────────────────────────── */}
+          {showClientReport && (
+            <div className="mb-8 rounded-2xl border border-indigo-100 bg-white p-6 print:block">
+              <div className="mb-5 flex flex-wrap items-start gap-3 border-b border-slate-100 pb-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600">
+                  <ClipboardCheck className="h-5 w-5 text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Informe para cliente
+                    </h2>
+                    <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[10px] font-semibold text-indigo-700">
+                      Versión preliminar
+                    </span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    Resumen inicial de la información relevada para validar la
+                    configuración del CRM antes de la activación operativa.
+                  </p>
+                  <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                    Documento para revisión con cliente
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-500">
+                  Resumen ejecutivo
+                </p>
+                <p className="text-xs leading-relaxed text-blue-700">
+                  Este informe resume el estado general del Constructor CRM, los
+                  bloques configurados y la próxima acción recomendada antes de
+                  habilitar una activación operativa.
+                </p>
+              </div>
+
+              <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-green-100 bg-green-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-green-600">
+                    Configuración
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-green-700">
+                    {completedSetupSteps}/{totalSetupSteps}
+                  </p>
+                  <p className="mt-1 text-[11px] text-green-700">
+                    pasos guardados
+                  </p>
+                </div>
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-600">
+                    Checklist
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-indigo-700">
+                    {totalChecked}/{auditChecklist.length}
+                  </p>
+                  <p className="mt-1 text-[11px] text-indigo-700">
+                    ítems completos
+                  </p>
+                </div>
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Score
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-blue-700">
+                    {effectiveScore}/100
+                  </p>
+                  <p className="mt-1 text-[11px] text-blue-700">
+                    preparación efectiva
+                  </p>
+                </div>
+                <div className={`rounded-xl border p-4 ${cfg.wrapperClass}`}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    Dictamen
+                  </p>
+                  <div className="mt-1 flex items-start gap-2">
+                    <DictamenIcon className={`mt-0.5 h-4 w-4 shrink-0 ${cfg.iconColor}`} />
+                    <p className={`text-sm font-bold leading-tight ${cfg.textColor}`}>
+                      {cfg.label}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-5">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  Bloques relevados
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {clientReportBlocks.map((block) => {
+                    const BlockIcon = block.icon;
+                    const isComplete = isSetupStepComplete(block.id);
+
+                    return (
+                      <div
+                        key={block.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4"
+                      >
+                        <div className="mb-2 flex items-start gap-2">
+                          <div
+                            className={[
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                              isComplete ? "bg-green-100" : "bg-amber-100",
+                            ].join(" ")}
+                          >
+                            <BlockIcon
+                              className={[
+                                "h-4 w-4",
+                                isComplete ? "text-green-700" : "text-amber-700",
+                              ].join(" ")}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800">
+                              {block.title}
+                            </p>
+                            <span
+                              className={[
+                                "mt-1 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                                isComplete
+                                  ? "border-green-200 bg-green-50 text-green-700"
+                                  : "border-amber-200 bg-amber-50 text-amber-700",
+                              ].join(" ")}
+                            >
+                              {isComplete ? "Completo" : "Pendiente"}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-slate-600">
+                          {block.summary}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5 print:block">
+                <p className="mb-1 text-sm font-bold text-slate-900">
+                  Validación de datos relevados
+                </p>
+                <p className="mb-4 text-xs leading-relaxed text-slate-500">
+                  Use esta sección para revisar con el cliente cada consulta
+                  realizada, confirmar los datos registrados y anotar correcciones
+                  antes de activar el CRM operativo.
+                </p>
+
+                <div className="space-y-4">
+                  {clientValidationSections.map((section) => {
+                    const SectionIcon = section.icon;
+
+                    return (
+                      <div
+                        key={section.id}
+                        className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                          <div
+                            className={[
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                              section.status ? "bg-green-100" : "bg-amber-100",
+                            ].join(" ")}
+                          >
+                            <SectionIcon
+                              className={[
+                                "h-4 w-4",
+                                section.status ? "text-green-700" : "text-amber-700",
+                              ].join(" ")}
+                            />
+                          </div>
+                          <p className="text-sm font-bold text-slate-900">
+                            {section.title}
+                          </p>
+                          <span
+                            className={[
+                              "ml-auto rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                              section.status
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700",
+                            ].join(" ")}
+                          >
+                            {section.status ? "Completo" : "Pendiente"}
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[760px] border-collapse text-left text-[11px]">
+                            <thead>
+                              <tr className="border-b border-slate-100 bg-white text-[10px] uppercase tracking-wide text-slate-400">
+                                <th className="w-[24%] px-3 py-2 font-bold">
+                                  Consulta / Pregunta realizada
+                                </th>
+                                <th className="w-[30%] px-3 py-2 font-bold">
+                                  Respuesta registrada
+                                </th>
+                                <th className="w-[18%] px-3 py-2 font-bold">
+                                  Validación cliente
+                                </th>
+                                <th className="w-[28%] px-3 py-2 font-bold">
+                                  Corrección / Observaciones
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {section.rows.map((row) => (
+                                <tr
+                                  key={row.question}
+                                  className="border-b border-slate-100 last:border-b-0"
+                                >
+                                  <td className="align-top px-3 py-3 font-semibold text-slate-700">
+                                    {row.question}
+                                  </td>
+                                  <td className="align-top px-3 py-3 leading-relaxed text-slate-600">
+                                    {row.value}
+                                  </td>
+                                  <td className="align-top px-3 py-3 text-slate-500">
+                                    □ Correcto&nbsp;&nbsp;□ Corregir
+                                  </td>
+                                  <td className="align-top px-3 py-3">
+                                    <div className="min-h-10 rounded border border-dashed border-slate-300 bg-slate-50/60" />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-xl border border-green-100 bg-green-50 px-4 py-3">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-green-600">
+                  Próxima acción sugerida
+                </p>
+                <p className="text-xs leading-relaxed text-green-800">
+                  Revisar este informe con el cliente, validar la información
+                  relevada y aprobar ajustes antes de habilitar la activación
+                  operativa del CRM.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-amber-600">
+                  Nota de alcance
+                </p>
+                <p className="text-xs leading-relaxed text-amber-800">
+                  Este informe es una versión preliminar. La exportación PDF real
+                  y la activación operativa se implementarán en una fase posterior.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ── Reporte Maestro de Validación CRM ───────────────────────── */}
           {showValidationReport && (
             <div className="mb-8 rounded-2xl border border-indigo-100 bg-indigo-50/30 p-6">
@@ -1626,7 +2487,73 @@ export default function AuditoriaPage() {
             </div>
           )}
 
-          {/* ── G: Navegación ────────────────────────────────────────────── */}
+          {/* ── G: Condiciones para activar CRM ──────────────────────────── */}
+          <div className="mb-8">
+            <SectionHeader letter="G" title="Condiciones para activar CRM" />
+            <p className="mb-4 text-xs text-slate-500">
+              La auditoría puede quedar lista para validación final, pero la
+              activación operativa sigue bloqueada hasta cerrar permisos, flujo
+              de producto y persistencia del estado activo.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {activationConditions.map((condition) => (
+                <div
+                  key={condition.label}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-3"
+                >
+                  <div className="mb-2 flex items-start gap-2">
+                    {condition.complete ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                    ) : condition.status === "Prototipo" ? (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                    ) : (
+                      <Square className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                    )}
+                    <p className="text-xs font-semibold leading-snug text-slate-800">
+                      {condition.label}
+                    </p>
+                  </div>
+                  <span
+                    className={[
+                      "inline-flex rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                      condition.status === "Cumplido"
+                        ? "border-green-200 bg-green-50 text-green-700"
+                        : condition.status === "Prototipo"
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700",
+                    ].join(" ")}
+                  >
+                    {condition.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── H: Preactivación ──────────────────────────────────────────── */}
+          <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-green-600" />
+              <p className="text-sm font-bold text-green-900">
+                CRM listo para preactivación controlada
+              </p>
+              <span className="ml-auto rounded-full border border-blue-200 bg-white/70 px-2.5 py-1 text-[10px] font-semibold text-blue-700">
+                Activación bloqueada
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed text-green-800">
+              El Constructor ya tiene configuración suficiente para revisar con
+              el cliente. La activación operativa queda bloqueada hasta definir
+              permisos reales, flujo de activación y persistencia del estado
+              activo.
+            </p>
+            <p className="mt-3 rounded-lg border border-green-200 bg-white/70 px-3 py-2 text-xs font-semibold text-green-800">
+              Próximo paso: validar el Reporte Maestro con el cliente antes de
+              habilitar Activar CRM.
+            </p>
+          </div>
+
+          {/* ── I: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap gap-2">
               <Link
@@ -1651,7 +2578,7 @@ export default function AuditoriaPage() {
                   type="button"
                   onClick={() => setShowValidationReport((prev) => !prev)}
                   className={[
-                    "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors",
+                    "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors print:hidden",
                     showValidationReport
                       ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
@@ -1664,16 +2591,46 @@ export default function AuditoriaPage() {
                 </button>
                 <button
                   type="button"
-                  disabled
-                  className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-6 py-2.5 text-sm font-semibold text-white opacity-60"
+                  onClick={() => setShowClientReport((prev) => !prev)}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors print:hidden",
+                    showClientReport
+                      ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <ClipboardCheck className="h-4 w-4" />
+                  {showClientReport
+                    ? "Ocultar informe"
+                    : "Ver informe para cliente"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintClientReport}
+                  disabled={!showClientReport}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors print:hidden",
+                    showClientReport
+                      ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300",
+                  ].join(" ")}
+                >
+                  <FileText className="h-4 w-4" />
+                  Imprimir / Guardar PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={!canActivateCRM}
+                  className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-300 px-6 py-2.5 text-sm font-semibold text-white opacity-60 print:hidden"
                 >
                   <ShieldCheck className="h-4 w-4" />
                   Activar CRM
                 </button>
               </div>
               <span className="max-w-xs text-right text-[11px] text-slate-400">
-                Activar CRM disponible en fase posterior — requiere aprobación
-                final y definición del flujo operativo.
+                {canPrepareActivation && !canActivateCRM
+                  ? "Bloqueado por seguridad: falta implementar activación persistente y permisos reales."
+                  : "Completar condiciones de auditoría antes de activar."}
               </span>
             </div>
           </div>
