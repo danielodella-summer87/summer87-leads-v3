@@ -38,6 +38,26 @@ type CuestionarioForm = {
   comentariosAdicionales: string;
 };
 
+type LocalSuggestion = {
+  id: string;
+  targetField:
+    | "queVendeDetalle"
+    | "tiposVenta"
+    | "decisores"
+    | "infoPrePropuesta"
+    | "procesoActual"
+    | "queBloquea"
+    | "motivosPerdida"
+    | "metricasImportantes"
+    | "dondeAyudarIA"
+    | "decisionesNoIA"
+    | "general";
+  title: string;
+  description: string;
+  actionLabel?: string;
+  apply?: () => void;
+};
+
 const INITIAL_FORM: CuestionarioForm = {
   queVendeDetalle: "",
   tiposVenta: [],
@@ -97,6 +117,8 @@ const DECISORES = [
   "Dueño / fundador",
   "Gerente general",
   "Gerente comercial",
+  "Administración / finanzas",
+  "Operaciones",
   "Gerente financiero",
   "Área técnica",
   "Compras",
@@ -111,6 +133,7 @@ const INFO_PRE_PROPUESTA = [
   "Dirección / ubicación",
   "Necesidad declarada",
   "Presupuesto estimado",
+  "Plazo esperado",
   "Cantidad de usuarios / personas / sedes",
   "Documentos técnicos",
   "Fotos o evidencia",
@@ -153,6 +176,7 @@ const METRICAS = [
   "Leads nuevos",
   "Leads por etapa",
   "Tasa de conversión",
+  "Motivo de pérdida",
   "Motivos de pérdida",
   "Ventas ganadas",
   "Monto cotizado",
@@ -172,6 +196,78 @@ const DONDE_AYUDAR_IA = [
   "Generar reportes",
   "Analizar oportunidades perdidas",
 ];
+
+const QUE_VENDE_SUGERIDO =
+  "Vendemos [producto/servicio] para [cliente objetivo], resolvemos [problema principal] y nos diferenciamos por [diferencial].";
+
+const TIPOS_VENTA_SUGERIDOS = [
+  "Venta consultiva",
+  "Venta recurrente",
+  "Venta por proyecto",
+  "Venta inbound",
+  "Venta outbound",
+];
+
+const PROCESO_CONSULTIVO_SUGERIDO =
+  "En una venta consultiva conviene detallar diagnóstico, armado de propuesta y seguimiento posterior.";
+
+const DECISORES_SUGERIDOS = [
+  "Dueño / fundador",
+  "Gerente general",
+  "Gerente comercial",
+  "Administración / finanzas",
+  "Operaciones",
+];
+
+const INFO_PRE_PROPUESTA_SUGERIDA = [
+  "Datos de contacto",
+  "Necesidad declarada",
+  "Presupuesto estimado",
+  "Plazo esperado",
+  "Cantidad de usuarios / personas / sedes",
+  "Documentos técnicos",
+];
+
+const PROCESO_ACTUAL_SUGERIDO =
+  "Lead recibido → calificación → diagnóstico/reunión → propuesta → seguimiento → negociación → cierre → onboarding.";
+
+const BLOQUEOS_AVANCE_SUGERIDO =
+  "Falta de respuesta del cliente, decisión postergada, falta de presupuesto, falta de información o aprobación interna.";
+
+const MOTIVOS_PERDIDA_SUGERIDOS = [
+  "Precio",
+  "Falta de respuesta",
+  "Competencia",
+  "No era el cliente ideal",
+  "Falta de presupuesto",
+  "Decisión postergada",
+];
+
+const METRICAS_SUGERIDAS = [
+  "Leads nuevos",
+  "Tasa de conversión",
+  "Motivo de pérdida",
+  "Ventas ganadas",
+  "Monto cotizado",
+  "Monto cerrado",
+  "Tiempo promedio de cierre",
+];
+
+const DONDE_AYUDAR_IA_SUGERIDO = [
+  "Investigar prospectos",
+  "Resumir reuniones",
+  "Recomendar próximos pasos",
+  "Armar propuestas",
+  "Detectar riesgos",
+  "Generar reportes",
+];
+
+const DECISIONES_NO_IA_SUGERIDO =
+  "Firmar contratos, aprobar descuentos mayores, calificar un lead como perdido o enviar propuestas finales sin revisión humana.";
+
+function mergeUnique(current: string[], additions: string[]) {
+  return Array.from(new Set([...(Array.isArray(current) ? current : []), ...additions]));
+}
 
 // ─── Helpers de estilo ────────────────────────────────────────────────────────
 
@@ -397,6 +493,191 @@ export default function CuestionarioPage() {
     }
   }
 
+  const localSuggestions: LocalSuggestion[] = [];
+
+  if (form.queVendeDetalle.trim().length < 40) {
+    localSuggestions.push({
+      id: "que-vende-corto",
+      targetField: "queVendeDetalle",
+      title: "Podés completar mejor qué vende la empresa",
+      description:
+        "Incluí producto/servicio, cliente objetivo, problema que resuelve y diferencial.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () => setField("queVendeDetalle", QUE_VENDE_SUGERIDO),
+    });
+  }
+
+  if (form.tiposVenta.length === 0) {
+    localSuggestions.push({
+      id: "tipos-venta-vacios",
+      targetField: "tiposVenta",
+      title: "Podés partir de tipos de venta frecuentes",
+      description:
+        "Sugerimos venta consultiva, recurrente, por proyecto, inbound y outbound.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField("tiposVenta", mergeUnique(form.tiposVenta, TIPOS_VENTA_SUGERIDOS)),
+    });
+  }
+
+  if (
+    form.tiposVenta.includes("Venta consultiva") &&
+    form.procesoActual.trim().length < 70
+  ) {
+    localSuggestions.push({
+      id: "venta-consultiva-proceso",
+      targetField: "tiposVenta",
+      title: "La venta consultiva necesita más detalle operativo",
+      description: PROCESO_CONSULTIVO_SUGERIDO,
+      actionLabel: "Completar proceso sugerido",
+      apply: () => setField("procesoActual", PROCESO_ACTUAL_SUGERIDO),
+    });
+  }
+
+  if (form.decisores.length === 0) {
+    localSuggestions.push({
+      id: "decisores-vacios",
+      targetField: "decisores",
+      title: "Podés cargar decisores habituales",
+      description:
+        "Dueño/fundador, gerencia, comercial, administración/finanzas y operaciones suelen participar en la decisión.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField("decisores", mergeUnique(form.decisores, DECISORES_SUGERIDOS)),
+    });
+  }
+
+  if (form.infoPrePropuesta.length === 0) {
+    localSuggestions.push({
+      id: "info-pre-propuesta-vacia",
+      targetField: "infoPrePropuesta",
+      title: "Definí información mínima antes de proponer",
+      description:
+        "Datos de contacto, necesidad, presupuesto, plazo, cantidad de usuarios/personas/sedes y documentos técnicos.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "infoPrePropuesta",
+          mergeUnique(form.infoPrePropuesta, INFO_PRE_PROPUESTA_SUGERIDA)
+        ),
+    });
+  }
+
+  if (form.procesoActual.trim().length > 0 && form.procesoActual.trim().length < 70) {
+    localSuggestions.push({
+      id: "proceso-actual-corto",
+      targetField: "procesoActual",
+      title: "El proceso comercial puede quedar más estructurado",
+      description: `Estructura sugerida: ${PROCESO_ACTUAL_SUGERIDO}`,
+      actionLabel: "Aplicar sugerencia",
+      apply: () => setField("procesoActual", PROCESO_ACTUAL_SUGERIDO),
+    });
+  }
+
+  if (!form.queBloquea.trim()) {
+    localSuggestions.push({
+      id: "bloqueos-avance-vacio",
+      targetField: "queBloquea",
+      title: "Podés registrar bloqueos frecuentes",
+      description: BLOQUEOS_AVANCE_SUGERIDO,
+      actionLabel: "Aplicar sugerencia",
+      apply: () => setField("queBloquea", BLOQUEOS_AVANCE_SUGERIDO),
+    });
+  }
+
+  if (form.motivosPerdida.length === 0) {
+    localSuggestions.push({
+      id: "motivos-perdida-vacios",
+      targetField: "motivosPerdida",
+      title: "Podés partir de motivos de pérdida típicos",
+      description:
+        "Precio, falta de respuesta, competencia, cliente no ideal, falta de presupuesto y decisión postergada.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "motivosPerdida",
+          mergeUnique(form.motivosPerdida, MOTIVOS_PERDIDA_SUGERIDOS)
+        ),
+    });
+  }
+
+  if (form.metricasImportantes.length === 0) {
+    localSuggestions.push({
+      id: "metricas-vacias",
+      targetField: "metricasImportantes",
+      title: "Podés iniciar con métricas comerciales clave",
+      description:
+        "Leads nuevos, tasa de conversión, motivo de pérdida, ventas ganadas, montos y tiempo promedio de cierre.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "metricasImportantes",
+          mergeUnique(form.metricasImportantes, METRICAS_SUGERIDAS)
+        ),
+    });
+  }
+
+  if (form.dondeAyudarIA.length === 0) {
+    localSuggestions.push({
+      id: "donde-ayudar-ia-vacio",
+      targetField: "dondeAyudarIA",
+      title: "Podés definir primeros usos seguros de IA",
+      description:
+        "Investigar prospectos, resumir reuniones, recomendar próximos pasos, armar propuestas, detectar riesgos y generar reportes.",
+      actionLabel: "Aplicar sugerencia",
+      apply: () =>
+        setField(
+          "dondeAyudarIA",
+          mergeUnique(form.dondeAyudarIA, DONDE_AYUDAR_IA_SUGERIDO)
+        ),
+    });
+  }
+
+  if (!form.decisionesNoIA.trim()) {
+    localSuggestions.push({
+      id: "decisiones-no-ia-vacio",
+      targetField: "decisionesNoIA",
+      title: "Definí límites de decisión para la IA",
+      description: DECISIONES_NO_IA_SUGERIDO,
+      actionLabel: "Aplicar sugerencia",
+      apply: () => setField("decisionesNoIA", DECISIONES_NO_IA_SUGERIDO),
+    });
+  }
+
+  function renderFieldSuggestions(targetField: LocalSuggestion["targetField"]) {
+    const suggestions = localSuggestions.filter(
+      (suggestion) => suggestion.targetField === targetField
+    );
+    if (suggestions.length === 0) return null;
+
+    return (
+      <div className="mt-2 space-y-2">
+        {suggestions.map((suggestion) => (
+          <div
+            key={suggestion.id}
+            className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2"
+          >
+            <p className="text-[11px] font-semibold text-indigo-800">
+              {suggestion.title}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-700">
+              {suggestion.description}
+            </p>
+            {suggestion.apply && (
+              <button
+                type="button"
+                onClick={suggestion.apply}
+                className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 transition-colors hover:bg-indigo-50"
+              >
+                {suggestion.actionLabel ?? "Aplicar sugerencia"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const step = CRM_SETUP_STEPS.find((s) => s.id === "cuestionario");
 
   return (
@@ -474,6 +755,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {renderFieldSuggestions("queVendeDetalle")}
                 </div>
 
                 <div>
@@ -486,6 +768,7 @@ export default function CuestionarioPage() {
                     value={form.tiposVenta}
                     onChange={(v) => setField("tiposVenta", v)}
                   />
+                  {renderFieldSuggestions("tiposVenta")}
                 </div>
 
                 <div>
@@ -582,6 +865,7 @@ export default function CuestionarioPage() {
                     value={form.decisores}
                     onChange={(v) => setField("decisores", v)}
                   />
+                  {renderFieldSuggestions("decisores")}
                 </div>
 
                 <div>
@@ -619,6 +903,7 @@ export default function CuestionarioPage() {
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
+                  {renderFieldSuggestions("procesoActual")}
                 </div>
 
                 <div>
@@ -641,6 +926,7 @@ export default function CuestionarioPage() {
                     value={form.infoPrePropuesta}
                     onChange={(v) => setField("infoPrePropuesta", v)}
                   />
+                  {renderFieldSuggestions("infoPrePropuesta")}
                 </div>
 
                 <div>
@@ -654,6 +940,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {renderFieldSuggestions("queBloquea")}
                 </div>
 
               </div>
@@ -716,6 +1003,7 @@ export default function CuestionarioPage() {
                     value={form.motivosPerdida}
                     onChange={(v) => setField("motivosPerdida", v)}
                   />
+                  {renderFieldSuggestions("motivosPerdida")}
                 </div>
 
               </div>
@@ -761,6 +1049,7 @@ export default function CuestionarioPage() {
                     value={form.metricasImportantes}
                     onChange={(v) => setField("metricasImportantes", v)}
                   />
+                  {renderFieldSuggestions("metricasImportantes")}
                 </div>
 
               </div>
@@ -784,6 +1073,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {renderFieldSuggestions("decisionesNoIA")}
                 </div>
 
                 <div>
@@ -795,6 +1085,7 @@ export default function CuestionarioPage() {
                     value={form.dondeAyudarIA}
                     onChange={(v) => setField("dondeAyudarIA", v)}
                   />
+                  {renderFieldSuggestions("dondeAyudarIA")}
                 </div>
 
                 <div>
