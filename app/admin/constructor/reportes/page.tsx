@@ -17,6 +17,8 @@ import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionC
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
+import { sendConstructorAIAuditEvent } from "@/lib/constructor-ai/audit-client";
+import type { ConstructorAISuggestionAuditEvent } from "@/lib/constructor-ai/audit-types";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -399,6 +401,7 @@ export default function ReportesPage() {
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
   const [mockAIReportesRequested, setMockAIReportesRequested] = useState(false);
   const [mockAIApplyMessage, setMockAIApplyMessage] = useState<string | null>(null);
+  const [mockAIAuditError, setMockAIAuditError] = useState<string | null>(null);
   const {
     suggestions: mockAIReportesSuggestions,
     loading: mockAIReportesLoading,
@@ -482,6 +485,16 @@ export default function ReportesPage() {
       cancelled = true;
     };
   }, []);
+
+  async function sendMockAIAuditEvent(event: ConstructorAISuggestionAuditEvent) {
+    const response = await sendConstructorAIAuditEvent(event);
+
+    if (!response.ok) {
+      setMockAIAuditError(response.error ?? "No se pudo registrar auditoría IA mock.");
+    } else {
+      setMockAIAuditError(null);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -567,8 +580,9 @@ export default function ReportesPage() {
   async function requestMockAISuggestionForReportes() {
     setMockAIReportesRequested(true);
     setMockAIApplyMessage(null);
+    setMockAIAuditError(null);
 
-    await requestMockAIReportes({
+    const suggestions = await requestMockAIReportes({
       mode: "field_suggestion",
       step: "reportes",
       field: "reportes",
@@ -579,6 +593,47 @@ export default function ReportesPage() {
       },
       constructorContext: constructorContext ?? {},
     });
+
+    if (suggestions.length === 0) {
+      await sendMockAIAuditEvent({
+        eventType: "suggestion_empty_result",
+        source: "mock",
+        step: "reportes",
+        field: "reportes",
+        action: "empty_result",
+        result: "noop",
+        requestId: "mock-constructor-assist",
+        metadata: {
+          prototypeMode: true,
+          screen: "constructor_reportes",
+          mock: true,
+        },
+      });
+      return;
+    }
+
+    for (const suggestion of suggestions) {
+      await sendMockAIAuditEvent({
+        eventType: "suggestion_shown",
+        suggestionId: suggestion.id,
+        source: suggestion.source,
+        step: "reportes",
+        field: "reportes",
+        targetStep: suggestion.targetStep,
+        targetField: suggestion.targetField,
+        suggestionType: suggestion.type,
+        severity: suggestion.severity,
+        confidence: suggestion.confidence,
+        action: "shown",
+        result: "success",
+        requestId: "mock-constructor-assist",
+        metadata: {
+          prototypeMode: true,
+          screen: "constructor_reportes",
+          mock: true,
+        },
+      });
+    }
   }
 
   function applyMockAIReportesSuggestion(
@@ -630,6 +685,28 @@ export default function ReportesPage() {
 
     if (nextReports.length === 0) {
       setMockAIApplyMessage("Esta sugerencia IA ya estaba aplicada.");
+      void sendMockAIAuditEvent({
+        eventType: "suggestion_duplicate",
+        suggestionId: suggestion.id,
+        source: suggestion.source,
+        step: "reportes",
+        field: "reportes",
+        targetStep: suggestion.targetStep,
+        targetField: suggestion.targetField,
+        suggestionType: suggestion.type,
+        severity: suggestion.severity,
+        confidence: suggestion.confidence,
+        action: "duplicate",
+        result: "noop",
+        requestId: "mock-constructor-assist",
+        afterSummary:
+          "Reportes IA ya existentes: Reporte ejecutivo comercial / Reporte de pipeline",
+        metadata: {
+          prototypeMode: true,
+          screen: "constructor_reportes",
+          mock: true,
+        },
+      });
       return;
     }
 
@@ -650,7 +727,49 @@ export default function ReportesPage() {
       return [...current, ...additions];
     });
     setMockAIApplyMessage("Sugerencia IA aplicada correctamente.");
+    void sendMockAIAuditEvent({
+      eventType: "suggestion_applied",
+      suggestionId: suggestion.id,
+      source: suggestion.source,
+      step: "reportes",
+      field: "reportes",
+      targetStep: suggestion.targetStep,
+      targetField: suggestion.targetField,
+      suggestionType: suggestion.type,
+      severity: suggestion.severity,
+      confidence: suggestion.confidence,
+      action: "applied",
+      result: "success",
+      requestId: "mock-constructor-assist",
+      afterSummary:
+        "Reportes IA agregados: Reporte ejecutivo comercial / Reporte de pipeline",
+      metadata: {
+        prototypeMode: true,
+        screen: "constructor_reportes",
+        mock: true,
+      },
+    });
   }
+
+  useEffect(() => {
+    if (!mockAIReportesError || !mockAIReportesRequested) return;
+
+    void sendMockAIAuditEvent({
+      eventType: "suggestion_failed",
+      source: "mock",
+      step: "reportes",
+      field: "reportes",
+      action: "failed",
+      result: "error",
+      requestId: "mock-constructor-assist",
+      metadata: {
+        prototypeMode: true,
+        screen: "constructor_reportes",
+        mock: true,
+        notes: mockAIReportesError,
+      },
+    });
+  }, [mockAIReportesError, mockAIReportesRequested]);
 
   const empresaContext = asRecord(constructorContext?.empresa);
   const cuestionarioContext = asRecord(constructorContext?.cuestionario);
@@ -1430,6 +1549,12 @@ export default function ReportesPage() {
               {mockAIApplyMessage ? (
                 <p className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
                   {mockAIApplyMessage}
+                </p>
+              ) : null}
+
+              {mockAIAuditError ? (
+                <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Auditoría IA mock: {mockAIAuditError}
                 </p>
               ) : null}
 
