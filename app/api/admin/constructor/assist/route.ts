@@ -1,4 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import type {
+  ConstructorAISuggestion,
+  ConstructorAssistMode,
+  ConstructorAssistResponse,
+  ConstructorStep,
+} from "@/lib/constructor-ai/types";
+import {
+  arrayOrTextIncludes,
+  asRecord,
+  isRecord,
+  isValidConstructorAssistMode,
+  isValidConstructorStep,
+  normalizeText,
+  textIncludes,
+} from "@/lib/constructor-ai/helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -8,57 +23,7 @@ export const dynamic = "force-dynamic";
 // Debe reemplazarse por lógica real con permisos antes de producción.
 // TODO: exigir permiso constructor.assist antes de conectar IA real.
 
-type ConstructorAssistMode =
-  | "field_suggestion"
-  | "step_review"
-  | "coherence_check"
-  | "missing_data_check"
-  | "client_report_review";
-
-type ConstructorStep =
-  | "empresa"
-  | "cuestionario"
-  | "documentos"
-  | "diagnostico"
-  | "proceso_pipeline"
-  | "motores_ia"
-  | "reportes"
-  | "auditoria";
-
-type ConstructorAISuggestionType =
-  | "correction"
-  | "enrichment"
-  | "warning"
-  | "missing_data"
-  | "contradiction"
-  | "process_advice"
-  | "report_advice"
-  | "ai_engine_advice"
-  | "client_validation_note";
-
-type ConstructorAISuggestionSeverity =
-  | "low"
-  | "medium"
-  | "high"
-  | "blocker";
-
-type ConstructorAISuggestion = {
-  id: string;
-  type: ConstructorAISuggestionType;
-  severity: ConstructorAISuggestionSeverity;
-  title: string;
-  message: string;
-  reason: string;
-  targetStep: ConstructorStep;
-  targetField?: string;
-  suggestedValue?: unknown;
-  suggestedPatch?: Record<string, unknown>;
-  requiresHumanApproval: boolean;
-  confidence: number;
-  source: "mock";
-};
-
-type ConstructorAssistRequest = {
+type ConstructorAssistRequestPayload = {
   mode?: unknown;
   step?: unknown;
   field?: unknown;
@@ -68,88 +33,12 @@ type ConstructorAssistRequest = {
   metadata?: unknown;
 };
 
-type ConstructorAssistResponse = {
-  ok: boolean;
-  suggestions: ConstructorAISuggestion[];
-  warnings: string[];
-  metadata: {
-    mock: true;
-    model: "mock";
-    prototypeMode: true;
-  };
-};
-
-type ConstructorAssistErrorResponse = ConstructorAssistResponse & {
-  error: string;
-};
-
-const VALID_MODES: ConstructorAssistMode[] = [
-  "field_suggestion",
-  "step_review",
-  "coherence_check",
-  "missing_data_check",
-  "client_report_review",
-];
-
-const VALID_STEPS: ConstructorStep[] = [
-  "empresa",
-  "cuestionario",
-  "documentos",
-  "diagnostico",
-  "proceso_pipeline",
-  "motores_ia",
-  "reportes",
-  "auditoria",
-];
-
 const MOCK_METADATA = {
   mock: true,
   model: "mock",
   prototypeMode: true,
+  requestId: "mock-constructor-assist",
 } as const;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeText(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
-}
-
-function isValidMode(value: unknown): value is ConstructorAssistMode {
-  return (
-    typeof value === "string" &&
-    VALID_MODES.includes(value as ConstructorAssistMode)
-  );
-}
-
-function isValidStep(value: unknown): value is ConstructorStep {
-  return (
-    typeof value === "string" &&
-    VALID_STEPS.includes(value as ConstructorStep)
-  );
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
-
-function valueToText(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.map(valueToText).join(" ");
-  }
-
-  if (isRecord(value)) {
-    return Object.values(value).map(valueToText).join(" ");
-  }
-
-  return normalizeText(value);
-}
-
-function textIncludes(value: unknown, terms: string[]): boolean {
-  const text = valueToText(value);
-  return terms.some((term) => text.includes(normalizeText(term)));
-}
 
 function buildMockSuggestions(input: {
   mode: ConstructorAssistMode;
@@ -240,7 +129,7 @@ function buildMockSuggestions(input: {
   }
 
   const hasConsultativeSale =
-    textIncludes(cuestionarioContext.tiposVenta, ["consultiva"]) ||
+    arrayOrTextIncludes(cuestionarioContext.tiposVenta, ["consultiva"]) ||
     textIncludes(cuestionarioContext.procesoActual, [
       "diagnóstico",
       "diagnostico",
@@ -278,8 +167,8 @@ function buildMockSuggestions(input: {
   }
 
   const hasSeguimientoRisk =
-    textIncludes(diagnosticoContext.riesgos, ["seguimiento"]) ||
-    textIncludes(procesoPipelineContext.etapas, ["seguimiento"]);
+    arrayOrTextIncludes(diagnosticoContext.riesgos, ["seguimiento"]) ||
+    arrayOrTextIncludes(procesoPipelineContext.etapas, ["seguimiento"]);
 
   if (step === "motores_ia" && hasSeguimientoRisk) {
     suggestions.push({
@@ -368,7 +257,7 @@ function buildMockSuggestions(input: {
 }
 
 function mockError(error: string, warning: string) {
-  const body: ConstructorAssistErrorResponse = {
+  const body: ConstructorAssistResponse = {
     ok: false,
     error,
     suggestions: [],
@@ -380,20 +269,22 @@ function mockError(error: string, warning: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as ConstructorAssistRequest | null;
+  const body = (await req.json().catch(() => null)) as
+    | ConstructorAssistRequestPayload
+    | null;
 
   if (!isRecord(body)) {
     return mockError("Payload inválido", "El body debe ser un objeto JSON.");
   }
 
-  if (!isValidMode(body.mode)) {
+  if (!isValidConstructorAssistMode(body.mode)) {
     return mockError(
       "mode inválido",
       "El campo mode debe ser uno de los modos definidos en el contrato."
     );
   }
 
-  if (!isValidStep(body.step)) {
+  if (!isValidConstructorStep(body.step)) {
     return mockError(
       "step inválido",
       "El campo step debe ser uno de los pasos definidos en el contrato."

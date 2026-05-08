@@ -1,55 +1,23 @@
-export type ConstructorAssistMode =
-  | "field_suggestion"
-  | "step_review"
-  | "coherence_check"
-  | "missing_data_check"
-  | "client_report_review";
+import type {
+  ConstructorMockAIResponse,
+  RequestConstructorMockAIInput,
+} from "./types";
 
-export type ConstructorStep =
-  | "empresa"
-  | "cuestionario"
-  | "documentos"
-  | "diagnostico"
-  | "proceso_pipeline"
-  | "motores_ia"
-  | "reportes"
-  | "auditoria";
-
-export type ConstructorMockAISuggestion = {
-  id: string;
-  type: string;
-  severity: string;
-  title: string;
-  message: string;
-  reason: string;
-  targetStep: string;
-  targetField?: string;
-  suggestedValue?: unknown;
-  suggestedPatch?: Record<string, unknown>;
-  requiresHumanApproval: boolean;
-  confidence: number;
-  source: "mock";
-};
-
-export type ConstructorMockAIResponse = {
-  ok: boolean;
-  suggestions?: ConstructorMockAISuggestion[];
-  warnings?: string[];
-  error?: string;
-};
-
-export type RequestConstructorMockAIInput = {
-  mode: ConstructorAssistMode;
-  step: ConstructorStep;
-  field?: string;
-  value?: unknown;
-  currentForm?: Record<string, unknown>;
-  constructorContext?: Record<string, unknown>;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
+export { pickAllowedPatch } from "./helpers";
+export type {
+  ConstructorAssistMode,
+  ConstructorAssistRequest,
+  ConstructorAssistResponse,
+  ConstructorAssistResponseMetadata,
+  ConstructorAISuggestion,
+  ConstructorAISuggestionSeverity,
+  ConstructorAISuggestionSource,
+  ConstructorAISuggestionType,
+  ConstructorMockAIResponse,
+  ConstructorMockAISuggestion,
+  ConstructorStep,
+  RequestConstructorMockAIInput,
+} from "./types";
 
 export async function requestConstructorMockAI(
   input: RequestConstructorMockAIInput
@@ -67,6 +35,7 @@ export async function requestConstructorMockAI(
           source: "constructor",
           locale: "es-UY",
           prototypeMode: true,
+          ...input.metadata,
         },
       }),
     });
@@ -81,6 +50,7 @@ export async function requestConstructorMockAI(
         error: json?.error ?? "No se pudo obtener sugerencia IA mock.",
         suggestions: json?.suggestions ?? [],
         warnings: json?.warnings ?? [],
+        metadata: json?.metadata,
       };
     }
 
@@ -88,6 +58,7 @@ export async function requestConstructorMockAI(
       ok: true,
       suggestions: json.suggestions ?? [],
       warnings: json.warnings ?? [],
+      metadata: json.metadata,
     };
   } catch {
     return {
@@ -97,17 +68,4 @@ export async function requestConstructorMockAI(
       warnings: [],
     };
   }
-}
-
-export function pickAllowedPatch(
-  patch: Record<string, unknown> | undefined,
-  allowedKeys: string[]
-): Record<string, unknown> {
-  if (!isRecord(patch)) return {};
-
-  const allowed = new Set(allowedKeys);
-
-  return Object.fromEntries(
-    Object.entries(patch).filter(([key]) => allowed.has(key))
-  );
 }
