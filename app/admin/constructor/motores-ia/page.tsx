@@ -19,8 +19,7 @@ import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionC
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
-import { sendConstructorAIAuditEvent } from "@/lib/constructor-ai/audit-client";
-import type { ConstructorAISuggestionAuditEvent } from "@/lib/constructor-ai/audit-types";
+import { useConstructorAIAudit } from "@/lib/constructor-ai/useConstructorAIAudit";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -417,7 +416,15 @@ export default function MotoresIAPage() {
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
   const [mockAIMotoresRequested, setMockAIMotoresRequested] = useState(false);
   const [mockAIApplyMessage, setMockAIApplyMessage] = useState<string | null>(null);
-  const [mockAIAuditError, setMockAIAuditError] = useState<string | null>(null);
+  const {
+    auditError: mockAIAuditError,
+    clearAuditError: clearMockAIAuditError,
+    auditSuggestionShown,
+    auditEmptyResult,
+    auditFailed,
+    auditApplied,
+    auditDuplicate,
+  } = useConstructorAIAudit();
   const {
     suggestions: mockAIMotoresSuggestions,
     loading: mockAIMotoresLoading,
@@ -502,16 +509,6 @@ export default function MotoresIAPage() {
     };
   }, []);
 
-  async function sendMockAIAuditEvent(event: ConstructorAISuggestionAuditEvent) {
-    const response = await sendConstructorAIAuditEvent(event);
-
-    if (!response.ok) {
-      setMockAIAuditError(response.error ?? "No se pudo registrar auditoría IA mock.");
-    } else {
-      setMockAIAuditError(null);
-    }
-  }
-
   async function handleSave() {
     setSaving(true);
     setSaveError(null);
@@ -594,7 +591,7 @@ export default function MotoresIAPage() {
   async function requestMockAISuggestionForMotores() {
     setMockAIMotoresRequested(true);
     setMockAIApplyMessage(null);
-    setMockAIAuditError(null);
+    clearMockAIAuditError();
 
     const suggestions = await requestMockAIMotores({
       mode: "field_suggestion",
@@ -609,43 +606,20 @@ export default function MotoresIAPage() {
     });
 
     if (suggestions.length === 0) {
-      await sendMockAIAuditEvent({
-        eventType: "suggestion_empty_result",
-        source: "mock",
+      await auditEmptyResult({
         step: "motores_ia",
         field: "motores",
-        action: "empty_result",
-        result: "noop",
-        requestId: "mock-constructor-assist",
-        metadata: {
-          prototypeMode: true,
-          screen: "constructor_motores_ia",
-          mock: true,
-        },
+        screen: "constructor_motores_ia",
       });
       return;
     }
 
     for (const suggestion of suggestions) {
-      await sendMockAIAuditEvent({
-        eventType: "suggestion_shown",
-        suggestionId: suggestion.id,
-        source: suggestion.source,
+      await auditSuggestionShown({
+        suggestion,
         step: "motores_ia",
         field: "motores",
-        targetStep: suggestion.targetStep,
-        targetField: suggestion.targetField,
-        suggestionType: suggestion.type,
-        severity: suggestion.severity,
-        confidence: suggestion.confidence,
-        action: "shown",
-        result: "success",
-        requestId: "mock-constructor-assist",
-        metadata: {
-          prototypeMode: true,
-          screen: "constructor_motores_ia",
-          mock: true,
-        },
+        screen: "constructor_motores_ia",
       });
     }
   }
@@ -668,26 +642,12 @@ export default function MotoresIAPage() {
 
     if (suggestionAlreadyApplied) {
       setMockAIApplyMessage("Esta sugerencia IA ya estaba aplicada.");
-      void sendMockAIAuditEvent({
-        eventType: "suggestion_duplicate",
-        suggestionId: suggestion.id,
-        source: suggestion.source,
+      auditDuplicate({
+        suggestion,
         step: "motores_ia",
         field: "motores",
-        targetStep: suggestion.targetStep,
-        targetField: suggestion.targetField,
-        suggestionType: suggestion.type,
-        severity: suggestion.severity,
-        confidence: suggestion.confidence,
-        action: "duplicate",
-        result: "noop",
-        requestId: "mock-constructor-assist",
+        screen: "constructor_motores_ia",
         afterSummary: "Motor IA ya existente: Auditor de seguimiento comercial",
-        metadata: {
-          prototypeMode: true,
-          screen: "constructor_motores_ia",
-          mock: true,
-        },
       });
       return;
     }
@@ -726,48 +686,25 @@ export default function MotoresIAPage() {
       ];
     });
     setMockAIApplyMessage("Sugerencia IA aplicada correctamente.");
-    void sendMockAIAuditEvent({
-      eventType: "suggestion_applied",
-      suggestionId: suggestion.id,
-      source: suggestion.source,
+    auditApplied({
+      suggestion,
       step: "motores_ia",
       field: "motores",
-      targetStep: suggestion.targetStep,
-      targetField: suggestion.targetField,
-      suggestionType: suggestion.type,
-      severity: suggestion.severity,
-      confidence: suggestion.confidence,
-      action: "applied",
-      result: "success",
-      requestId: "mock-constructor-assist",
+      screen: "constructor_motores_ia",
       afterSummary: "Motor IA agregado: Auditor de seguimiento comercial",
-      metadata: {
-        prototypeMode: true,
-        screen: "constructor_motores_ia",
-        mock: true,
-      },
     });
   }
 
   useEffect(() => {
     if (!mockAIMotoresRequested || !mockAIMotoresError) return;
 
-    void sendMockAIAuditEvent({
-      eventType: "suggestion_failed",
-      source: "mock",
+    void auditFailed({
       step: "motores_ia",
       field: "motores",
-      action: "failed",
-      result: "error",
-      requestId: "mock-constructor-assist",
-      metadata: {
-        prototypeMode: true,
-        screen: "constructor_motores_ia",
-        mock: true,
-        notes: "Consulta IA mock falló en Motores IA.",
-      },
+      screen: "constructor_motores_ia",
+      notes: mockAIMotoresError,
     });
-  }, [mockAIMotoresRequested, mockAIMotoresError]);
+  }, [auditFailed, mockAIMotoresRequested, mockAIMotoresError]);
 
   const empresaContext = asRecord(constructorContext?.empresa);
   const cuestionarioContext = asRecord(constructorContext?.cuestionario);
