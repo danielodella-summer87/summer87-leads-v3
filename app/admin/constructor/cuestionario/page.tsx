@@ -5,6 +5,10 @@ import Link from "next/link";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import {
+  type ConstructorMockAISuggestion,
+  requestConstructorMockAI,
+} from "@/lib/constructor-ai/client";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -56,29 +60,6 @@ type LocalSuggestion = {
   description: string;
   actionLabel?: string;
   apply?: () => void;
-};
-
-type MockAISuggestion = {
-  id: string;
-  type: string;
-  severity: string;
-  title: string;
-  message: string;
-  reason: string;
-  targetStep: string;
-  targetField?: string;
-  suggestedValue?: unknown;
-  suggestedPatch?: Record<string, unknown>;
-  requiresHumanApproval: boolean;
-  confidence: number;
-  source: "mock";
-};
-
-type MockAIResponse = {
-  ok: boolean;
-  suggestions?: MockAISuggestion[];
-  warnings?: string[];
-  error?: string;
 };
 
 const INITIAL_FORM: CuestionarioForm = {
@@ -387,7 +368,7 @@ export default function CuestionarioPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [mockAIProcesoSuggestions, setMockAIProcesoSuggestions] = useState<
-    MockAISuggestion[]
+    ConstructorMockAISuggestion[]
   >([]);
   const [mockAIProcesoLoading, setMockAIProcesoLoading] = useState(false);
   const [mockAIProcesoError, setMockAIProcesoError] = useState<string | null>(null);
@@ -486,28 +467,16 @@ export default function CuestionarioPage() {
     setMockAIProcesoError(null);
 
     try {
-      const res = await fetch("/api/admin/constructor/assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          mode: "field_suggestion",
-          step: "cuestionario",
-          field: "procesoActual",
-          value: form.procesoActual,
-          currentForm: form,
-          constructorContext: {},
-          metadata: {
-            source: "constructor",
-            locale: "es-UY",
-            prototypeMode: true,
-          },
-        }),
+      const json = await requestConstructorMockAI({
+        mode: "field_suggestion",
+        step: "cuestionario",
+        field: "procesoActual",
+        value: form.procesoActual,
+        currentForm: form,
+        constructorContext: {},
       });
 
-      const json = (await res.json().catch(() => null)) as MockAIResponse | null;
-
-      if (res.redirected || !res.ok || !json?.ok) {
+      if (!json.ok) {
         setMockAIProcesoError(
           json?.error ?? "No se pudo obtener sugerencia IA mock."
         );
@@ -522,7 +491,7 @@ export default function CuestionarioPage() {
     }
   }
 
-  function applyMockAIProcesoSuggestion(suggestion: MockAISuggestion) {
+  function applyMockAIProcesoSuggestion(suggestion: ConstructorMockAISuggestion) {
     if (typeof suggestion.suggestedValue !== "string") return;
 
     setForm((prev) => ({

@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import {
+  type ConstructorMockAISuggestion,
+  pickAllowedPatch,
+  requestConstructorMockAI,
+} from "@/lib/constructor-ai/client";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -34,29 +39,6 @@ type EmpresaForm = {
   comoTrabajaHoy: string;
   queEsperaLograr: string;
   queDeberiaAnalizarIA: string;
-};
-
-type MockAISuggestion = {
-  id: string;
-  type: string;
-  severity: string;
-  title: string;
-  message: string;
-  reason: string;
-  targetStep: string;
-  targetField?: string;
-  suggestedValue?: unknown;
-  suggestedPatch?: Record<string, unknown>;
-  requiresHumanApproval: boolean;
-  confidence: number;
-  source: "mock";
-};
-
-type MockAIResponse = {
-  ok: boolean;
-  suggestions?: MockAISuggestion[];
-  warnings?: string[];
-  error?: string;
 };
 
 const INITIAL_FORM: EmpresaForm = {
@@ -154,7 +136,9 @@ export default function EmpresaPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [mockAISuggestions, setMockAISuggestions] = useState<MockAISuggestion[]>([]);
+  const [mockAISuggestions, setMockAISuggestions] = useState<
+    ConstructorMockAISuggestion[]
+  >([]);
   const [mockAILoading, setMockAILoading] = useState(false);
   const [mockAIError, setMockAIError] = useState<string | null>(null);
 
@@ -254,28 +238,16 @@ export default function EmpresaPage() {
     setMockAIError(null);
 
     try {
-      const res = await fetch("/api/admin/constructor/assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          mode: "field_suggestion",
-          step: "empresa",
-          field: "pais",
-          value: form.pais,
-          currentForm: form,
-          constructorContext: {},
-          metadata: {
-            source: "constructor",
-            locale: "es-UY",
-            prototypeMode: true,
-          },
-        }),
+      const json = await requestConstructorMockAI({
+        mode: "field_suggestion",
+        step: "empresa",
+        field: "pais",
+        value: form.pais,
+        currentForm: form,
+        constructorContext: {},
       });
 
-      const json = (await res.json().catch(() => null)) as MockAIResponse | null;
-
-      if (res.redirected || !res.ok || !json?.ok) {
+      if (!json.ok) {
         setMockAIError(json?.error ?? "No se pudo obtener sugerencia IA mock.");
         return;
       }
@@ -288,24 +260,14 @@ export default function EmpresaPage() {
     }
   }
 
-  function applyMockAISuggestion(suggestion: MockAISuggestion) {
-    const patch = suggestion.suggestedPatch;
+  function applyMockAISuggestion(suggestion: ConstructorMockAISuggestion) {
+    const patch = pickAllowedPatch(suggestion.suggestedPatch, ["pais", "ciudad"]);
 
-    if (!patch || typeof patch !== "object") return;
-
-    setForm((prev) => {
-      const allowedPatch: Partial<EmpresaForm> = {};
-
-      if (typeof patch.pais === "string") {
-        allowedPatch.pais = patch.pais;
-      }
-
-      if (typeof patch.ciudad === "string") {
-        allowedPatch.ciudad = patch.ciudad;
-      }
-
-      return { ...prev, ...allowedPatch };
-    });
+    setForm((prev) => ({
+      ...prev,
+      ...(typeof patch.pais === "string" ? { pais: patch.pais } : {}),
+      ...(typeof patch.ciudad === "string" ? { ciudad: patch.ciudad } : {}),
+    }));
   }
 
   function toggleFuente(fuente: string) {
