@@ -56,7 +56,7 @@ export function MockAISuggestionCard({
       ) : null}
       {confidencePercent !== null ? (
         <p className="mt-1 text-[10px] font-medium text-violet-500">
-          Confianza mock: {confidencePercent}%
+          Confianza: {confidencePercent}%
         </p>
       ) : null}
       {showApply ? (

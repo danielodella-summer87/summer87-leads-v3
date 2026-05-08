@@ -354,6 +354,7 @@ export default function DiagnosticoPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [aiApplyMessage, setAIApplyMessage] = useState<string | null>(null);
+  const [sandboxAIWarning, setSandboxAIWarning] = useState<string | null>(null);
   const {
     suggestions: mockAIRiesgosSuggestions,
     loading: mockAIRiesgosLoading,
@@ -523,6 +524,7 @@ export default function DiagnosticoPage() {
 
   async function requestMockAISuggestionForRiesgos() {
     setAIApplyMessage(null);
+    setSandboxAIWarning(null);
     clearSandboxAIRiesgos();
     await requestMockAIRiesgos({
       mode: "field_suggestion",
@@ -536,6 +538,7 @@ export default function DiagnosticoPage() {
 
   async function requestSandboxAISuggestionForRiesgos() {
     setAIApplyMessage(null);
+    setSandboxAIWarning(null);
     clearMockAIRiesgos();
     const sandboxMetadata = {
       source: "constructor",
@@ -544,7 +547,7 @@ export default function DiagnosticoPage() {
       provider: "openai_sandbox",
     };
 
-    await requestSandboxAIRiesgos({
+    const result = await requestSandboxAIRiesgos({
       mode: "field_suggestion",
       step: "diagnostico",
       field: "riesgos",
@@ -553,6 +556,12 @@ export default function DiagnosticoPage() {
       constructorContext,
       metadata: sandboxMetadata,
     });
+
+    if (result.length === 0) {
+      setSandboxAIWarning(
+        "IA sandbox no devolvió sugerencias. Verificá OPENAI_API_KEY o usá el asistente mock/local."
+      );
+    }
   }
 
   function applyMockAIRiesgosSuggestion(
@@ -962,6 +971,7 @@ export default function DiagnosticoPage() {
                     setField("riesgos", e.target.value);
                     clearMockAIRiesgos();
                     clearSandboxAIRiesgos();
+                    setSandboxAIWarning(null);
                   }}
                 />
                 {renderFieldSuggestions("riesgos")}
@@ -1008,6 +1018,11 @@ export default function DiagnosticoPage() {
                       {sandboxAIRiesgosError}
                     </p>
                   )}
+                  {sandboxAIWarning && !sandboxAIRiesgosError ? (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                      {sandboxAIWarning}
+                    </div>
+                  ) : null}
 
                   {mockAIRiesgosSuggestions.length > 0 && (
                     <div className="mt-2 space-y-2">
