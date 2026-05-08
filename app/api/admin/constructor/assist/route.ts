@@ -178,28 +178,36 @@ function buildMockSuggestions(input: {
     arrayOrTextIncludes(diagnosticoContext.riesgos, ["seguimiento"]) ||
     arrayOrTextIncludes(procesoPipelineContext.etapas, ["seguimiento"]);
 
-  if (step === "motores_ia" && hasSeguimientoRisk) {
+  const shouldSuggestFollowUpAuditor =
+    step === "motores_ia" &&
+    (mode === "step_review" || mode === "field_suggestion") &&
+    (field === "motores" || normalizedField === "motores" || hasSeguimientoRisk);
+
+  if (shouldSuggestFollowUpAuditor) {
     suggestions.push({
-      id: "mock-ai-engine-follow-up-auditor",
+      id: "mock-motores-ia-auditor-seguimiento",
       type: "ai_engine_advice",
       severity: "medium",
-      title: "Podés definir un auditor de seguimiento comercial",
+      title: "Agregar auditor de seguimiento comercial",
       message:
-        "Se sugiere un motor Auditor de seguimiento comercial para detectar oportunidades sin próxima acción o con seguimiento vencido.",
+        "El mock sugiere agregar un motor IA para detectar oportunidades sin seguimiento y recomendar próximas acciones.",
       reason:
-        "El diagnóstico o el pipeline mencionan seguimiento como riesgo o etapa relevante.",
+        "El seguimiento comercial suele ser uno de los principales puntos de fuga en procesos con múltiples etapas.",
       targetStep: "motores_ia",
       targetField: "motores",
-      suggestedPatch: {
-        motorSugerido: {
-          nombre: "Auditor de seguimiento comercial",
-          etapa: "Seguimiento",
-          tipo: "Auditoría",
-          requiereValidacionHumana: true,
-        },
+      suggestedValue: {
+        nombre: "Auditor de seguimiento comercial",
+        etapa: "Seguimiento",
+        input:
+          "Fecha de último contacto, próxima acción, estado de oportunidad, responsable y notas comerciales.",
+        output:
+          "Alertas de oportunidades frías, riesgos de abandono y recomendaciones de próxima acción.",
+        requiereValidacionHumana: true,
+        prioridad: "alta",
+        riesgo: "medio",
       },
       requiresHumanApproval: true,
-      confidence: 0.8,
+      confidence: 0.87,
       source: "mock",
     });
   }

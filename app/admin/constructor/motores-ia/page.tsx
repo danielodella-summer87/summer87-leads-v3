@@ -15,8 +15,11 @@ import {
   ZapOff,
   ShieldAlert,
 } from "lucide-react";
+import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
+import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -339,6 +342,16 @@ function appendTextIfMissing(current: string, addition: string) {
   return `${current}\n\n${addition}`;
 }
 
+function slugFromText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 function SectionHeader({ letter, title }: { letter: string; title: string }) {
@@ -400,6 +413,15 @@ export default function MotoresIAPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
+  const [mockAIMotoresRequested, setMockAIMotoresRequested] = useState(false);
+  const [mockAIApplyMessage, setMockAIApplyMessage] = useState<string | null>(null);
+  const {
+    suggestions: mockAIMotoresSuggestions,
+    loading: mockAIMotoresLoading,
+    error: mockAIMotoresError,
+    request: requestMockAIMotores,
+    clear: clearMockAIMotores,
+  } = useConstructorMockAI();
 
   useEffect(() => {
     let cancelled = false;
@@ -526,6 +548,8 @@ export default function MotoresIAPage() {
     key: K,
     value: MotorIA[K]
   ) {
+    clearMockAIMotores();
+    setMockAIMotoresRequested(false);
     setMotores((prev) =>
       prev.map((m) => (m.id === id ? { ...m, [key]: value } : m))
     );
@@ -539,6 +563,8 @@ export default function MotoresIAPage() {
   }
 
   function addSuggestedMotors(suggested: MotorIA[]) {
+    clearMockAIMotores();
+    setMockAIMotoresRequested(false);
     setMotores((prev) => {
       const current = Array.isArray(prev) ? prev : [];
       const existingNames = new Set(
@@ -550,6 +576,80 @@ export default function MotoresIAPage() {
 
       return [...current, ...next];
     });
+  }
+
+  async function requestMockAISuggestionForMotores() {
+    setMockAIMotoresRequested(true);
+    setMockAIApplyMessage(null);
+
+    await requestMockAIMotores({
+      mode: "field_suggestion",
+      step: "motores_ia",
+      field: "motores",
+      value: motores,
+      currentForm: {
+        motores,
+        reglas,
+      },
+      constructorContext: constructorContext ?? {},
+    });
+  }
+
+  function applyMockAIMotorSuggestion(
+    suggestion: ConstructorMockAISuggestion
+  ) {
+    const value = suggestion.suggestedValue;
+
+    if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+    const record = value as SetupRecord;
+    const nombre = typeof record.nombre === "string" ? record.nombre.trim() : "";
+
+    if (!nombre) return;
+
+    const suggestionAlreadyApplied = motores.some(
+      (motor) => motor.nombre.trim().toLowerCase() === nombre.toLowerCase()
+    );
+
+    if (suggestionAlreadyApplied) {
+      setMockAIApplyMessage("Esta sugerencia IA ya estaba aplicada.");
+      return;
+    }
+
+    const etapa = typeof record.etapa === "string" ? record.etapa.trim() : "";
+    const input = typeof record.input === "string" ? record.input.trim() : "";
+    const output = typeof record.output === "string" ? record.output.trim() : "";
+
+    setMotores((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const alreadyExists = current.some(
+        (motor) => motor.nombre.trim().toLowerCase() === nombre.toLowerCase()
+      );
+
+      if (alreadyExists) return current;
+
+      return [
+        ...current,
+        createSuggestedMotor({
+          id: `mock-motor-${slugFromText(nombre)}`,
+          nombre,
+          etapa: etapa || "Seguimiento",
+          tipo: "Auditoría",
+          objetivo:
+            "Detectar oportunidades sin seguimiento y recomendar próximas acciones comerciales.",
+          input,
+          output,
+          requiereValidacionHumana:
+            typeof record.requiereValidacionHumana === "boolean"
+              ? record.requiereValidacionHumana
+              : true,
+          prioridad: asPrioridad(record.prioridad),
+          riesgo: asNivelRiesgo(record.riesgo),
+          activo: true,
+        }),
+      ];
+    });
+    setMockAIApplyMessage("Sugerencia IA aplicada correctamente.");
   }
 
   const empresaContext = asRecord(constructorContext?.empresa);
@@ -1123,6 +1223,62 @@ export default function MotoresIAPage() {
                   <p className="text-[10px] text-slate-500">{stat.label}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-violet-700">
+                  Prototipo: usa endpoint mock, no OpenAI.
+                </p>
+                <button
+                  type="button"
+                  onClick={requestMockAISuggestionForMotores}
+                  disabled={mockAIMotoresLoading}
+                  className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {mockAIMotoresLoading
+                    ? "Consultando IA mock..."
+                    : "Consultar IA mock"}
+                </button>
+              </div>
+
+              {mockAIMotoresError && (
+                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                  {mockAIMotoresError}
+                </p>
+              )}
+
+              {mockAIMotoresSuggestions.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {mockAIMotoresSuggestions.map((suggestion) => (
+                    <MockAISuggestionCard
+                      key={suggestion.id}
+                      suggestion={suggestion}
+                      onApply={applyMockAIMotorSuggestion}
+                      showApply={
+                        Boolean(suggestion.suggestedValue) &&
+                        typeof suggestion.suggestedValue === "object" &&
+                        !Array.isArray(suggestion.suggestedValue)
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+
+              {mockAIApplyMessage ? (
+                <p className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                  {mockAIApplyMessage}
+                </p>
+              ) : null}
+
+              {!mockAIMotoresLoading &&
+                !mockAIMotoresError &&
+                mockAIMotoresRequested &&
+                mockAIMotoresSuggestions.length === 0 && (
+                  <p className="mt-2 rounded-md border border-violet-100 bg-white px-2 py-1 text-[11px] font-medium text-violet-700">
+                    No se recibieron sugerencias IA mock para este caso.
+                  </p>
+                )}
             </div>
 
             <div className="space-y-3">
