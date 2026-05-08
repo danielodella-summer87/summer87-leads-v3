@@ -275,6 +275,22 @@ function mergeTextLines(current: string, additions: string[]) {
   return [...currentLines, ...nextLines].join("\n");
 }
 
+function countNewRiesgosLines(current: string, additions: string[]): number {
+  const currentLines = current
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const seen = new Set(currentLines.map((line) => line.toLowerCase()));
+  let count = 0;
+  for (const addition of additions) {
+    const normalized = addition.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    count += 1;
+  }
+  return count;
+}
+
 // ─── Estilos compartidos ──────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-xs font-semibold text-slate-600 mb-1";
@@ -330,16 +346,27 @@ function PillGroup<T extends string>({
 
 export default function DiagnosticoPage() {
   const [form, setForm] = useState<DiagnosticoForm>(INITIAL_FORM);
+  const [constructorContext, setConstructorContext] = useState<
+    Record<string, unknown>
+  >({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [aiApplyMessage, setAIApplyMessage] = useState<string | null>(null);
   const {
     suggestions: mockAIRiesgosSuggestions,
     loading: mockAIRiesgosLoading,
     error: mockAIRiesgosError,
     request: requestMockAIRiesgos,
     clear: clearMockAIRiesgos,
+  } = useConstructorMockAI();
+  const {
+    suggestions: sandboxAIRiesgosSuggestions,
+    loading: sandboxAIRiesgosLoading,
+    error: sandboxAIRiesgosError,
+    request: requestSandboxAIRiesgos,
+    clear: clearSandboxAIRiesgos,
   } = useConstructorMockAI();
 
   useEffect(() => {
@@ -357,7 +384,7 @@ export default function DiagnosticoPage() {
         });
 
         const json = (await res.json().catch(() => null)) as {
-          data?: { diagnostico?: unknown } | null;
+          data?: Record<string, unknown> | null;
           error?: string | null;
         } | null;
 
@@ -376,6 +403,15 @@ export default function DiagnosticoPage() {
         }
 
         const diagnostico = json?.data?.diagnostico;
+        if (!cancelled) {
+          setConstructorContext({
+            empresa: isRecord(json?.data?.empresa) ? json?.data?.empresa : {},
+            cuestionario: isRecord(json?.data?.cuestionario)
+              ? json?.data?.cuestionario
+              : {},
+            diagnostico: isRecord(diagnostico) ? diagnostico : {},
+          });
+        }
 
         if (
           diagnostico &&
@@ -486,13 +522,36 @@ export default function DiagnosticoPage() {
   }
 
   async function requestMockAISuggestionForRiesgos() {
+    setAIApplyMessage(null);
+    clearSandboxAIRiesgos();
     await requestMockAIRiesgos({
       mode: "field_suggestion",
       step: "diagnostico",
       field: "riesgos",
       value: form.riesgos,
       currentForm: form,
-      constructorContext: {},
+      constructorContext,
+    });
+  }
+
+  async function requestSandboxAISuggestionForRiesgos() {
+    setAIApplyMessage(null);
+    clearMockAIRiesgos();
+    const sandboxMetadata = {
+      source: "constructor",
+      locale: "es-UY",
+      prototypeMode: true,
+      provider: "openai_sandbox",
+    };
+
+    await requestSandboxAIRiesgos({
+      mode: "field_suggestion",
+      step: "diagnostico",
+      field: "riesgos",
+      value: form.riesgos,
+      currentForm: form,
+      constructorContext,
+      metadata: sandboxMetadata,
     });
   }
 
@@ -507,10 +566,17 @@ export default function DiagnosticoPage() {
 
     if (suggestedRiesgos.length === 0) return;
 
-    setForm((prev) => ({
-      ...prev,
-      riesgos: mergeTextLines(prev.riesgos, suggestedRiesgos),
-    }));
+    const newCount = countNewRiesgosLines(form.riesgos, suggestedRiesgos);
+
+    if (newCount > 0) {
+      setForm((prev) => ({
+        ...prev,
+        riesgos: mergeTextLines(prev.riesgos, suggestedRiesgos),
+      }));
+      setAIApplyMessage("Sugerencia IA aplicada correctamente.");
+    } else {
+      setAIApplyMessage("Esta sugerencia IA ya estaba aplicada.");
+    }
   }
 
   function toggleRecomendacion(rec: string) {
@@ -895,29 +961,51 @@ export default function DiagnosticoPage() {
                   onChange={(e) => {
                     setField("riesgos", e.target.value);
                     clearMockAIRiesgos();
+                    clearSandboxAIRiesgos();
                   }}
                 />
                 {renderFieldSuggestions("riesgos")}
                 <div className="mt-3 rounded-xl border border-violet-100 bg-white/70 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-slate-500">
-                      Prototipo: usa endpoint mock, no OpenAI.
+                      Prototipo: usa endpoint mock y sandbox opcional.
                     </p>
-                    <button
-                      type="button"
-                      onClick={requestMockAISuggestionForRiesgos}
-                      disabled={mockAIRiesgosLoading}
-                      className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {mockAIRiesgosLoading
-                        ? "Consultando IA mock..."
-                        : "Consultar IA mock"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={requestMockAISuggestionForRiesgos}
+                        disabled={mockAIRiesgosLoading || sandboxAIRiesgosLoading}
+                        className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {mockAIRiesgosLoading
+                          ? "Consultando IA mock..."
+                          : "Consultar IA mock"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={requestSandboxAISuggestionForRiesgos}
+                        disabled={mockAIRiesgosLoading || sandboxAIRiesgosLoading}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {sandboxAIRiesgosLoading
+                          ? "Consultando IA real sandbox..."
+                          : "Consultar IA real sandbox"}
+                      </button>
+                    </div>
                   </div>
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    Sandbox: usa IA real server-side si OPENAI_API_KEY está
+                    configurada. Revisión humana obligatoria.
+                  </p>
 
                   {mockAIRiesgosError && (
                     <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
                       {mockAIRiesgosError}
+                    </p>
+                  )}
+                  {sandboxAIRiesgosError && (
+                    <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                      {sandboxAIRiesgosError}
                     </p>
                   )}
 
@@ -933,6 +1021,23 @@ export default function DiagnosticoPage() {
                       ))}
                     </div>
                   )}
+                  {sandboxAIRiesgosSuggestions.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {sandboxAIRiesgosSuggestions.map((suggestion) => (
+                        <MockAISuggestionCard
+                          key={suggestion.id}
+                          suggestion={suggestion}
+                          onApply={applyMockAIRiesgosSuggestion}
+                          showApply={Array.isArray(suggestion.suggestedValue)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {aiApplyMessage ? (
+                    <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                      {aiApplyMessage}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

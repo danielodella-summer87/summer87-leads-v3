@@ -42,6 +42,10 @@ const MOCK_METADATA = {
   requestId: "mock-constructor-assist",
 } as const;
 
+const OPENAI_SANDBOX_REQUEST_ID = "openai-sandbox-diagnostico" as const;
+const OPENAI_SANDBOX_MODEL =
+  process.env.OPENAI_SANDBOX_MODEL?.trim() || "gpt-4o-mini";
+
 const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"] as const;
 
 function isLikelyInternalSessionToken(value: string): boolean {
@@ -369,6 +373,198 @@ function mockError(error: string, warning: string) {
   return NextResponse.json(body, { status: 400 });
 }
 
+function safeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  return [];
+}
+
+function buildLimitedDiagnosticoContext(input: {
+  value: unknown;
+  currentForm: Record<string, unknown>;
+  constructorContext: Record<string, unknown>;
+}) {
+  const empresaContext = asRecord(input.constructorContext.empresa);
+  const cuestionarioContext = asRecord(input.constructorContext.cuestionario);
+  const diagnosticoContext = asRecord(input.constructorContext.diagnostico);
+  const currentDiagnostico = asRecord(input.currentForm);
+  const currentRiesgos = toStringList(input.value);
+
+  return {
+    empresa: {
+      rubro: safeString(empresaContext.rubro),
+      giro: safeString(empresaContext.giro),
+      vertical: safeString(empresaContext.vertical),
+      pais: safeString(empresaContext.pais),
+      ciudad: safeString(empresaContext.ciudad),
+    },
+    cuestionario: {
+      procesoActual: safeString(cuestionarioContext.procesoActual),
+      tiposVenta: toStringList(cuestionarioContext.tiposVenta),
+      metricasImportantes: toStringList(cuestionarioContext.metricasImportantes),
+      decisores: toStringList(cuestionarioContext.decisores),
+    },
+    diagnostico: {
+      riesgosActuales:
+        currentRiesgos.length > 0
+          ? currentRiesgos
+          : toStringList(currentDiagnostico.riesgos).length > 0
+            ? toStringList(currentDiagnostico.riesgos)
+            : toStringList(diagnosticoContext.riesgos),
+      oportunidadesActuales: toStringList(
+        currentDiagnostico.oportunidades ?? diagnosticoContext.oportunidades
+      ),
+      puntosCiegosActuales: toStringList(
+        currentDiagnostico.puntosCiegos ?? diagnosticoContext.puntosCiegos
+      ),
+    },
+  };
+}
+
+function parseOpenAISandboxDiagnostico(content: string): {
+  riesgos: string[];
+  reason: string;
+} | null {
+  try {
+    const parsed = JSON.parse(content) as {
+      riesgos?: unknown;
+      reason?: unknown;
+    };
+    const riesgos = toStringList(parsed.riesgos).slice(0, 5);
+    const reason = safeString(parsed.reason);
+    if (riesgos.length === 0) return null;
+    return { riesgos, reason };
+  } catch {
+    return null;
+  }
+}
+
+async function buildOpenAISandboxDiagnosticoSuggestions(input: {
+  value: unknown;
+  currentForm: Record<string, unknown>;
+  constructorContext: Record<string, unknown>;
+}): Promise<{
+  suggestions: ConstructorAISuggestion[];
+  warnings: string[];
+  model: string;
+}> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return {
+      suggestions: [],
+      warnings: [
+        "IA sandbox no disponible. Se mantiene el asistente mock/local.",
+      ],
+      model: OPENAI_SANDBOX_MODEL,
+    };
+  }
+
+  const limitedContext = buildLimitedDiagnosticoContext(input);
+  const systemPrompt =
+    "Sos un consultor senior en procesos comerciales, CRM, growth y automatización. Tu tarea es sugerir riesgos comerciales para configurar un CRM. No inventes datos. Si falta contexto, marcá hipótesis. Devolvé únicamente JSON válido.";
+  const userPrompt = [
+    "Analizá el contexto y devolvé SOLO JSON válido con este formato exacto:",
+    '{ "riesgos": ["riesgo 1", "riesgo 2", "riesgo 3", "riesgo 4", "riesgo 5"], "reason": "explicación breve" }',
+    "Reglas: máximo 5 riesgos, concretos, en español, orientados al rubro y proceso comercial. No uses frases genéricas. No recomendar cambios automáticos.",
+    "",
+    `Contexto limitado: ${JSON.stringify(limitedContext)}`,
+  ].join("\n");
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_SANDBOX_MODEL,
+        temperature: 0.2,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      return {
+        suggestions: [],
+        warnings: [
+          "IA sandbox no disponible. Se mantiene el asistente mock/local.",
+        ],
+        model: OPENAI_SANDBOX_MODEL,
+      };
+    }
+
+    const json = (await response.json().catch(() => null)) as
+      | { choices?: Array<{ message?: { content?: string } }> }
+      | null;
+    const raw = safeString(json?.choices?.[0]?.message?.content);
+    const parsed = parseOpenAISandboxDiagnostico(raw);
+
+    if (!parsed) {
+      return {
+        suggestions: [],
+        warnings: [
+          "IA sandbox devolvió un formato no válido. Se mantiene el asistente mock/local.",
+        ],
+        model: OPENAI_SANDBOX_MODEL,
+      };
+    }
+
+    return {
+      suggestions: [
+        {
+          id: "ai-diagnostico-riesgos-comerciales",
+          type: "warning",
+          severity: "medium",
+          title: "Riesgos comerciales sugeridos por IA",
+          message:
+            "La IA sugiere revisar riesgos específicos del proceso comercial antes de activar el CRM.",
+          reason:
+            parsed.reason ||
+            "Análisis basado en el contexto cargado en Empresa y Cuestionario.",
+          targetStep: "diagnostico",
+          targetField: "riesgos",
+          suggestedValue: parsed.riesgos,
+          requiresHumanApproval: true,
+          confidence: 0.78,
+          source: "ai",
+        },
+      ],
+      warnings: [],
+      model: OPENAI_SANDBOX_MODEL,
+    };
+  } catch {
+    return {
+      suggestions: [],
+      warnings: ["IA sandbox no disponible. Se mantiene el asistente mock/local."],
+      model: OPENAI_SANDBOX_MODEL,
+    };
+  }
+}
+
 function unauthorizedError() {
   const body: ConstructorAssistResponse = {
     ok: false,
@@ -433,13 +629,48 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const metadata = isRecord(body.metadata) ? body.metadata : {};
+  const provider =
+    typeof metadata.provider === "string" ? metadata.provider : "mock";
+  const currentForm = asRecord(body.currentForm);
+  const constructorContext = asRecord(body.constructorContext);
+
+  if (
+    provider === "openai_sandbox" &&
+    body.step === "diagnostico" &&
+    body.field === "riesgos"
+  ) {
+    const sandboxResult = await buildOpenAISandboxDiagnosticoSuggestions({
+      value: body.value,
+      currentForm,
+      constructorContext,
+    });
+
+    const sandboxResponse: ConstructorAssistResponse = {
+      ok: true,
+      suggestions: sandboxResult.suggestions,
+      warnings: sandboxResult.warnings,
+      metadata: {
+        mock: false,
+        model: sandboxResult.model,
+        prototypeMode: true,
+        requestId: OPENAI_SANDBOX_REQUEST_ID,
+      },
+    };
+
+    return NextResponse.json(sandboxResponse, {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   const suggestions = buildMockSuggestions({
     mode: body.mode,
     step: body.step,
     field: body.field,
     value: body.value,
-    currentForm: asRecord(body.currentForm),
-    constructorContext: asRecord(body.constructorContext),
+    currentForm,
+    constructorContext,
   });
 
   const response: ConstructorAssistResponse = {
