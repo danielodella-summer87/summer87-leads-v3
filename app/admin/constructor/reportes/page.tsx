@@ -13,8 +13,11 @@ import {
   Zap,
   ZapOff,
 } from "lucide-react";
+import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
+import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -304,6 +307,35 @@ function appendTextIfMissing(current: string, addition: string) {
   return `${current}\n\n${addition}`;
 }
 
+function slugFromText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function asMockFrecuencia(value: unknown): Frecuencia {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  return FRECUENCIA_VALUES.has(normalized as Frecuencia)
+    ? (normalized as Frecuencia)
+    : "semanal";
+}
+
+function asMockTipoReporte(value: unknown): TipoReporte {
+  const normalized = String(value ?? "").trim().toLowerCase();
+
+  if (normalized === "comercial") return "gerencial";
+  if (normalized === "pipeline") return "operativo";
+
+  return TIPO_REPORTE_VALUES.has(normalized as TipoReporte)
+    ? (normalized as TipoReporte)
+    : "operativo";
+}
+
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
 function SectionHeader({ letter, title }: { letter: string; title: string }) {
@@ -365,6 +397,15 @@ export default function ReportesPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
+  const [mockAIReportesRequested, setMockAIReportesRequested] = useState(false);
+  const [mockAIApplyMessage, setMockAIApplyMessage] = useState<string | null>(null);
+  const {
+    suggestions: mockAIReportesSuggestions,
+    loading: mockAIReportesLoading,
+    error: mockAIReportesError,
+    request: requestMockAIReportes,
+    clear: clearMockAIReportes,
+  } = useConstructorMockAI();
 
   useEffect(() => {
     let cancelled = false;
@@ -491,6 +532,9 @@ export default function ReportesPage() {
     key: K,
     value: ReporteSugerido[K]
   ) {
+    clearMockAIReportes();
+    setMockAIReportesRequested(false);
+    setMockAIApplyMessage(null);
     setReportes((prev) =>
       prev.map((r) => (r.id === id ? { ...r, [key]: value } : r))
     );
@@ -504,6 +548,9 @@ export default function ReportesPage() {
   }
 
   function addSuggestedReports(suggested: ReporteSugerido[]) {
+    clearMockAIReportes();
+    setMockAIReportesRequested(false);
+    setMockAIApplyMessage(null);
     setReportes((prev) => {
       const current = Array.isArray(prev) ? prev : [];
       const existingNames = new Set(
@@ -515,6 +562,94 @@ export default function ReportesPage() {
 
       return [...current, ...next];
     });
+  }
+
+  async function requestMockAISuggestionForReportes() {
+    setMockAIReportesRequested(true);
+    setMockAIApplyMessage(null);
+
+    await requestMockAIReportes({
+      mode: "field_suggestion",
+      step: "reportes",
+      field: "reportes",
+      value: reportes,
+      currentForm: {
+        reportes,
+        reglas,
+      },
+      constructorContext: constructorContext ?? {},
+    });
+  }
+
+  function applyMockAIReportesSuggestion(
+    suggestion: ConstructorMockAISuggestion
+  ) {
+    const value = suggestion.suggestedValue;
+
+    if (!Array.isArray(value)) return;
+
+    const suggestedReports = value
+      .filter((item): item is SetupRecord => isRecord(item))
+      .map((item): ReporteSugerido | null => {
+        const nombre = typeof item.nombre === "string" ? item.nombre.trim() : "";
+
+        if (!nombre) return null;
+
+        const metricas = Array.isArray(item.metricas)
+          ? item.metricas.filter((metric): metric is string => typeof metric === "string")
+          : [];
+
+        return createSuggestedReport({
+          id: `mock-reporte-${slugFromText(nombre)}`,
+          nombre,
+          tipo: asMockTipoReporte(item.tipo),
+          audiencia:
+            typeof item.audiencia === "string" && item.audiencia.trim()
+              ? item.audiencia.trim()
+              : "Dirección",
+          frecuencia: asMockFrecuencia(item.frecuencia),
+          metricas,
+          filtros: "Período, responsable, etapa",
+        });
+      })
+      .filter((report): report is ReporteSugerido => report !== null);
+
+    if (suggestedReports.length === 0) return;
+
+    const existingNames = new Set(
+      reportes.map((report) => report.nombre.trim().toLowerCase())
+    );
+    const nextReports = suggestedReports.filter((report) => {
+      const name = report.nombre.trim().toLowerCase();
+
+      if (!name || existingNames.has(name)) return false;
+
+      existingNames.add(name);
+      return true;
+    });
+
+    if (nextReports.length === 0) {
+      setMockAIApplyMessage("Esta sugerencia IA ya estaba aplicada.");
+      return;
+    }
+
+    setReportes((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      const currentNames = new Set(
+        current.map((report) => report.nombre.trim().toLowerCase())
+      );
+      const additions = nextReports.filter((report) => {
+        const name = report.nombre.trim().toLowerCase();
+
+        if (!name || currentNames.has(name)) return false;
+
+        currentNames.add(name);
+        return true;
+      });
+
+      return [...current, ...additions];
+    });
+    setMockAIApplyMessage("Sugerencia IA aplicada correctamente.");
   }
 
   const empresaContext = asRecord(constructorContext?.empresa);
@@ -1254,6 +1389,58 @@ export default function ReportesPage() {
                   <p className="text-[10px] text-slate-500">{stat.label}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-violet-700">
+                  Prototipo: usa endpoint mock, no OpenAI.
+                </p>
+                <button
+                  type="button"
+                  onClick={requestMockAISuggestionForReportes}
+                  disabled={mockAIReportesLoading}
+                  className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {mockAIReportesLoading
+                    ? "Consultando IA mock..."
+                    : "Consultar IA mock"}
+                </button>
+              </div>
+
+              {mockAIReportesError && (
+                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                  {mockAIReportesError}
+                </p>
+              )}
+
+              {mockAIReportesSuggestions.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {mockAIReportesSuggestions.map((suggestion) => (
+                    <MockAISuggestionCard
+                      key={suggestion.id}
+                      suggestion={suggestion}
+                      onApply={applyMockAIReportesSuggestion}
+                      showApply={Array.isArray(suggestion.suggestedValue)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {mockAIApplyMessage ? (
+                <p className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                  {mockAIApplyMessage}
+                </p>
+              ) : null}
+
+              {!mockAIReportesLoading &&
+                !mockAIReportesError &&
+                mockAIReportesRequested &&
+                mockAIReportesSuggestions.length === 0 && (
+                  <p className="mt-2 rounded-md border border-violet-100 bg-white px-2 py-1 text-[11px] font-medium text-violet-700">
+                    No se recibieron sugerencias IA mock para este caso.
+                  </p>
+                )}
             </div>
 
             <div className="space-y-3">

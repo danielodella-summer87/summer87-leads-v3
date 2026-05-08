@@ -244,35 +244,49 @@ function buildMockSuggestions(input: {
 
   if (
     step === "reportes" &&
-    (mode === "step_review" || mode === "field_suggestion")
+    (mode === "step_review" || mode === "field_suggestion") &&
+    (field === "reportes" || normalizedField === "reportes")
   ) {
     suggestions.push({
-      id: "mock-reports-pipeline-executive",
+      id: "mock-reportes-base-comerciales",
       type: "report_advice",
       severity: "low",
-      title: "Podés revisar reportes ejecutivos y de pipeline",
+      title: "Agregar reportes comerciales base",
       message:
-        "Se sugieren Reporte ejecutivo comercial y Reporte de pipeline como base para dirección y supervisión comercial.",
+        "El mock sugiere crear reportes mínimos para dirección y seguimiento del pipeline comercial.",
       reason:
-        "Reportes suele requerir una vista ejecutiva y otra operativa para seguimiento del pipeline.",
+        "Todo CRM comercial debería permitir revisar salud del pipeline, actividad comercial, oportunidades estancadas y evolución de resultados.",
       targetStep: "reportes",
-      targetField: field ?? "reportes",
-      suggestedPatch: {
-        reportesSugeridos: [
-          {
-            nombre: "Reporte ejecutivo comercial",
-            audiencia: "Dirección",
-            frecuencia: "semanal",
-          },
-          {
-            nombre: "Reporte de pipeline",
-            audiencia: "Supervisor comercial",
-            frecuencia: "semanal",
-          },
-        ],
-      },
+      targetField: "reportes",
+      suggestedValue: [
+        {
+          nombre: "Reporte ejecutivo comercial",
+          audiencia: "Dirección / gerencia",
+          frecuencia: "Semanal",
+          metricas: [
+            "Leads nuevos",
+            "Oportunidades activas",
+            "Monto cotizado",
+            "Monto cerrado",
+            "Tasa de conversión",
+          ],
+          tipo: "comercial",
+        },
+        {
+          nombre: "Reporte de pipeline",
+          audiencia: "Equipo comercial",
+          frecuencia: "Semanal",
+          metricas: [
+            "Oportunidades por etapa",
+            "Oportunidades sin próxima acción",
+            "Oportunidades frías",
+            "Avance por responsable",
+          ],
+          tipo: "pipeline",
+        },
+      ],
       requiresHumanApproval: true,
-      confidence: 0.76,
+      confidence: 0.86,
       source: "mock",
     });
   }
