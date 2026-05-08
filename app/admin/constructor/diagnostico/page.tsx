@@ -16,8 +16,11 @@ import {
   Square,
   Code2,
 } from "lucide-react";
+import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
+import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -256,6 +259,22 @@ function appendTextIfMissing(current: string, addition: string) {
   return `${current}\n\n${addition}`;
 }
 
+function mergeTextLines(current: string, additions: string[]) {
+  const currentLines = current
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const seen = new Set(currentLines.map((line) => line.toLowerCase()));
+  const nextLines = additions.filter((addition) => {
+    const normalized = addition.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+
+  return [...currentLines, ...nextLines].join("\n");
+}
+
 // ─── Estilos compartidos ──────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-xs font-semibold text-slate-600 mb-1";
@@ -315,6 +334,13 @@ export default function DiagnosticoPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const {
+    suggestions: mockAIRiesgosSuggestions,
+    loading: mockAIRiesgosLoading,
+    error: mockAIRiesgosError,
+    request: requestMockAIRiesgos,
+    clear: clearMockAIRiesgos,
+  } = useConstructorMockAI();
 
   useEffect(() => {
     let cancelled = false;
@@ -457,6 +483,34 @@ export default function DiagnosticoPage() {
     patch: Partial<BloqueMatriz>
   ) {
     setForm((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  }
+
+  async function requestMockAISuggestionForRiesgos() {
+    await requestMockAIRiesgos({
+      mode: "field_suggestion",
+      step: "diagnostico",
+      field: "riesgos",
+      value: form.riesgos,
+      currentForm: form,
+      constructorContext: {},
+    });
+  }
+
+  function applyMockAIRiesgosSuggestion(
+    suggestion: ConstructorMockAISuggestion
+  ) {
+    if (!Array.isArray(suggestion.suggestedValue)) return;
+
+    const suggestedRiesgos = suggestion.suggestedValue.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0
+    );
+
+    if (suggestedRiesgos.length === 0) return;
+
+    setForm((prev) => ({
+      ...prev,
+      riesgos: mergeTextLines(prev.riesgos, suggestedRiesgos),
+    }));
   }
 
   function toggleRecomendacion(rec: string) {
@@ -838,9 +892,48 @@ export default function DiagnosticoPage() {
                   rows={4}
                   placeholder="¿Qué podría fallar o perderse si no se controla bien?"
                   value={form.riesgos}
-                  onChange={(e) => setField("riesgos", e.target.value)}
+                  onChange={(e) => {
+                    setField("riesgos", e.target.value);
+                    clearMockAIRiesgos();
+                  }}
                 />
                 {renderFieldSuggestions("riesgos")}
+                <div className="mt-3 rounded-xl border border-violet-100 bg-white/70 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500">
+                      Prototipo: usa endpoint mock, no OpenAI.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={requestMockAISuggestionForRiesgos}
+                      disabled={mockAIRiesgosLoading}
+                      className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {mockAIRiesgosLoading
+                        ? "Consultando IA mock..."
+                        : "Consultar IA mock"}
+                    </button>
+                  </div>
+
+                  {mockAIRiesgosError && (
+                    <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                      {mockAIRiesgosError}
+                    </p>
+                  )}
+
+                  {mockAIRiesgosSuggestions.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {mockAIRiesgosSuggestions.map((suggestion) => (
+                        <MockAISuggestionCard
+                          key={suggestion.id}
+                          suggestion={suggestion}
+                          onApply={applyMockAIRiesgosSuggestion}
+                          showApply={Array.isArray(suggestion.suggestedValue)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

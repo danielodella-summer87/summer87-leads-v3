@@ -197,6 +197,36 @@ function buildMockSuggestions(input: {
   }
 
   if (
+    step === "diagnostico" &&
+    (normalizedField === "riesgos" ||
+      mode === "step_review" ||
+      mode === "field_suggestion")
+  ) {
+    suggestions.push({
+      id: "mock-diagnostico-riesgos-comerciales",
+      type: "warning",
+      severity: "medium",
+      title: "Riesgos comerciales sugeridos",
+      message:
+        "El mock sugiere revisar riesgos frecuentes del proceso comercial antes de activar el CRM.",
+      reason:
+        "En diagnósticos comerciales suelen aparecer riesgos vinculados a seguimiento, trazabilidad, dependencia humana y criterios de calificación.",
+      targetStep: "diagnostico",
+      targetField: "riesgos",
+      suggestedValue: [
+        "Falta de seguimiento sistemático",
+        "Baja trazabilidad del pipeline",
+        "Dependencia de personas clave",
+        "Pérdida de información comercial",
+        "Criterios de calificación poco claros",
+      ],
+      requiresHumanApproval: true,
+      confidence: 0.84,
+      source: "mock",
+    });
+  }
+
+  if (
     step === "reportes" &&
     (mode === "step_review" || mode === "field_suggestion")
   ) {
