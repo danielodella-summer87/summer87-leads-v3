@@ -58,6 +58,29 @@ type LocalSuggestion = {
   apply?: () => void;
 };
 
+type MockAISuggestion = {
+  id: string;
+  type: string;
+  severity: string;
+  title: string;
+  message: string;
+  reason: string;
+  targetStep: string;
+  targetField?: string;
+  suggestedValue?: unknown;
+  suggestedPatch?: Record<string, unknown>;
+  requiresHumanApproval: boolean;
+  confidence: number;
+  source: "mock";
+};
+
+type MockAIResponse = {
+  ok: boolean;
+  suggestions?: MockAISuggestion[];
+  warnings?: string[];
+  error?: string;
+};
+
 const INITIAL_FORM: CuestionarioForm = {
   queVendeDetalle: "",
   tiposVenta: [],
@@ -363,6 +386,11 @@ export default function CuestionarioPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [mockAIProcesoSuggestions, setMockAIProcesoSuggestions] = useState<
+    MockAISuggestion[]
+  >([]);
+  const [mockAIProcesoLoading, setMockAIProcesoLoading] = useState(false);
+  const [mockAIProcesoError, setMockAIProcesoError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -451,6 +479,56 @@ export default function CuestionarioPage() {
     value: CuestionarioForm[K]
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function requestMockAISuggestionForProcesoActual() {
+    setMockAIProcesoLoading(true);
+    setMockAIProcesoError(null);
+
+    try {
+      const res = await fetch("/api/admin/constructor/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          mode: "field_suggestion",
+          step: "cuestionario",
+          field: "procesoActual",
+          value: form.procesoActual,
+          currentForm: form,
+          constructorContext: {},
+          metadata: {
+            source: "constructor",
+            locale: "es-UY",
+            prototypeMode: true,
+          },
+        }),
+      });
+
+      const json = (await res.json().catch(() => null)) as MockAIResponse | null;
+
+      if (res.redirected || !res.ok || !json?.ok) {
+        setMockAIProcesoError(
+          json?.error ?? "No se pudo obtener sugerencia IA mock."
+        );
+        return;
+      }
+
+      setMockAIProcesoSuggestions(json.suggestions ?? []);
+    } catch {
+      setMockAIProcesoError("Error de red al consultar sugerencia IA mock.");
+    } finally {
+      setMockAIProcesoLoading(false);
+    }
+  }
+
+  function applyMockAIProcesoSuggestion(suggestion: MockAISuggestion) {
+    if (typeof suggestion.suggestedValue !== "string") return;
+
+    setForm((prev) => ({
+      ...prev,
+      procesoActual: suggestion.suggestedValue as string,
+    }));
   }
 
   function agregarSegmento() {
@@ -898,12 +976,79 @@ export default function CuestionarioPage() {
                   </label>
                   <textarea
                     value={form.procesoActual}
-                    onChange={(e) => setField("procesoActual", e.target.value)}
+                    onChange={(e) => {
+                      setField("procesoActual", e.target.value);
+                      setMockAIProcesoSuggestions([]);
+                      setMockAIProcesoError(null);
+                    }}
                     placeholder="Describí el proceso paso a paso tal como lo hace hoy el equipo comercial."
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
                   {renderFieldSuggestions("procesoActual")}
+                  <div className="mt-2 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={requestMockAISuggestionForProcesoActual}
+                        disabled={
+                          mockAIProcesoLoading || !form.procesoActual.trim()
+                        }
+                        className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {mockAIProcesoLoading
+                          ? "Consultando IA mock..."
+                          : "Consultar IA mock"}
+                      </button>
+                      <span className="text-[11px] text-violet-700">
+                        Prototipo: usa endpoint mock, no OpenAI.
+                      </span>
+                    </div>
+
+                    {mockAIProcesoError && (
+                      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                        {mockAIProcesoError}
+                      </p>
+                    )}
+
+                    {mockAIProcesoSuggestions.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {mockAIProcesoSuggestions.map((suggestion) => (
+                          <div
+                            key={suggestion.id}
+                            className="rounded-lg border border-violet-100 bg-white px-3 py-2"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                                IA mock
+                              </span>
+                              <p className="text-[11px] font-semibold text-violet-900">
+                                {suggestion.title}
+                              </p>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-violet-800">
+                              {suggestion.message}
+                            </p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-violet-700">
+                              {suggestion.reason}
+                            </p>
+                            <p className="mt-1 text-[10px] font-medium text-violet-500">
+                              Confianza mock: {Math.round(suggestion.confidence * 100)}%
+                            </p>
+                            {typeof suggestion.suggestedValue === "string" && (
+                              <button
+                                type="button"
+                                onClick={() => applyMockAIProcesoSuggestion(suggestion)}
+                                className="mt-2 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                              >
+                                Aplicar sugerencia IA
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
