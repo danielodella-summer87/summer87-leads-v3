@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import type {
   ConstructorAISuggestion,
   ConstructorAssistMode,
@@ -22,6 +23,7 @@ export const dynamic = "force-dynamic";
 // No guarda datos, no aplica cambios y no activa CRM.
 // Debe reemplazarse por lógica real con permisos antes de producción.
 // TODO: exigir permiso constructor.assist antes de conectar IA real.
+// TODO: reemplazar este guard por permiso explícito constructor.assist antes de OpenAI real.
 
 type ConstructorAssistRequestPayload = {
   mode?: unknown;
@@ -39,6 +41,45 @@ const MOCK_METADATA = {
   prototypeMode: true,
   requestId: "mock-constructor-assist",
 } as const;
+
+const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"] as const;
+
+function isLikelyInternalSessionToken(value: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(value.trim());
+}
+
+function isValidPrototypeCrmSession(value: string): boolean {
+  try {
+    const json = Buffer.from(value, "base64url").toString("utf8");
+    const parsed = JSON.parse(json);
+
+    return (
+      Boolean(parsed?.id) &&
+      typeof parsed.role === "string" &&
+      CRM_VALID_ROLES.includes(
+        parsed.role as (typeof CRM_VALID_ROLES)[number]
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Seguridad mínima:
+// El middleware protege rutas admin, pero este endpoint también valida sesión
+// antes de cualquier integración futura con IA real.
+async function hasConstructorAssistAccess(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const crmSession = cookieStore.get("crm_session")?.value;
+  const copilotSession = cookieStore.get("copilot_session")?.value;
+
+  return Boolean(
+    (crmSession &&
+      (isLikelyInternalSessionToken(crmSession) ||
+        isValidPrototypeCrmSession(crmSession))) ||
+      copilotSession?.trim()
+  );
+}
 
 function buildMockSuggestions(input: {
   mode: ConstructorAssistMode;
@@ -328,7 +369,24 @@ function mockError(error: string, warning: string) {
   return NextResponse.json(body, { status: 400 });
 }
 
+function unauthorizedError() {
+  const body: ConstructorAssistResponse = {
+    ok: false,
+    error: "No autorizado",
+    suggestions: [],
+    warnings: [
+      "Se requiere sesión válida para usar el asistente del Constructor.",
+    ],
+    metadata: MOCK_METADATA,
+  };
+
+  return NextResponse.json(body, { status: 401 });
+}
+
 export async function POST(req: NextRequest) {
+  const hasAccess = await hasConstructorAssistAccess();
+  if (!hasAccess) return unauthorizedError();
+
   const body = (await req.json().catch(() => null)) as
     | ConstructorAssistRequestPayload
     | null;
