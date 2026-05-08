@@ -9,6 +9,21 @@ type MockAISuggestionCardProps = {
   showApply?: boolean;
 };
 
+function getSourceBadgeLabel(
+  source: ConstructorMockAISuggestion["source"] | undefined
+): string {
+  switch (source) {
+    case "mock":
+      return "IA MOCK";
+    case "ai":
+      return "IA SANDBOX";
+    case "local":
+      return "LOCAL";
+    default:
+      return "IA";
+  }
+}
+
 export function MockAISuggestionCard({
   suggestion,
   onApply,
@@ -19,12 +34,13 @@ export function MockAISuggestionCard({
     typeof suggestion.confidence === "number"
       ? Math.round(suggestion.confidence * 100)
       : null;
+  const sourceBadgeLabel = getSourceBadgeLabel(suggestion.source);
 
   return (
     <div className="rounded-lg border border-violet-100 bg-white px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
-          IA mock
+          {sourceBadgeLabel}
         </span>
         <p className="text-[11px] font-semibold text-violet-900">
           {suggestion.title}
