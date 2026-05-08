@@ -25,6 +25,11 @@ const MOCK_METADATA = {
   requestId: "mock-constructor-assist-events",
 } as const;
 
+// BYPASS TEMPORAL DE PROTOTIPO:
+// Permitimos registrar eventos mock sin sesión mientras el Constructor se valida internamente.
+// Revertir antes de exponer a terceros.
+const CONSTRUCTOR_ASSIST_EVENTS_AUTH_BYPASS = true;
+
 const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"] as const;
 
 function isLikelyInternalSessionToken(value: string): boolean {
@@ -191,8 +196,12 @@ function validateAuditEvent(
 }
 
 export async function POST(req: NextRequest) {
-  const hasAccess = await hasConstructorAssistEventsAccess();
-  if (!hasAccess) return unauthorizedError();
+  // BYPASS TEMPORAL DE PROTOTIPO:
+  // Mantenemos el guard pero deshabilitado por bypass mientras dura la fase de prototipo interno.
+  if (!CONSTRUCTOR_ASSIST_EVENTS_AUTH_BYPASS) {
+    const hasAccess = await hasConstructorAssistEventsAccess();
+    if (!hasAccess) return unauthorizedError();
+  }
 
   const body = (await req.json().catch(() => null)) as
     | ConstructorAISuggestionAuditEventPayload

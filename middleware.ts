@@ -42,6 +42,20 @@ function addDebugHeaders(res: NextResponse, debug: DebugCookies): NextResponse {
   return res;
 }
 
+// BYPASS TEMPORAL DE PROTOTIPO:
+// El Constructor CRM queda accesible sin login para pruebas internas.
+// Revertir antes de exponer a terceros.
+const CONSTRUCTOR_AUTH_BYPASS = true;
+
+function isConstructorRoute(pathname: string) {
+  return (
+    pathname === "/admin/constructor" ||
+    pathname.startsWith("/admin/constructor/") ||
+    pathname === "/api/admin/constructor" ||
+    pathname.startsWith("/api/admin/constructor/")
+  );
+}
+
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
@@ -50,6 +64,12 @@ export async function middleware(req: NextRequest) {
   const legacy = req.cookies.get("cc_session")?.value;
   const crm = req.cookies.get("crm_session")?.value;
   const debug: DebugCookies = { expectedName, expected, legacy, crm, path: pathname };
+
+  // BYPASS TEMPORAL DE PROTOTIPO:
+  // Permitimos abrir el Constructor sin sesión mientras se valida internamente.
+  if (CONSTRUCTOR_AUTH_BYPASS && isConstructorRoute(pathname)) {
+    return addDebugHeaders(NextResponse.next(), debug);
+  }
 
   // Validación crm_session (prototipo): si hay cookie válida, dejar pasar
   const crmCookie = req.cookies.get("crm_session")?.value ?? null;

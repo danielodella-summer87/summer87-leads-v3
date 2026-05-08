@@ -46,6 +46,11 @@ const OPENAI_SANDBOX_REQUEST_ID = "openai-sandbox-diagnostico" as const;
 const OPENAI_SANDBOX_MODEL =
   process.env.OPENAI_SANDBOX_MODEL?.trim() || "gpt-4o-mini";
 
+// BYPASS TEMPORAL DE PROTOTIPO:
+// Permitimos usar assist sin sesión mientras el Constructor se valida internamente.
+// Revertir antes de exponer a terceros.
+const CONSTRUCTOR_ASSIST_AUTH_BYPASS = true;
+
 const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"] as const;
 
 function isLikelyInternalSessionToken(value: string): boolean {
@@ -580,8 +585,12 @@ function unauthorizedError() {
 }
 
 export async function POST(req: NextRequest) {
-  const hasAccess = await hasConstructorAssistAccess();
-  if (!hasAccess) return unauthorizedError();
+  // BYPASS TEMPORAL DE PROTOTIPO:
+  // Mantenemos el guard pero deshabilitado por bypass mientras dura la fase de prototipo interno.
+  if (!CONSTRUCTOR_ASSIST_AUTH_BYPASS) {
+    const hasAccess = await hasConstructorAssistAccess();
+    if (!hasAccess) return unauthorizedError();
+  }
 
   const body = (await req.json().catch(() => null)) as
     | ConstructorAssistRequestPayload
