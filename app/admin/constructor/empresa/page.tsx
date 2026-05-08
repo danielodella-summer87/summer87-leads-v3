@@ -13,8 +13,8 @@ import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import {
   type ConstructorMockAISuggestion,
   pickAllowedPatch,
-  requestConstructorMockAI,
 } from "@/lib/constructor-ai/client";
+import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -137,11 +137,13 @@ export default function EmpresaPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [mockAISuggestions, setMockAISuggestions] = useState<
-    ConstructorMockAISuggestion[]
-  >([]);
-  const [mockAILoading, setMockAILoading] = useState(false);
-  const [mockAIError, setMockAIError] = useState<string | null>(null);
+  const {
+    suggestions: mockAISuggestions,
+    loading: mockAILoading,
+    error: mockAIError,
+    request: requestMockAI,
+    clear: clearMockAI,
+  } = useConstructorMockAI();
 
   useEffect(() => {
     let cancelled = false;
@@ -235,30 +237,14 @@ export default function EmpresaPage() {
   }
 
   async function requestMockAISuggestionForPais() {
-    setMockAILoading(true);
-    setMockAIError(null);
-
-    try {
-      const json = await requestConstructorMockAI({
-        mode: "field_suggestion",
-        step: "empresa",
-        field: "pais",
-        value: form.pais,
-        currentForm: form,
-        constructorContext: {},
-      });
-
-      if (!json.ok) {
-        setMockAIError(json?.error ?? "No se pudo obtener sugerencia IA mock.");
-        return;
-      }
-
-      setMockAISuggestions(json.suggestions ?? []);
-    } catch {
-      setMockAIError("Error de red al consultar sugerencia IA mock.");
-    } finally {
-      setMockAILoading(false);
-    }
+    await requestMockAI({
+      mode: "field_suggestion",
+      step: "empresa",
+      field: "pais",
+      value: form.pais,
+      currentForm: form,
+      constructorContext: {},
+    });
   }
 
   function applyMockAISuggestion(suggestion: ConstructorMockAISuggestion) {
@@ -385,8 +371,7 @@ export default function EmpresaPage() {
                     value={form.pais}
                     onChange={(e) => {
                       setField("pais", e.target.value);
-                      setMockAISuggestions([]);
-                      setMockAIError(null);
+                      clearMockAI();
                     }}
                     placeholder="Ej: Ecuador"
                     className={INPUT_CLASS}

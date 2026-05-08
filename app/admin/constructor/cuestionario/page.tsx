@@ -6,10 +6,8 @@ import { ArrowLeft, ChevronRight } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
-import {
-  type ConstructorMockAISuggestion,
-  requestConstructorMockAI,
-} from "@/lib/constructor-ai/client";
+import { type ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
+import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -368,11 +366,13 @@ export default function CuestionarioPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [mockAIProcesoSuggestions, setMockAIProcesoSuggestions] = useState<
-    ConstructorMockAISuggestion[]
-  >([]);
-  const [mockAIProcesoLoading, setMockAIProcesoLoading] = useState(false);
-  const [mockAIProcesoError, setMockAIProcesoError] = useState<string | null>(null);
+  const {
+    suggestions: mockAIProcesoSuggestions,
+    loading: mockAIProcesoLoading,
+    error: mockAIProcesoError,
+    request: requestMockAIProceso,
+    clear: clearMockAIProceso,
+  } = useConstructorMockAI();
 
   useEffect(() => {
     let cancelled = false;
@@ -464,32 +464,14 @@ export default function CuestionarioPage() {
   }
 
   async function requestMockAISuggestionForProcesoActual() {
-    setMockAIProcesoLoading(true);
-    setMockAIProcesoError(null);
-
-    try {
-      const json = await requestConstructorMockAI({
-        mode: "field_suggestion",
-        step: "cuestionario",
-        field: "procesoActual",
-        value: form.procesoActual,
-        currentForm: form,
-        constructorContext: {},
-      });
-
-      if (!json.ok) {
-        setMockAIProcesoError(
-          json?.error ?? "No se pudo obtener sugerencia IA mock."
-        );
-        return;
-      }
-
-      setMockAIProcesoSuggestions(json.suggestions ?? []);
-    } catch {
-      setMockAIProcesoError("Error de red al consultar sugerencia IA mock.");
-    } finally {
-      setMockAIProcesoLoading(false);
-    }
+    await requestMockAIProceso({
+      mode: "field_suggestion",
+      step: "cuestionario",
+      field: "procesoActual",
+      value: form.procesoActual,
+      currentForm: form,
+      constructorContext: {},
+    });
   }
 
   function applyMockAIProcesoSuggestion(suggestion: ConstructorMockAISuggestion) {
@@ -948,8 +930,7 @@ export default function CuestionarioPage() {
                     value={form.procesoActual}
                     onChange={(e) => {
                       setField("procesoActual", e.target.value);
-                      setMockAIProcesoSuggestions([]);
-                      setMockAIProcesoError(null);
+                      clearMockAIProceso();
                     }}
                     placeholder="Describí el proceso paso a paso tal como lo hace hoy el equipo comercial."
                     rows={4}
