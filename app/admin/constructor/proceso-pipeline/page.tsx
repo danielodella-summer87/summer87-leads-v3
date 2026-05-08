@@ -16,8 +16,11 @@ import {
   ArrowRight,
   ShieldAlert,
 } from "lucide-react";
+import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
+import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -554,6 +557,16 @@ function appendTextIfMissing(current: string, addition: string) {
   return `${current}\n\n${addition}`;
 }
 
+function slugFromText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-[11px] font-semibold text-slate-500 mb-1 uppercase tracking-wide";
@@ -594,6 +607,14 @@ export default function ProcesoPipelinePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
+  const [mockAIEtapasRequested, setMockAIEtapasRequested] = useState(false);
+  const {
+    suggestions: mockAIEtapasSuggestions,
+    loading: mockAIEtapasLoading,
+    error: mockAIEtapasError,
+    request: requestMockAIEtapas,
+    clear: clearMockAIEtapas,
+  } = useConstructorMockAI();
 
   useEffect(() => {
     let cancelled = false;
@@ -728,9 +749,65 @@ export default function ProcesoPipelinePage() {
     key: K,
     value: EtapaProceso[K]
   ) {
+    clearMockAIEtapas();
+    setMockAIEtapasRequested(false);
     setEtapas((prev) =>
       prev.map((e) => (e.id === id ? { ...e, [key]: value } : e))
     );
+  }
+
+  async function requestMockAISuggestionForEtapas() {
+    setMockAIEtapasRequested(true);
+
+    await requestMockAIEtapas({
+      mode: "field_suggestion",
+      step: "proceso_pipeline",
+      field: "etapas",
+      value: etapas,
+      currentForm: {
+        etapas,
+        columnas,
+        reglas,
+      },
+      constructorContext: constructorContext ?? {},
+    });
+  }
+
+  function applyMockAIEtapaSuggestion(
+    suggestion: ConstructorMockAISuggestion
+  ) {
+    const value = suggestion.suggestedValue;
+
+    if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+    const record = value as SetupRecord;
+    const nombre = typeof record.nombre === "string" ? record.nombre.trim() : "";
+    const descripcion =
+      typeof record.descripcion === "string" ? record.descripcion.trim() : "";
+
+    if (!nombre) return;
+
+    setEtapas((prev) => {
+      const alreadyExists = prev.some(
+        (etapa) => etapa.nombre.trim().toLowerCase() === nombre.toLowerCase()
+      );
+
+      if (alreadyExists) return prev;
+
+      return [
+        ...prev,
+        {
+          id: `mock-etapa-${slugFromText(nombre)}`,
+          nombre,
+          objetivo: descripcion,
+          responsable: "Vendedor / Técnico",
+          tareas: "Coordinar reunión, relevar información mínima y registrar próximos pasos",
+          condicionAvance:
+            "Necesidad, decisores e información mínima validados antes de preparar propuesta",
+          requiereValidacionHumana: true,
+        },
+      ];
+    });
   }
 
   function setColumna<K extends keyof ColumnaKanban>(
@@ -1251,6 +1328,55 @@ export default function ProcesoPipelinePage() {
               Estas son las etapas internas del proceso. Editá cada una según la realidad de la empresa.
               Los cambios son locales — no se guardan todavía.
             </p>
+            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-violet-700">
+                  Prototipo: usa endpoint mock, no OpenAI.
+                </p>
+                <button
+                  type="button"
+                  onClick={requestMockAISuggestionForEtapas}
+                  disabled={mockAIEtapasLoading}
+                  className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {mockAIEtapasLoading
+                    ? "Consultando IA mock..."
+                    : "Consultar IA mock"}
+                </button>
+              </div>
+
+              {mockAIEtapasError && (
+                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                  {mockAIEtapasError}
+                </p>
+              )}
+
+              {mockAIEtapasSuggestions.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {mockAIEtapasSuggestions.map((suggestion) => (
+                    <MockAISuggestionCard
+                      key={suggestion.id}
+                      suggestion={suggestion}
+                      onApply={applyMockAIEtapaSuggestion}
+                      showApply={
+                        Boolean(suggestion.suggestedValue) &&
+                        typeof suggestion.suggestedValue === "object" &&
+                        !Array.isArray(suggestion.suggestedValue)
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+
+              {!mockAIEtapasLoading &&
+                !mockAIEtapasError &&
+                mockAIEtapasRequested &&
+                mockAIEtapasSuggestions.length === 0 && (
+                  <p className="mt-2 rounded-md border border-violet-100 bg-white px-2 py-1 text-[11px] font-medium text-violet-700">
+                    No se recibieron sugerencias IA mock para este caso.
+                  </p>
+                )}
+            </div>
             <div className="space-y-3">
               {etapas.map((etapa, index) => (
                 <div

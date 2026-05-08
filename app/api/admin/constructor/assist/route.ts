@@ -137,31 +137,39 @@ function buildMockSuggestions(input: {
       "reunion",
     ]);
 
-  if (
+  const shouldSuggestPipelineDiagnosisStage =
     step === "proceso_pipeline" &&
     (mode === "step_review" || mode === "field_suggestion") &&
-    hasConsultativeSale
-  ) {
+    (hasConsultativeSale ||
+      field === "etapas" ||
+      normalizedField === "etapas" ||
+      textIncludes(value, [
+        "consultiva",
+        "diagnóstico",
+        "diagnostico",
+        "reunión",
+        "reunion",
+      ]));
+
+  if (shouldSuggestPipelineDiagnosisStage) {
     suggestions.push({
-      id: "mock-pipeline-diagnosis-stage",
+      id: "mock-proceso-pipeline-diagnostico-reunion",
       type: "process_advice",
       severity: "medium",
-      title: "La venta consultiva debería incluir diagnóstico/reunión",
+      title: "Agregar etapa de diagnóstico o reunión",
       message:
-        "Se sugiere agregar o validar una etapa Diagnóstico / reunión antes de propuesta.",
+        "El mock sugiere incluir una etapa de diagnóstico/reunión antes de propuesta para validar necesidad, decisores y condiciones.",
       reason:
-        "El cuestionario indica venta consultiva o reuniones de diagnóstico, por lo que el pipeline debería reflejar ese momento comercial.",
+        "En procesos consultivos, avanzar a propuesta sin diagnóstico previo suele reducir calidad de calificación y seguimiento.",
       targetStep: "proceso_pipeline",
       targetField: "etapas",
-      suggestedPatch: {
-        etapaSugerida: {
-          nombre: "Diagnóstico / reunión",
-          objetivo: "Entender necesidad, alcance y criterios de decisión.",
-          requiereValidacionHumana: true,
-        },
+      suggestedValue: {
+        nombre: "Diagnóstico / reunión",
+        descripcion:
+          "Validar necesidad, decisores, información mínima y próximos pasos antes de preparar propuesta.",
       },
       requiresHumanApproval: true,
-      confidence: 0.84,
+      confidence: 0.86,
       source: "mock",
     });
   }
