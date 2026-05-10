@@ -9,6 +9,42 @@ import {
 } from "@/lib/constructor/readiness/statusStyles";
 import { clampCompletionPercent } from "@/lib/constructor/readiness/helpers";
 
+function ProgressGradientBar({
+  value,
+  heightClass = "h-2",
+  ariaLabel,
+  className,
+}: {
+  value: number;
+  heightClass?: string;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const pct = clampCompletionPercent(value);
+  const remainder = 100 - pct;
+
+  return (
+    <div
+      className={`relative w-full overflow-hidden rounded-full bg-slate-200 ${heightClass} ${className ?? ""}`}
+      role="progressbar"
+      aria-label={ariaLabel}
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500"
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-y-0 right-0 bg-slate-200 transition-all duration-300"
+        style={{ width: `${remainder}%` }}
+      />
+    </div>
+  );
+}
+
 type StepReadinessPanelProps = {
   title: string;
   readiness: BaseReadiness;
@@ -23,12 +59,10 @@ export function StepReadinessPanel({
   overallProgress,
 }: StepReadinessPanelProps) {
   const pct = clampCompletionPercent(readiness.completionPercent);
-  const progressBarWidth = `${pct}%`;
   const overallPct =
     overallProgress !== undefined
       ? clampCompletionPercent(overallProgress.percent)
       : null;
-  const overallBarWidth = overallPct !== null ? `${overallPct}%` : "0%";
   const rootClass =
     className ??
     "mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4";
@@ -49,19 +83,12 @@ export function StepReadinessPanel({
               etapas completas
             </p>
           </div>
-          <div
-            className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200"
-            role="progressbar"
-            aria-valuenow={overallPct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={overallProgress.label}
-          >
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 transition-all"
-              style={{ width: overallBarWidth }}
-            />
-          </div>
+          <ProgressGradientBar
+            className="mt-2"
+            value={overallPct}
+            heightClass="h-1.5"
+            ariaLabel={overallProgress.label}
+          />
         </div>
       ) : null}
 
@@ -95,19 +122,12 @@ export function StepReadinessPanel({
           </div>
         </div>
 
-        <div
-          className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
-          role="progressbar"
-          aria-valuenow={pct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`Completitud de esta etapa: ${title}`}
-        >
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 transition-all"
-            style={{ width: progressBarWidth }}
-          />
-        </div>
+        <ProgressGradientBar
+          className="mt-3"
+          value={pct}
+          heightClass="h-2"
+          ariaLabel={title}
+        />
 
         <p className="mt-3 text-xs leading-relaxed text-slate-600">
           <span className="font-semibold text-slate-700">
