@@ -17,10 +17,27 @@ import {
   Code2,
 } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import type {
+  BaseReadiness,
+  ConstructorOverallProgress,
+  FieldQualityHintValue,
+  QualityStatus,
+} from "@/lib/constructor/readiness/types";
+import {
+  READINESS_SUMMARY_LABEL,
+  STATUS_VALUE,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  countSelectedValues,
+  hasText,
+  textLength,
+} from "@/lib/constructor/readiness/helpers";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -296,81 +313,23 @@ function countNewRiesgosLines(current: string, additions: string[]): number {
   return count;
 }
 
-// ─── Calidad / readiness (helpers locales fase 4K) ────────────────────────────
-
-type QualityStatus = "good" | "warning" | "danger" | "neutral";
-
-type SectionQuality = {
-  key: string;
-  label: string;
-  status: QualityStatus;
-  detail: string;
-};
-
-type DiagnosticoReadiness = {
-  completionPercent: number;
-  overallStatus: QualityStatus;
-  overallLabel: string;
-  nextAction: string;
-  sections: SectionQuality[];
-  fieldHints: Record<string, { status: QualityStatus; text: string }>;
-};
-
-const STATUS_CHIP_CLASS: Record<QualityStatus, string> = {
-  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  danger: "border-rose-200 bg-rose-50 text-rose-700",
-  neutral: "border-slate-200 bg-slate-50 text-slate-700",
-};
-
-const STATUS_DOT_CLASS: Record<QualityStatus, string> = {
-  good: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  neutral: "bg-slate-400",
-};
-
-const STATUS_BAR_CLASS: Record<QualityStatus, string> = {
-  good: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  neutral: "bg-slate-300",
-};
-
-const STATUS_TEXT_CLASS: Record<QualityStatus, string> = {
-  good: "text-emerald-700",
-  warning: "text-amber-700",
-  danger: "text-rose-700",
-  neutral: "text-slate-600",
-};
-
-const STATUS_VALUE: Record<QualityStatus, number> = {
-  good: 1,
-  warning: 0.5,
-  danger: 0,
-  neutral: 0.25,
-};
-
-const STATUS_OVERALL_LABEL: Record<QualityStatus, string> = {
-  good: "Listo para avanzar",
-  warning: "Suficiente, pero conviene revisar",
-  danger: "Faltan datos importantes",
-  neutral: "Sin datos suficientes",
-};
-
-function hasText(value: unknown): boolean {
-  return typeof value === "string" && value.trim().length > 0;
+function getConstructorOverallProgress(
+  currentStepPercent: number
+): ConstructorOverallProgress {
+  const totalSteps = 7;
+  const completedBaseSteps = 2;
+  const weightedCurrent =
+    currentStepPercent >= 80 ? 1 : currentStepPercent >= 55 ? 0.5 : 0;
+  const completedEquivalent = completedBaseSteps + weightedCurrent;
+  return {
+    percent: Math.round((completedEquivalent / totalSteps) * 100),
+    completedSteps: Math.floor(completedEquivalent),
+    totalSteps,
+    label: "Avance total del Constructor CRM",
+  };
 }
 
-function textLength(value: unknown): number {
-  return typeof value === "string" ? value.trim().length : 0;
-}
-
-function countSelectedValues(value: unknown): number {
-  return Array.isArray(value)
-    ? value.filter((item) => Boolean(item)).length
-    : 0;
-}
+type DiagnosticoReadiness = BaseReadiness;
 
 function evaluateDiagnosticoReadiness(
   form: DiagnosticoForm
@@ -511,7 +470,7 @@ function evaluateDiagnosticoReadiness(
   }
 
   // Hints por campo
-  const fieldHints: Record<string, { status: QualityStatus; text: string }> = {};
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
 
   if (!hasText(form.modeloComercial)) {
     fieldHints.modeloComercial = {
@@ -612,7 +571,7 @@ function evaluateDiagnosticoReadiness(
   return {
     completionPercent,
     overallStatus,
-    overallLabel: STATUS_OVERALL_LABEL[overallStatus],
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
     nextAction,
     sections: [
       {
@@ -1138,8 +1097,6 @@ export default function DiagnosticoPage() {
   ];
 
   const readiness = evaluateDiagnosticoReadiness(form);
-  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
-  const progressBarWidth = `${Math.min(100, Math.max(0, readiness.completionPercent))}%`;
 
   return (
     <PageContainer>
@@ -1203,64 +1160,13 @@ export default function DiagnosticoPage() {
             </p>
           </div>
 
-          {/* ── Panel: Estado del diagnóstico ─────────────────────────────── */}
-          <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-800">
-                  Estado del diagnóstico
-                </p>
-                <p
-                  className={`mt-0.5 text-xs font-medium ${STATUS_TEXT_CLASS[readiness.overallStatus]}`}
-                >
-                  {readiness.overallLabel}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-semibold leading-none text-slate-900">
-                  {readiness.completionPercent}%
-                </p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-                  completado
-                </p>
-              </div>
-            </div>
-
-            <div
-              className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
-              role="progressbar"
-              aria-valuenow={readiness.completionPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className={`h-full rounded-full transition-all ${progressBarColor}`}
-                style={{ width: progressBarWidth }}
-              />
-            </div>
-
-            <p className="mt-3 text-xs leading-relaxed text-slate-600">
-              <span className="font-semibold text-slate-700">
-                Siguiente recomendado:
-              </span>{" "}
-              {readiness.nextAction}
-            </p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {readiness.sections.map((section) => (
-                <span
-                  key={section.key}
-                  title={section.detail}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${STATUS_CHIP_CLASS[section.status]}`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASS[section.status]}`}
-                  />
-                  {section.label}
-                </span>
-              ))}
-            </div>
-          </div>
+          <StepReadinessPanel
+            title="Estado del diagnóstico"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress(
+              readiness.completionPercent
+            )}
+          />
 
           {/* ── A: Resumen del diagnóstico esperado ─────────────────────── */}
           <div className="mb-8">
@@ -1283,13 +1189,7 @@ export default function DiagnosticoPage() {
                     </option>
                   ))}
                 </select>
-                {readiness.fieldHints.modeloComercial ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.modeloComercial.status]}`}
-                  >
-                    {readiness.fieldHints.modeloComercial.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.modeloComercial} />
                 {renderFieldSuggestions("modeloComercial")}
               </div>
 
@@ -1304,13 +1204,7 @@ export default function DiagnosticoPage() {
                   value={form.complejidad}
                   onChange={(v) => setField("complejidad", v)}
                 />
-                {readiness.fieldHints.complejidad ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.complejidad.status]}`}
-                  >
-                    {readiness.fieldHints.complejidad.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.complejidad} />
                 {renderFieldSuggestions("complejidad")}
               </div>
 
@@ -1326,13 +1220,7 @@ export default function DiagnosticoPage() {
                   value={form.madurez}
                   onChange={(v) => setField("madurez", v)}
                 />
-                {readiness.fieldHints.madurez ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.madurez.status]}`}
-                  >
-                    {readiness.fieldHints.madurez.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.madurez} />
                 {renderFieldSuggestions("madurez")}
               </div>
 
@@ -1347,13 +1235,7 @@ export default function DiagnosticoPage() {
                   value={form.dependenciaHumana}
                   onChange={(v) => setField("dependenciaHumana", v)}
                 />
-                {readiness.fieldHints.dependenciaHumana ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.dependenciaHumana.status]}`}
-                  >
-                    {readiness.fieldHints.dependenciaHumana.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.dependenciaHumana} />
                 {renderFieldSuggestions("dependenciaHumana")}
               </div>
 
@@ -1383,13 +1265,7 @@ export default function DiagnosticoPage() {
                   value={form.comoVende}
                   onChange={(e) => setField("comoVende", e.target.value)}
                 />
-                {readiness.fieldHints.comoVende ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.comoVende.status]}`}
-                  >
-                    {readiness.fieldHints.comoVende.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.comoVende} />
                 {renderFieldSuggestions("comoVende")}
               </div>
 
@@ -1407,13 +1283,7 @@ export default function DiagnosticoPage() {
                   value={form.oportunidades}
                   onChange={(e) => setField("oportunidades", e.target.value)}
                 />
-                {readiness.fieldHints.oportunidades ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.oportunidades.status]}`}
-                  >
-                    {readiness.fieldHints.oportunidades.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.oportunidades} />
                 {renderFieldSuggestions("oportunidades")}
               </div>
 
@@ -1436,13 +1306,7 @@ export default function DiagnosticoPage() {
                     setSandboxAIWarning(null);
                   }}
                 />
-                {readiness.fieldHints.riesgos ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.riesgos.status]}`}
-                  >
-                    {readiness.fieldHints.riesgos.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.riesgos} />
                 {renderFieldSuggestions("riesgos")}
                 <div className="mt-3 rounded-xl border border-violet-100 bg-white/70 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1544,13 +1408,7 @@ export default function DiagnosticoPage() {
                   value={form.puntosCiegos}
                   onChange={(e) => setField("puntosCiegos", e.target.value)}
                 />
-                {readiness.fieldHints.puntosCiegos ? (
-                  <p
-                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.puntosCiegos.status]}`}
-                  >
-                    {readiness.fieldHints.puntosCiegos.text}
-                  </p>
-                ) : null}
+                <FieldQualityHint hint={readiness.fieldHints.puntosCiegos} />
                 {renderFieldSuggestions("puntosCiegos")}
               </div>
 
@@ -1623,13 +1481,10 @@ export default function DiagnosticoPage() {
                         </span>
                       </p>
                     )}
-                    {readiness.fieldHints[key] ? (
-                      <p
-                        className={`mt-2 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints[key].status]}`}
-                      >
-                        {readiness.fieldHints[key].text}
-                      </p>
-                    ) : null}
+                    <FieldQualityHint
+                      className="mt-2 text-[11px]"
+                      hint={readiness.fieldHints[key]}
+                    />
                   </div>
                 );
               })}
@@ -1669,13 +1524,10 @@ export default function DiagnosticoPage() {
                 );
               })}
             </div>
-            {readiness.fieldHints.recomendaciones ? (
-              <p
-                className={`mt-3 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.recomendaciones.status]}`}
-              >
-                {readiness.fieldHints.recomendaciones.text}
-              </p>
-            ) : null}
+            <FieldQualityHint
+              className="mt-3 text-[11px]"
+              hint={readiness.fieldHints.recomendaciones}
+            />
           </div>
 
           {/* ── E: Preguntas abiertas ────────────────────────────────────── */}

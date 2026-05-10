@@ -4,10 +4,11 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Building2,
   ChevronRight,
 } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import {
@@ -15,8 +16,21 @@ import {
   pickAllowedPatch,
 } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import type {
+  BaseReadiness,
+  ConstructorOverallProgress,
+  FieldQualityHintValue,
+  QualityStatus,
+} from "@/lib/constructor/readiness/types";
+import {
+  READINESS_SUMMARY_LABEL,
+  STATUS_VALUE,
+} from "@/lib/constructor/readiness/statusStyles";
+import { hasText, textLength } from "@/lib/constructor/readiness/helpers";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
+
+type EmpresaReadiness = BaseReadiness;
 
 type EmpresaForm = {
   // A. Identidad
@@ -98,68 +112,6 @@ const OPCIONES_VISITA = ["Sí", "No", "Depende"];
 
 const OPCIONES_COTIZACION = ["Estándar", "Personalizada", "Mixta"];
 
-// ─── Calidad / readiness (helpers locales fase 4I) ────────────────────────────
-
-type QualityStatus = "good" | "warning" | "danger" | "neutral";
-
-type SectionQuality = {
-  key: string;
-  label: string;
-  status: QualityStatus;
-  detail: string;
-};
-
-type EmpresaReadiness = {
-  completionPercent: number;
-  overallStatus: QualityStatus;
-  overallLabel: string;
-  nextAction: string;
-  sections: SectionQuality[];
-  fieldHints: Record<string, { status: QualityStatus; text: string }>;
-};
-
-const STATUS_CHIP_CLASS: Record<QualityStatus, string> = {
-  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  danger: "border-rose-200 bg-rose-50 text-rose-700",
-  neutral: "border-slate-200 bg-slate-50 text-slate-700",
-};
-
-const STATUS_DOT_CLASS: Record<QualityStatus, string> = {
-  good: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  neutral: "bg-slate-400",
-};
-
-const STATUS_BAR_CLASS: Record<QualityStatus, string> = {
-  good: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  neutral: "bg-slate-300",
-};
-
-const STATUS_TEXT_CLASS: Record<QualityStatus, string> = {
-  good: "text-emerald-700",
-  warning: "text-amber-700",
-  danger: "text-rose-700",
-  neutral: "text-slate-600",
-};
-
-const STATUS_VALUE: Record<QualityStatus, number> = {
-  good: 1,
-  warning: 0.5,
-  danger: 0,
-  neutral: 0.25,
-};
-
-const STATUS_OVERALL_LABEL: Record<QualityStatus, string> = {
-  good: "Listo para avanzar",
-  warning: "Suficiente, pero conviene revisar",
-  danger: "Faltan datos importantes",
-  neutral: "Sin datos suficientes",
-};
-
 const PAIS_LIKELY_CITY_TERMS = [
   "buenos aires",
   "montevideo",
@@ -174,17 +126,25 @@ const CIUDAD_LIKELY_COUNTRY_TERMS = [
   "ecuador",
 ];
 
-function hasText(value: unknown): boolean {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function textLength(value: unknown): number {
-  return typeof value === "string" ? value.trim().length : 0;
-}
-
 function includesAny(value: string, terms: string[]): boolean {
   const normalized = value.toLowerCase();
   return terms.some((term) => normalized.includes(term));
+}
+
+function getConstructorOverallProgress(
+  currentStepPercent: number
+): ConstructorOverallProgress {
+  const totalSteps = 7;
+  const completedBaseSteps = 0;
+  const weightedCurrent =
+    currentStepPercent >= 80 ? 1 : currentStepPercent >= 55 ? 0.5 : 0;
+  const completedEquivalent = completedBaseSteps + weightedCurrent;
+  return {
+    percent: Math.round((completedEquivalent / totalSteps) * 100),
+    completedSteps: Math.floor(completedEquivalent),
+    totalSteps,
+    label: "Avance total del Constructor CRM",
+  };
 }
 
 function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
@@ -319,7 +279,7 @@ function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
   }
 
   // Hints por campo
-  const fieldHints: Record<string, { status: QualityStatus; text: string }> = {};
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
 
   if (!hasText(form.nombreComercial)) {
     fieldHints.nombreComercial = {
@@ -426,7 +386,7 @@ function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
   return {
     completionPercent,
     overallStatus,
-    overallLabel: STATUS_OVERALL_LABEL[overallStatus],
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
     nextAction,
     sections: [
       {
@@ -710,8 +670,6 @@ export default function EmpresaPage() {
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "empresa");
   const readiness = evaluateEmpresaReadiness(form);
-  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
-  const progressBarWidth = `${Math.min(100, Math.max(0, readiness.completionPercent))}%`;
 
   return (
     <PageContainer>
@@ -760,64 +718,13 @@ export default function EmpresaPage() {
             </p>
           </div>
 
-          {/* ── Panel: Estado de carga ───────────────────────────────────────── */}
-          <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-800">
-                  Estado de carga
-                </p>
-                <p
-                  className={`mt-0.5 text-xs font-medium ${STATUS_TEXT_CLASS[readiness.overallStatus]}`}
-                >
-                  {readiness.overallLabel}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-semibold leading-none text-slate-900">
-                  {readiness.completionPercent}%
-                </p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-                  completado
-                </p>
-              </div>
-            </div>
-
-            <div
-              className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
-              role="progressbar"
-              aria-valuenow={readiness.completionPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className={`h-full rounded-full transition-all ${progressBarColor}`}
-                style={{ width: progressBarWidth }}
-              />
-            </div>
-
-            <p className="mt-3 text-xs leading-relaxed text-slate-600">
-              <span className="font-semibold text-slate-700">
-                Siguiente recomendado:
-              </span>{" "}
-              {readiness.nextAction}
-            </p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {readiness.sections.map((section) => (
-                <span
-                  key={section.key}
-                  title={section.detail}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${STATUS_CHIP_CLASS[section.status]}`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASS[section.status]}`}
-                  />
-                  {section.label}
-                </span>
-              ))}
-            </div>
-          </div>
+          <StepReadinessPanel
+            title="Estado de carga"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress(
+              readiness.completionPercent
+            )}
+          />
 
           {/* ── Formulario ───────────────────────────────────────────────────── */}
           <div className="space-y-8">
@@ -835,13 +742,7 @@ export default function EmpresaPage() {
                     placeholder="Ej: Casalimpia"
                     className={INPUT_CLASS}
                   />
-                  {readiness.fieldHints.nombreComercial ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.nombreComercial.status]}`}
-                    >
-                      {readiness.fieldHints.nombreComercial.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.nombreComercial} />
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>Nombre legal</label>
@@ -865,13 +766,7 @@ export default function EmpresaPage() {
                     placeholder="Ej: Ecuador"
                     className={INPUT_CLASS}
                   />
-                  {readiness.fieldHints.pais ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.pais.status]}`}
-                    >
-                      {readiness.fieldHints.pais.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.pais} />
                   {shouldSuggestQuito && (
                     <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                       <p className="text-[11px] font-semibold text-indigo-800">
@@ -957,13 +852,7 @@ export default function EmpresaPage() {
                     placeholder="Ej: Guayaquil"
                     className={INPUT_CLASS}
                   />
-                  {readiness.fieldHints.ciudad ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.ciudad.status]}`}
-                    >
-                      {readiness.fieldHints.ciudad.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.ciudad} />
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>Sitio web</label>
@@ -1007,13 +896,7 @@ export default function EmpresaPage() {
                         </option>
                       ))}
                     </select>
-                    {readiness.fieldHints.rubro ? (
-                      <p
-                        className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.rubro.status]}`}
-                      >
-                        {readiness.fieldHints.rubro.text}
-                      </p>
-                    ) : null}
+                    <FieldQualityHint hint={readiness.fieldHints.rubro} />
                     {(form.rubro === "Otro" ||
                       !form.rubro ||
                       form.rubroPersonalizado.trim().length > 0) && (
@@ -1030,13 +913,7 @@ export default function EmpresaPage() {
                           placeholder="Ej: Automotriz / accesorios 4x4"
                           className={INPUT_CLASS}
                         />
-                        {readiness.fieldHints.rubroPersonalizado ? (
-                          <p
-                            className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.rubroPersonalizado.status]}`}
-                          >
-                            {readiness.fieldHints.rubroPersonalizado.text}
-                          </p>
-                        ) : null}
+                        <FieldQualityHint hint={readiness.fieldHints.rubroPersonalizado} />
                         <p className="mt-1 text-[11px] text-slate-500">
                           Si el rubro no está en la lista, escribilo acá. El
                           Constructor usará este valor para interpretar mejor la
@@ -1078,13 +955,7 @@ export default function EmpresaPage() {
                       placeholder="Ej: limpieza de hospitales y laboratorios"
                       className={INPUT_CLASS}
                     />
-                    {readiness.fieldHints.giro ? (
-                      <p
-                        className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.giro.status]}`}
-                      >
-                        {readiness.fieldHints.giro.text}
-                      </p>
-                    ) : null}
+                    <FieldQualityHint hint={readiness.fieldHints.giro} />
                   </div>
                 </div>
 
@@ -1120,13 +991,7 @@ export default function EmpresaPage() {
                     placeholder="Ej: limpieza corporativa, servicios contables para pymes, laboratorio clínico…"
                     className={INPUT_CLASS}
                   />
-                  {readiness.fieldHints.vertical ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.vertical.status]}`}
-                    >
-                      {readiness.fieldHints.vertical.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.vertical} />
                 </div>
               </div>
             </section>
@@ -1144,13 +1009,7 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.queVende ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queVende.status]}`}
-                    >
-                      {readiness.fieldHints.queVende.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.queVende} />
                 </div>
 
                 <div>
@@ -1240,13 +1099,7 @@ export default function EmpresaPage() {
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.comoTrabajaHoy ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.comoTrabajaHoy.status]}`}
-                    >
-                      {readiness.fieldHints.comoTrabajaHoy.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.comoTrabajaHoy} />
                   {shouldSuggestProceso && (
                     <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                       <p className="text-[11px] font-semibold text-indigo-800">
@@ -1278,13 +1131,7 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.queEsperaLograr ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queEsperaLograr.status]}`}
-                    >
-                      {readiness.fieldHints.queEsperaLograr.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.queEsperaLograr} />
                   {shouldSuggestObjetivo && (
                     <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                       <p className="text-[11px] font-semibold text-indigo-800">
@@ -1316,13 +1163,7 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.queDeberiaAnalizarIA ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queDeberiaAnalizarIA.status]}`}
-                    >
-                      {readiness.fieldHints.queDeberiaAnalizarIA.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.queDeberiaAnalizarIA} />
                 </div>
               </div>
             </section>

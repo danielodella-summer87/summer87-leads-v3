@@ -4,10 +4,28 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import { type ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import type {
+  BaseReadiness,
+  ConstructorOverallProgress,
+  FieldQualityHintValue,
+  QualityStatus,
+} from "@/lib/constructor/readiness/types";
+import {
+  READINESS_SUMMARY_LABEL,
+  STATUS_VALUE,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  countSelectedValues,
+  hasRelevantText,
+  hasText,
+  textLength,
+} from "@/lib/constructor/readiness/helpers";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -272,83 +290,23 @@ function mergeUnique(current: string[], additions: string[]) {
   return Array.from(new Set([...(Array.isArray(current) ? current : []), ...additions]));
 }
 
-// ─── Calidad / readiness (helpers locales fase 4L) ────────────────────────────
-
-type QualityStatus = "good" | "warning" | "danger" | "neutral";
-
-type SectionQuality = {
-  key: string;
-  label: string;
-  status: QualityStatus;
-  detail: string;
-};
-
-type CuestionarioReadiness = {
-  completionPercent: number;
-  overallStatus: QualityStatus;
-  overallLabel: string;
-  nextAction: string;
-  sections: SectionQuality[];
-  fieldHints: Record<string, { status: QualityStatus; text: string }>;
-};
-
-const STATUS_CHIP_CLASS: Record<QualityStatus, string> = {
-  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  danger: "border-rose-200 bg-rose-50 text-rose-700",
-  neutral: "border-slate-200 bg-slate-50 text-slate-700",
-};
-
-const STATUS_DOT_CLASS: Record<QualityStatus, string> = {
-  good: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  neutral: "bg-slate-400",
-};
-
-const STATUS_BAR_CLASS: Record<QualityStatus, string> = {
-  good: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500",
-  neutral: "bg-slate-300",
-};
-
-const STATUS_TEXT_CLASS: Record<QualityStatus, string> = {
-  good: "text-emerald-700",
-  warning: "text-amber-700",
-  danger: "text-rose-700",
-  neutral: "text-slate-600",
-};
-
-const STATUS_VALUE: Record<QualityStatus, number> = {
-  good: 1,
-  warning: 0.5,
-  danger: 0,
-  neutral: 0.25,
-};
-
-const STATUS_OVERALL_LABEL: Record<QualityStatus, string> = {
-  good: "Listo para avanzar",
-  warning: "Suficiente, pero conviene revisar",
-  danger: "Faltan datos importantes",
-  neutral: "Sin datos suficientes",
-};
-
-function hasText(value: unknown): boolean {
-  return typeof value === "string" && value.trim().length > 0;
+function getConstructorOverallProgress(
+  currentStepPercent: number
+): ConstructorOverallProgress {
+  const totalSteps = 7;
+  const completedBaseSteps = 1;
+  const weightedCurrent =
+    currentStepPercent >= 80 ? 1 : currentStepPercent >= 55 ? 0.5 : 0;
+  const completedEquivalent = completedBaseSteps + weightedCurrent;
+  return {
+    percent: Math.round((completedEquivalent / totalSteps) * 100),
+    completedSteps: Math.floor(completedEquivalent),
+    totalSteps,
+    label: "Avance total del Constructor CRM",
+  };
 }
 
-function textLength(value: unknown): number {
-  return typeof value === "string" ? value.trim().length : 0;
-}
-
-function countSelectedValues(value: unknown): number {
-  return Array.isArray(value) ? value.filter(Boolean).length : 0;
-}
-
-function hasRelevantText(value: unknown, minLength = 20): boolean {
-  return textLength(value) >= minLength;
-}
+type CuestionarioReadiness = BaseReadiness;
 
 function evaluateCuestionarioReadiness(
   form: CuestionarioForm,
@@ -539,8 +497,7 @@ function evaluateCuestionarioReadiness(
     nextAction = "Definí qué decisiones nunca debería tomar la IA sola.";
   }
 
-  const fieldHints: Record<string, { status: QualityStatus; text: string }> =
-    {};
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
 
   if (!hasText(form.queVendeDetalle)) {
     fieldHints.queVende = {
@@ -667,7 +624,7 @@ function evaluateCuestionarioReadiness(
   return {
     completionPercent,
     overallStatus,
-    overallLabel: STATUS_OVERALL_LABEL[overallStatus],
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
     nextAction,
     sections: [
       {
@@ -1150,8 +1107,6 @@ export default function CuestionarioPage() {
   const step = CRM_SETUP_STEPS.find((s) => s.id === "cuestionario");
 
   const readiness = evaluateCuestionarioReadiness(form, segmentosCustom);
-  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
-  const progressBarWidth = `${Math.min(100, Math.max(0, readiness.completionPercent))}%`;
 
   return (
     <PageContainer>
@@ -1209,64 +1164,13 @@ export default function CuestionarioPage() {
             </p>
           </div>
 
-          {/* ── Panel: Estado del cuestionario ───────────────────────────── */}
-          <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-800">
-                  Estado del cuestionario
-                </p>
-                <p
-                  className={`mt-0.5 text-xs font-medium ${STATUS_TEXT_CLASS[readiness.overallStatus]}`}
-                >
-                  {readiness.overallLabel}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-semibold leading-none text-slate-900">
-                  {readiness.completionPercent}%
-                </p>
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-                  completado
-                </p>
-              </div>
-            </div>
-
-            <div
-              className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
-              role="progressbar"
-              aria-valuenow={readiness.completionPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className={`h-full rounded-full transition-all ${progressBarColor}`}
-                style={{ width: progressBarWidth }}
-              />
-            </div>
-
-            <p className="mt-3 text-xs leading-relaxed text-slate-600">
-              <span className="font-semibold text-slate-700">
-                Siguiente recomendado:
-              </span>{" "}
-              {readiness.nextAction}
-            </p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {readiness.sections.map((section) => (
-                <span
-                  key={section.key}
-                  title={section.detail}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${STATUS_CHIP_CLASS[section.status]}`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASS[section.status]}`}
-                  />
-                  {section.label}
-                </span>
-              ))}
-            </div>
-          </div>
+          <StepReadinessPanel
+            title="Estado del cuestionario"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress(
+              readiness.completionPercent
+            )}
+          />
 
           {/* ── Formulario ─────────────────────────────────────────────────── */}
           <div className="space-y-8">
@@ -1287,13 +1191,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.queVende ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queVende.status]}`}
-                    >
-                      {readiness.fieldHints.queVende.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.queVende} />
                   {renderFieldSuggestions("queVendeDetalle")}
                 </div>
 
@@ -1307,13 +1205,7 @@ export default function CuestionarioPage() {
                     value={form.tiposVenta}
                     onChange={(v) => setField("tiposVenta", v)}
                   />
-                  {readiness.fieldHints.tiposVenta ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.tiposVenta.status]}`}
-                    >
-                      {readiness.fieldHints.tiposVenta.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.tiposVenta} />
                   {renderFieldSuggestions("tiposVenta")}
                 </div>
 
@@ -1352,13 +1244,7 @@ export default function CuestionarioPage() {
                     value={form.tiposClienteObj}
                     onChange={(v) => setField("tiposClienteObj", v)}
                   />
-                  {readiness.fieldHints.tipoCliente ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.tipoCliente.status]}`}
-                    >
-                      {readiness.fieldHints.tipoCliente.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.tipoCliente} />
                 </div>
 
                 <div>
@@ -1407,13 +1293,7 @@ export default function CuestionarioPage() {
                       ))}
                     </div>
                   )}
-                  {readiness.fieldHints.segmentos ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.segmentos.status]}`}
-                    >
-                      {readiness.fieldHints.segmentos.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.segmentos} />
                 </div>
 
                 <div>
@@ -1425,13 +1305,7 @@ export default function CuestionarioPage() {
                     value={form.decisores}
                     onChange={(v) => setField("decisores", v)}
                   />
-                  {readiness.fieldHints.decisores ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.decisores.status]}`}
-                    >
-                      {readiness.fieldHints.decisores.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.decisores} />
                   {renderFieldSuggestions("decisores")}
                 </div>
 
@@ -1473,13 +1347,7 @@ export default function CuestionarioPage() {
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.procesoActual ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.procesoActual.status]}`}
-                    >
-                      {readiness.fieldHints.procesoActual.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.procesoActual} />
                   {renderFieldSuggestions("procesoActual")}
                   <div className="mt-2 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1541,13 +1409,7 @@ export default function CuestionarioPage() {
                     value={form.infoPrePropuesta}
                     onChange={(v) => setField("infoPrePropuesta", v)}
                   />
-                  {readiness.fieldHints.informacionPropuesta ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.informacionPropuesta.status]}`}
-                    >
-                      {readiness.fieldHints.informacionPropuesta.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.informacionPropuesta} />
                   {renderFieldSuggestions("infoPrePropuesta")}
                 </div>
 
@@ -1562,13 +1424,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.bloqueosOportunidad ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.bloqueosOportunidad.status]}`}
-                    >
-                      {readiness.fieldHints.bloqueosOportunidad.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.bloqueosOportunidad} />
                   {renderFieldSuggestions("queBloquea")}
                 </div>
 
@@ -1590,13 +1446,7 @@ export default function CuestionarioPage() {
                     value={form.tiposPropuesta}
                     onChange={(v) => setField("tiposPropuesta", v)}
                   />
-                  {readiness.fieldHints.tipoPropuesta ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.tipoPropuesta.status]}`}
-                    >
-                      {readiness.fieldHints.tipoPropuesta.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.tipoPropuesta} />
                 </div>
 
                 <div>
@@ -1639,13 +1489,7 @@ export default function CuestionarioPage() {
                     value={form.motivosPerdida}
                     onChange={(v) => setField("motivosPerdida", v)}
                   />
-                  {readiness.fieldHints.motivosPerdida ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.motivosPerdida.status]}`}
-                    >
-                      {readiness.fieldHints.motivosPerdida.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.motivosPerdida} />
                   {renderFieldSuggestions("motivosPerdida")}
                 </div>
 
@@ -1670,13 +1514,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.necesidadesDireccion ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.necesidadesDireccion.status]}`}
-                    >
-                      {readiness.fieldHints.necesidadesDireccion.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.necesidadesDireccion} />
                 </div>
 
                 <div>
@@ -1699,13 +1537,7 @@ export default function CuestionarioPage() {
                     value={form.metricasImportantes}
                     onChange={(v) => setField("metricasImportantes", v)}
                   />
-                  {readiness.fieldHints.metricas ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.metricas.status]}`}
-                    >
-                      {readiness.fieldHints.metricas.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.metricas} />
                   {renderFieldSuggestions("metricasImportantes")}
                 </div>
 
@@ -1730,13 +1562,7 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
-                  {readiness.fieldHints.decisionesIA ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.decisionesIA.status]}`}
-                    >
-                      {readiness.fieldHints.decisionesIA.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.decisionesIA} />
                   {renderFieldSuggestions("decisionesNoIA")}
                 </div>
 
@@ -1749,13 +1575,7 @@ export default function CuestionarioPage() {
                     value={form.dondeAyudarIA}
                     onChange={(v) => setField("dondeAyudarIA", v)}
                   />
-                  {readiness.fieldHints.ayudasIA ? (
-                    <p
-                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.ayudasIA.status]}`}
-                    >
-                      {readiness.fieldHints.ayudasIA.text}
-                    </p>
-                  ) : null}
+                  <FieldQualityHint hint={readiness.fieldHints.ayudasIA} />
                   {renderFieldSuggestions("dondeAyudarIA")}
                 </div>
 
