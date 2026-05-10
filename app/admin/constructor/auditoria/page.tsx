@@ -21,6 +21,23 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import type {
+  BaseReadiness,
+  FieldQualityHintValue,
+  QualityStatus,
+  SectionQuality,
+} from "@/lib/constructor/readiness/types";
+import {
+  STATUS_VALUE,
+  READINESS_SUMMARY_LABEL,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  clampCompletionPercent,
+  countSelectedValues,
+} from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -43,10 +60,12 @@ type Riesgo = {
 };
 
 type SetupRecord = Record<string, unknown>;
+type ConstructorSetup = Record<string, unknown> | null;
 type ValidationRow = {
   question: string;
   value: string;
 };
+type AuditoriaReadiness = BaseReadiness;
 
 // ─── Datos estáticos ──────────────────────────────────────────────────────────
 
@@ -341,6 +360,326 @@ const TEXTAREA_CLASS =
 function hasSetupData(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.keys(value).length > 0;
+}
+
+function hasObject(value: unknown): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function objectKeysCount(value: unknown): number {
+  return hasObject(value) ? Object.keys(value as Record<string, unknown>).length : 0;
+}
+
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function evaluateAuditoriaReadiness(setup: ConstructorSetup): AuditoriaReadiness {
+  const empresaOk = hasSetupData(setup?.empresa);
+  const cuestionarioOk = hasSetupData(setup?.cuestionario);
+  const documentosOk = hasSetupData(setup?.documentos);
+  const datosBaseCubiertos = countSelectedValues([
+    empresaOk,
+    cuestionarioOk,
+    documentosOk,
+  ]);
+  const datosBaseFaltantes = 3 - datosBaseCubiertos;
+
+  let datosBaseStatus: QualityStatus;
+  let datosBaseDetail: string;
+  if (datosBaseFaltantes >= 2) {
+    datosBaseStatus = "danger";
+    datosBaseDetail = "Faltan dos o más bloques base (Empresa, Cuestionario o Documentos).";
+  } else if (datosBaseFaltantes === 1) {
+    datosBaseStatus = "warning";
+    datosBaseDetail = "Falta un bloque base por completar o consolidar.";
+  } else {
+    datosBaseStatus = "good";
+    datosBaseDetail = "Empresa, Cuestionario y Documentos tienen contenido cargado.";
+  }
+
+  const diagnosticoOk = hasSetupData(setup?.diagnostico);
+  const procesoOk = hasSetupData(setup?.proceso_pipeline);
+
+  let diagnosticoProcesoStatus: QualityStatus;
+  let diagnosticoProcesoDetail: string;
+  if (!diagnosticoOk && !procesoOk) {
+    diagnosticoProcesoStatus = "danger";
+    diagnosticoProcesoDetail = "Diagnóstico y proceso/pipeline están vacíos.";
+  } else if (!diagnosticoOk || !procesoOk) {
+    diagnosticoProcesoStatus = "warning";
+    diagnosticoProcesoDetail =
+      "Diagnóstico o proceso comercial necesita más definición cargada.";
+  } else {
+    diagnosticoProcesoStatus = "good";
+    diagnosticoProcesoDetail = "Diagnóstico y proceso/pipeline cargados.";
+  }
+
+  const motoresOk = hasSetupData(setup?.motores_ia);
+  const reportesOk = hasSetupData(setup?.reportes);
+
+  let iaReportesStatus: QualityStatus;
+  let iaReportesDetail: string;
+  if (!motoresOk && !reportesOk) {
+    iaReportesStatus = "danger";
+    iaReportesDetail = "Motores IA y reportes sin configuración cargada.";
+  } else if (!motoresOk || !reportesOk) {
+    iaReportesStatus = "warning";
+    iaReportesDetail = "Falta contenido en motores IA o en reportes.";
+  } else {
+    iaReportesStatus = "good";
+    iaReportesDetail = "Motores IA y reportes cargados.";
+  }
+
+  const pasosPreviosCubiertos = countSelectedValues([
+    empresaOk,
+    cuestionarioOk,
+    documentosOk,
+    diagnosticoOk,
+    procesoOk,
+    motoresOk,
+    reportesOk,
+  ]);
+  const pasosMarcadosApi = arrayLength(setup?.completed_steps);
+  const efectivoCompletados = Math.max(pasosMarcadosApi, pasosPreviosCubiertos);
+  const readinessApi =
+    typeof setup?.readiness_score === "number" && setup.readiness_score >= 0
+      ? setup.readiness_score
+      : null;
+  const readinessDerivado = Math.round((pasosPreviosCubiertos / 7) * 100);
+  const readinessUsar = readinessApi !== null ? readinessApi : readinessDerivado;
+
+  let cierreActivacionStatus: QualityStatus;
+  let cierreActivacionDetail: string;
+  if (setup === null) {
+    cierreActivacionStatus = "danger";
+    cierreActivacionDetail = "No hay fila de configuración disponible.";
+  } else if (efectivoCompletados >= 6 || readinessUsar >= 70) {
+    cierreActivacionStatus = "good";
+    cierreActivacionDetail =
+      "Progreso alto: pasos completados o readiness score suficiente para revisión final.";
+  } else if (efectivoCompletados >= 4 || readinessUsar >= 45) {
+    cierreActivacionStatus = "warning";
+    cierreActivacionDetail =
+      "Avance medio: revisá pasos pendientes antes de considerar activación.";
+  } else if (pasosMarcadosApi > 0 || pasosPreviosCubiertos > 0 || readinessDerivado > 0) {
+    cierreActivacionStatus = "warning";
+    cierreActivacionDetail = "Todavía hay huecos materiales antes de cerrar el Constructor.";
+  } else {
+    cierreActivacionStatus = "danger";
+    cierreActivacionDetail = "El Constructor apenas tiene contenido cargado.";
+  }
+
+  const sections: SectionQuality[] = [
+    {
+      key: "datos-base",
+      label: "Datos base",
+      status: datosBaseStatus,
+      detail: datosBaseDetail,
+    },
+    {
+      key: "diagnostico-proceso",
+      label: "Diagnóstico y proceso",
+      status: diagnosticoProcesoStatus,
+      detail: diagnosticoProcesoDetail,
+    },
+    {
+      key: "ia-reportes",
+      label: "IA y reportes",
+      status: iaReportesStatus,
+      detail: iaReportesDetail,
+    },
+    {
+      key: "cierre-activacion",
+      label: "Cierre y activación",
+      status: cierreActivacionStatus,
+      detail: cierreActivacionDetail,
+    },
+  ];
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      25 * STATUS_VALUE[datosBaseStatus] +
+        30 * STATUS_VALUE[diagnosticoProcesoStatus] +
+        25 * STATUS_VALUE[iaReportesStatus] +
+        20 * STATUS_VALUE[cierreActivacionStatus]
+    )
+  );
+
+  const hayDangerSem = sections.some((s) => s.status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hayDangerSem) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction =
+    "El Constructor está listo para revisión final. La activación real sigue bloqueada en prototipo.";
+  if (setup === null) {
+    nextAction = "No hay configuración cargada para auditar.";
+  } else if (!empresaOk) {
+    nextAction = "Volvé a Empresa y completá los datos base.";
+  } else if (!cuestionarioOk) {
+    nextAction = "Volvé a Cuestionario y completá el relevamiento comercial.";
+  } else if (!documentosOk) {
+    nextAction =
+      "Volvé a Documentos Fuente y registrá materiales disponibles.";
+  } else if (!diagnosticoOk) {
+    nextAction = "Volvé a Diagnóstico y completá los hallazgos principales.";
+  } else if (!procesoOk) {
+    nextAction =
+      "Volvé a Proceso/Pipeline y definí etapas y criterios.";
+  } else if (!motoresOk) {
+    nextAction =
+      "Volvé a Motores IA y definí motores, riesgos y validación humana.";
+  } else if (!reportesOk) {
+    nextAction = "Volvé a Reportes y definí KPIs y tableros.";
+  } else if (completionPercent < 80) {
+    nextAction = "Revisá los bloques en amarillo antes de activar.";
+  }
+
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
+
+  if (datosBaseStatus === "danger") {
+    fieldHints.datosBase = {
+      status: "danger",
+      text: "Faltan datos base para auditar el CRM.",
+    };
+  } else if (datosBaseStatus !== "good") {
+    fieldHints.datosBase = {
+      status: "warning",
+      text: "Hay datos base parciales. Revisá Empresa, Cuestionario o Documentos.",
+    };
+  }
+
+  if (diagnosticoProcesoStatus === "danger") {
+    fieldHints.diagnosticoProceso = {
+      status: "danger",
+      text: "Falta diagnóstico o proceso comercial antes de cerrar el Constructor.",
+    };
+  } else if (diagnosticoProcesoStatus !== "good") {
+    fieldHints.diagnosticoProceso = {
+      status: "warning",
+      text: "Revisá diagnóstico y proceso antes de activar.",
+    };
+  }
+
+  if (iaReportesStatus === "danger") {
+    fieldHints.iaReportes = {
+      status: "danger",
+      text: "Faltan motores IA o reportes para cerrar la configuración.",
+    };
+  } else if (iaReportesStatus !== "good") {
+    fieldHints.iaReportes = {
+      status: "warning",
+      text: "Completá IA y reportes para tener un CRM operativo.",
+    };
+  }
+
+  if (cierreActivacionStatus === "good") {
+    fieldHints.cierreActivacion = {
+      status: "good",
+      text: "Listo para revisión final. Activación real bloqueada por seguridad de prototipo.",
+    };
+  } else {
+    fieldHints.cierreActivacion = {
+      status: "warning",
+      text: "La activación real sigue bloqueada en modo prototipo.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections,
+    fieldHints,
+  };
+}
+
+type GlobalResumeTier = "completo" | "parcial" | "pendiente";
+
+function getAuditoriaStepPayloadFromSetup(
+  setup: ConstructorSetup,
+  stepId: string
+): unknown {
+  if (!setup) return undefined;
+  if (stepId === "proceso-pipeline") return setup.proceso_pipeline;
+  if (stepId === "motores-ia") return setup.motores_ia;
+  return setup[stepId];
+}
+
+function globalResumeTierForPayload(
+  setupLoading: boolean,
+  payload: unknown
+): GlobalResumeTier {
+  if (setupLoading) return "parcial";
+  if (!hasSetupData(payload)) return "pendiente";
+  if (objectKeysCount(payload) >= 3) return "completo";
+  return "parcial";
+}
+
+function globalResumeChipClasses(tier: GlobalResumeTier): {
+  wrap: string;
+  estadoClass: string;
+  detalleClass: string;
+  estadoLabel: string;
+  detalleLabel: string;
+} {
+  if (tier === "completo") {
+    return {
+      wrap: "border-emerald-200 bg-emerald-50 hover:border-emerald-300",
+      estadoClass: "text-emerald-800",
+      detalleClass: "text-emerald-700",
+      estadoLabel: "Completo",
+      detalleLabel: "Datos cargados",
+    };
+  }
+  if (tier === "parcial") {
+    return {
+      wrap: "border-amber-200 bg-amber-50 hover:border-amber-300",
+      estadoClass: "text-amber-900",
+      detalleClass: "text-amber-800",
+      estadoLabel: "Parcial",
+      detalleLabel: "Falta información",
+    };
+  }
+  return {
+    wrap: "border-rose-200 bg-rose-50 hover:border-rose-300",
+    estadoClass: "text-rose-900",
+    detalleClass: "text-rose-800",
+    estadoLabel: "Pendiente",
+    detalleLabel: "Sin datos",
+  };
+}
+
+function tierForAuditoriaEtapa(args: {
+  setupLoading: boolean;
+  auditoriaReadiness: AuditoriaReadiness | null;
+  allSetupStepsCompleted: boolean;
+  completedSetupSteps: number;
+}): GlobalResumeTier {
+  if (args.setupLoading) return "parcial";
+  if (!args.auditoriaReadiness) return "pendiente";
+  if (
+    args.allSetupStepsCompleted &&
+    args.auditoriaReadiness.overallStatus === "good" &&
+    args.auditoriaReadiness.completionPercent >= 80
+  ) {
+    return "completo";
+  }
+  if (
+    args.completedSetupSteps >= 4 ||
+    args.auditoriaReadiness.completionPercent >= 55 ||
+    args.completedSetupSteps >= 1
+  ) {
+    return "parcial";
+  }
+  return "pendiente";
 }
 
 function formatReportValue(value: unknown): string {
@@ -758,6 +1097,9 @@ export default function AuditoriaPage() {
       complete: false,
     },
   ];
+  const auditoriaReadiness: AuditoriaReadiness | null =
+    setupLoading ? null : evaluateAuditoriaReadiness(setupData);
+
   const clientReportBlocks = [
     {
       id: "empresa",
@@ -1243,6 +1585,95 @@ export default function AuditoriaPage() {
               Revisá el estado de preparación del CRM antes de activarlo. Esta pantalla evalúa
               localmente el resultado de los 7 pasos anteriores y genera un dictamen preliminar.
             </p>
+          </div>
+
+          {!setupLoading && auditoriaReadiness ? (
+            <StepReadinessPanel
+              title="Estado de auditoría final"
+              readiness={auditoriaReadiness}
+              overallProgress={getConstructorOverallProgress({
+                currentStep: "auditoria",
+                currentStepPercent: auditoriaReadiness.completionPercent,
+              })}
+            />
+          ) : null}
+
+          <div className="mb-8 rounded-xl border border-slate-200 bg-white/90 p-4">
+            <p className="text-sm font-semibold text-slate-800">
+              Resumen global del Constructor
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              Lectura rápida por etapa según contenido cargado del setup guardado.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {PASOS_RESUMEN.map((paso) => {
+                const Icon = paso.icon;
+                const payload = getAuditoriaStepPayloadFromSetup(setupData, paso.id);
+                const tier = globalResumeTierForPayload(setupLoading, payload);
+                const chip = globalResumeChipClasses(tier);
+                const labelEtapa =
+                  paso.id === "documentos"
+                    ? "Documentos Fuente"
+                    : paso.id === "diagnostico"
+                      ? "Diagnóstico"
+                      : paso.id === "proceso-pipeline"
+                        ? "Proceso/Pipeline"
+                        : paso.id === "motores-ia"
+                          ? "Motores IA"
+                          : paso.title;
+                return (
+                  <Link
+                    key={paso.id}
+                    href={paso.href}
+                    className={`flex min-w-[152px] max-w-[210px] flex-1 flex-col gap-1 rounded-xl border px-3 py-2.5 transition-colors ${chip.wrap}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                      <span className={`text-[11px] font-semibold leading-tight ${chip.estadoClass}`}>
+                        {labelEtapa}
+                      </span>
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wide ${chip.estadoClass}`}
+                    >
+                      {chip.estadoLabel}
+                    </span>
+                    <span className={`text-[10px] ${chip.detalleClass}`}>{chip.detalleLabel}</span>
+                  </Link>
+                );
+              })}
+              {(() => {
+                const auditoriaTier = tierForAuditoriaEtapa({
+                  setupLoading,
+                  auditoriaReadiness,
+                  allSetupStepsCompleted,
+                  completedSetupSteps,
+                });
+                const auditoriaChip = globalResumeChipClasses(auditoriaTier);
+                return (
+                  <div
+                    className={`flex min-w-[152px] max-w-[210px] flex-1 flex-col gap-1 rounded-xl border px-3 py-2.5 ${auditoriaChip.wrap}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                      <span
+                        className={`text-[11px] font-semibold leading-tight ${auditoriaChip.estadoClass}`}
+                      >
+                        Auditoría
+                      </span>
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wide ${auditoriaChip.estadoClass}`}
+                    >
+                      {auditoriaChip.estadoLabel}
+                    </span>
+                    <span className={`text-[10px] ${auditoriaChip.detalleClass}`}>
+                      {auditoriaChip.detalleLabel}
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Aviso */}
@@ -2552,6 +2983,33 @@ export default function AuditoriaPage() {
               habilitar Activar CRM.
             </p>
           </div>
+
+          {!setupLoading && auditoriaReadiness ? (
+            <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+              <p className="text-xs font-semibold text-slate-800">
+                Avisos de cierre antes de activar (prototipo)
+              </p>
+              <p className="mt-1 mb-3 text-[11px] leading-relaxed text-slate-600">
+                La activación real permanece bloqueada en esta fase.
+              </p>
+              <FieldQualityHint
+                hint={auditoriaReadiness.fieldHints.datosBase}
+                className="block text-[11px] leading-snug"
+              />
+              <FieldQualityHint
+                hint={auditoriaReadiness.fieldHints.diagnosticoProceso}
+                className="block text-[11px] leading-snug"
+              />
+              <FieldQualityHint
+                hint={auditoriaReadiness.fieldHints.iaReportes}
+                className="block text-[11px] leading-snug"
+              />
+              <FieldQualityHint
+                hint={auditoriaReadiness.fieldHints.cierreActivacion}
+                className="block text-[11px] leading-snug"
+              />
+            </div>
+          ) : null}
 
           {/* ── I: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
