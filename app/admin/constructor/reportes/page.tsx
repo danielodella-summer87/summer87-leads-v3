@@ -19,6 +19,24 @@ import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorAIAudit } from "@/lib/constructor-ai/useConstructorAIAudit";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import type {
+  BaseReadiness,
+  FieldQualityHintValue,
+  QualityStatus,
+  SectionQuality,
+} from "@/lib/constructor/readiness/types";
+import {
+  STATUS_VALUE,
+  READINESS_SUMMARY_LABEL,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  clampCompletionPercent,
+  hasRelevantText,
+  hasText,
+} from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +88,9 @@ type ReportesPayload = {
   reportes: ReporteSugerido[];
   reglas: ReglasReportes;
 };
+
+type ReportesForm = ReportesPayload;
+type ReportesReadiness = BaseReadiness;
 
 // ─── Datos iniciales ──────────────────────────────────────────────────────────
 
@@ -380,6 +401,225 @@ function PillSelect<T extends string>({
       ))}
     </div>
   );
+}
+
+function contarPiezasLista(texto: string): number {
+  return texto
+    .split(/[,;\n]/)
+    .map((frag) => frag.trim())
+    .filter((frag) => frag.length >= 3).length;
+}
+
+function evaluateReportesReadiness(form: ReportesForm): ReportesReadiness {
+  const { reportes, reglas } = form;
+
+  const piezasMetricasTotales = reportes.reduce(
+    (acc, r) => acc + contarPiezasLista(r.metricas),
+    0
+  );
+  const reportesClaros = reportes.filter(
+    (r) => hasText(r.nombre) && hasRelevantText(r.metricas, 14)
+  ).length;
+
+  let definidosStatus: QualityStatus;
+  let definidosDetail: string;
+  if (reportes.length === 0) {
+    definidosStatus = "danger";
+    definidosDetail = "No hay reportes ni tableros sugeridos todavía.";
+  } else if (
+    reportes.length === 1 ||
+    reportesClaros < reportes.length ||
+    reportesClaros < 2
+  ) {
+    definidosStatus = "warning";
+    definidosDetail =
+      reportes.length === 1
+        ? "Hay un único reporte: sumá vistas para otros roles si aplica."
+        : "Hay reportes con nombre o métricas aún incompletos.";
+  } else {
+    definidosStatus = "good";
+    definidosDetail = "Dos o más reportes con nombre y métricas descriptivas.";
+  }
+
+  let metricasStatus: QualityStatus;
+  let metricasDetail: string;
+  if (piezasMetricasTotales === 0) {
+    metricasStatus = "danger";
+    metricasDetail = "No hay métricas escritas para armar KPIs.";
+  } else if (piezasMetricasTotales <= 2) {
+    metricasStatus = "warning";
+    metricasDetail = "Pocas métricas: el tablero puede quedar poco accionable.";
+  } else {
+    metricasStatus = "good";
+    metricasDetail = "Hay varias métricas listadas entre los reportes.";
+  }
+
+  const audienciasDistintas = new Set(
+    reportes.map((r) => r.audiencia.trim()).filter(Boolean)
+  ).size;
+  const audienciasCubiertas = reportes.every((r) => hasText(r.audiencia));
+  const freqExplicitas = reportes.filter(
+    (r) => r.frecuencia !== "bajo-demanda"
+  ).length;
+
+  let frecDestStatus: QualityStatus;
+  let frecDestDetail: string;
+  if (reportes.length === 0) {
+    frecDestStatus = "warning";
+    frecDestDetail = "Sin reportes cargados para asignar audiencia ni frecuencia.";
+  } else {
+    const frecOk =
+      freqExplicitas >= Math.min(2, Math.max(1, reportes.length)) ||
+      hasRelevantText(reglas.generacionAutomatica, 28);
+
+    const destOk =
+      audienciasCubiertas &&
+      (audienciasDistintas >= 2 ||
+        hasRelevantText(reglas.distribucion, 24) ||
+        hasRelevantText(reglas.formatoPreferido, 20));
+
+    const soloUnAspecto =
+      (!frecOk && destOk) || (frecOk && !destOk && audienciasDistintas < 2);
+
+    if (frecOk && destOk) {
+      frecDestStatus = "good";
+      frecDestDetail = "Frecuencia y audiencias/coordinación bien planteadas.";
+    } else if (soloUnAspecto) {
+      frecDestStatus = "warning";
+      frecDestDetail = "Faltan datos de cadencia global o distribución entre roles.";
+    } else if (!audienciasCubiertas) {
+      frecDestStatus = "warning";
+      frecDestDetail = "Al menos un reporte no tiene audiencia de consumo definida.";
+    } else {
+      frecDestStatus = "warning";
+      frecDestDetail = "Reforzá frecuencia operativa y quién usa cada vista.";
+    }
+  }
+
+  const decisionesCubiertas =
+    hasRelevantText(reglas.generacionAutomatica, 26) ||
+    reportes.some((r) => hasRelevantText(r.filtros, 18));
+  const alertasCubiertas = hasRelevantText(reglas.alertasUmbral, 26);
+
+  let decisionesAlertasStatus: QualityStatus;
+  let decisionesAlertasDetail: string;
+  if (decisionesCubiertas && alertasCubiertas) {
+    decisionesAlertasStatus = "good";
+    decisionesAlertasDetail = "Hay reglas ligadas a decisiones y disparadores de alerta.";
+  } else if (decisionesCubiertas || alertasCubiertas) {
+    decisionesAlertasStatus = "warning";
+    decisionesAlertasDetail = "Sumá contenido tanto en decisiones de negocio como en umbrales de alerta.";
+  } else {
+    decisionesAlertasStatus = "warning";
+    decisionesAlertasDetail = "Las reglas aún no conectan reportes con acciones claras.";
+  }
+
+  const sections: SectionQuality[] = [
+    {
+      key: "reportes-definidos",
+      label: "Reportes definidos",
+      status: definidosStatus,
+      detail: definidosDetail,
+    },
+    {
+      key: "metricas-kpis",
+      label: "Métricas y KPIs",
+      status: metricasStatus,
+      detail: metricasDetail,
+    },
+    {
+      key: "frecuencia-destinatarios",
+      label: "Frecuencia y destinatarios",
+      status: frecDestStatus,
+      detail: frecDestDetail,
+    },
+    {
+      key: "decisiones-alertas",
+      label: "Decisiones y alertas",
+      status: decisionesAlertasStatus,
+      detail: decisionesAlertasDetail,
+    },
+  ];
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      30 * STATUS_VALUE[definidosStatus] +
+        30 * STATUS_VALUE[metricasStatus] +
+        20 * STATUS_VALUE[frecDestStatus] +
+        20 * STATUS_VALUE[decisionesAlertasStatus]
+    )
+  );
+
+  const hasDanger = sections.some((s) => s.status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction = "Podés guardar y continuar a Auditoría.";
+  if (reportes.length === 0) {
+    nextAction = "Definí al menos un reporte o dashboard para el CRM.";
+  } else if (piezasMetricasTotales === 0) {
+    nextAction = "Seleccioná las métricas principales que debe medir el CRM.";
+  } else if (frecDestStatus !== "good") {
+    nextAction = "Definí frecuencia y quién usará cada reporte.";
+  } else if (!decisionesCubiertas) {
+    nextAction = "Indicá qué decisiones debe facilitar cada reporte.";
+  } else if (!alertasCubiertas) {
+    nextAction =
+      "Agregá alertas o desvíos críticos para que el CRM detecte problemas.";
+  }
+
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
+
+  if (definidosStatus === "danger") {
+    fieldHints.reportesDefinidos = {
+      status: "danger",
+      text: "Definí qué reportes o tableros necesita el CRM.",
+    };
+  } else if (definidosStatus !== "good") {
+    fieldHints.reportesDefinidos = {
+      status: "warning",
+      text: "Agregar más reportes ayuda a cubrir dirección, comercial y operación.",
+    };
+  }
+
+  if (metricasStatus !== "good") {
+    fieldHints.metricasKPIs = {
+      status: metricasStatus === "danger" ? "danger" : "warning",
+      text:
+        metricasStatus === "danger"
+          ? "Seleccioná métricas para que los reportes tengan valor operativo."
+          : "Un buen tablero necesita varias métricas accionables.",
+    };
+  }
+
+  if (frecDestStatus !== "good") {
+    fieldHints.frecuenciaDestinatarios = {
+      status: "warning",
+      text: "Definir frecuencia y destinatarios evita reportes que nadie usa.",
+    };
+  }
+
+  if (decisionesAlertasStatus !== "good") {
+    fieldHints.decisionesAlertas = {
+      status: "warning",
+      text: "Conectá cada reporte con decisiones, alertas o acciones concretas.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections,
+    fieldHints,
+  };
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
@@ -1229,6 +1469,8 @@ export default function ReportesPage() {
   };
   const step = CRM_SETUP_STEPS.find((s) => s.id === "reportes");
 
+  const readiness = evaluateReportesReadiness({ reportes, reglas });
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -1306,6 +1548,15 @@ export default function ReportesPage() {
               {" "}Esta configuración no crea dashboards reales todavía.
             </p>
           </div>
+
+          <StepReadinessPanel
+            title="Estado de reportes"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "reportes",
+              currentStepPercent: readiness.completionPercent,
+            })}
+          />
 
           {/* Aviso */}
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
@@ -1405,6 +1656,7 @@ export default function ReportesPage() {
               Editá cada reporte según las necesidades del equipo. Los cambios
               son locales — no se guardan todavía.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.reportesDefinidos} />
 
             {/* Resumen rápido */}
             <div className="mb-5 flex flex-wrap gap-3">
@@ -1446,6 +1698,7 @@ export default function ReportesPage() {
                 </div>
               ))}
             </div>
+            <FieldQualityHint hint={readiness.fieldHints.metricasKPIs} />
 
             <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1642,6 +1895,8 @@ export default function ReportesPage() {
               Vista derivada del estado local. Muestra qué reportes consume cada
               rol y con qué frecuencia.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.frecuenciaDestinatarios} />
+
             <div className="space-y-3">
               {audienciasConReportes.map((audiencia) => {
                 const reportesDe = reportes.filter(
@@ -1719,6 +1974,8 @@ export default function ReportesPage() {
               Definí las reglas generales que gobiernan cuándo se generan los
               reportes, cómo se distribuyen y qué umbrales disparan alertas.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.decisionesAlertas} />
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
