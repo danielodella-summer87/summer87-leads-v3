@@ -23,9 +23,9 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 import type {
   BaseReadiness,
-  ConstructorOverallProgress,
   FieldQualityHintValue,
   QualityStatus,
 } from "@/lib/constructor/readiness/types";
@@ -311,22 +311,6 @@ function countNewRiesgosLines(current: string, additions: string[]): number {
     count += 1;
   }
   return count;
-}
-
-function getConstructorOverallProgress(
-  currentStepPercent: number
-): ConstructorOverallProgress {
-  const totalSteps = 7;
-  const completedBaseSteps = 2;
-  const weightedCurrent =
-    currentStepPercent >= 80 ? 1 : currentStepPercent >= 55 ? 0.5 : 0;
-  const completedEquivalent = completedBaseSteps + weightedCurrent;
-  return {
-    percent: Math.round((completedEquivalent / totalSteps) * 100),
-    completedSteps: Math.floor(completedEquivalent),
-    totalSteps,
-    label: "Avance total del Constructor CRM",
-  };
 }
 
 type DiagnosticoReadiness = BaseReadiness;
@@ -1163,9 +1147,10 @@ export default function DiagnosticoPage() {
           <StepReadinessPanel
             title="Estado del diagnóstico"
             readiness={readiness}
-            overallProgress={getConstructorOverallProgress(
-              readiness.completionPercent
-            )}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "diagnostico",
+              currentStepPercent: readiness.completionPercent,
+            })}
           />
 
           {/* ── A: Resumen del diagnóstico esperado ─────────────────────── */}

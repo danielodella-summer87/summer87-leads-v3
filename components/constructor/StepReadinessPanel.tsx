@@ -5,7 +5,6 @@ import type {
 import {
   STATUS_CHIP_CLASS,
   STATUS_DOT_CLASS,
-  STATUS_BAR_CLASS,
   STATUS_TEXT_CLASS,
 } from "@/lib/constructor/readiness/statusStyles";
 import { clampCompletionPercent } from "@/lib/constructor/readiness/helpers";
@@ -24,7 +23,6 @@ export function StepReadinessPanel({
   overallProgress,
 }: StepReadinessPanelProps) {
   const pct = clampCompletionPercent(readiness.completionPercent);
-  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
   const progressBarWidth = `${pct}%`;
   const overallPct =
     overallProgress !== undefined
@@ -60,7 +58,7 @@ export function StepReadinessPanel({
             aria-label={overallProgress.label}
           >
             <div
-              className="h-full rounded-full bg-violet-500/75 transition-all"
+              className="h-full rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 transition-all"
               style={{ width: overallBarWidth }}
             />
           </div>
@@ -106,7 +104,7 @@ export function StepReadinessPanel({
           aria-label={`Completitud de esta etapa: ${title}`}
         >
           <div
-            className={`h-full rounded-full transition-all ${progressBarColor}`}
+            className="h-full rounded-full bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 transition-all"
             style={{ width: progressBarWidth }}
           />
         </div>

@@ -10,9 +10,9 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import { type ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 import type {
   BaseReadiness,
-  ConstructorOverallProgress,
   FieldQualityHintValue,
   QualityStatus,
 } from "@/lib/constructor/readiness/types";
@@ -288,22 +288,6 @@ const DECISIONES_NO_IA_SUGERIDO =
 
 function mergeUnique(current: string[], additions: string[]) {
   return Array.from(new Set([...(Array.isArray(current) ? current : []), ...additions]));
-}
-
-function getConstructorOverallProgress(
-  currentStepPercent: number
-): ConstructorOverallProgress {
-  const totalSteps = 7;
-  const completedBaseSteps = 1;
-  const weightedCurrent =
-    currentStepPercent >= 80 ? 1 : currentStepPercent >= 55 ? 0.5 : 0;
-  const completedEquivalent = completedBaseSteps + weightedCurrent;
-  return {
-    percent: Math.round((completedEquivalent / totalSteps) * 100),
-    completedSteps: Math.floor(completedEquivalent),
-    totalSteps,
-    label: "Avance total del Constructor CRM",
-  };
 }
 
 type CuestionarioReadiness = BaseReadiness;
@@ -1167,9 +1151,10 @@ export default function CuestionarioPage() {
           <StepReadinessPanel
             title="Estado del cuestionario"
             readiness={readiness}
-            overallProgress={getConstructorOverallProgress(
-              readiness.completionPercent
-            )}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "cuestionario",
+              currentStepPercent: readiness.completionPercent,
+            })}
           />
 
           {/* ── Formulario ─────────────────────────────────────────────────── */}

@@ -16,9 +16,9 @@ import {
   pickAllowedPatch,
 } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 import type {
   BaseReadiness,
-  ConstructorOverallProgress,
   FieldQualityHintValue,
   QualityStatus,
 } from "@/lib/constructor/readiness/types";
@@ -129,22 +129,6 @@ const CIUDAD_LIKELY_COUNTRY_TERMS = [
 function includesAny(value: string, terms: string[]): boolean {
   const normalized = value.toLowerCase();
   return terms.some((term) => normalized.includes(term));
-}
-
-function getConstructorOverallProgress(
-  currentStepPercent: number
-): ConstructorOverallProgress {
-  const totalSteps = 7;
-  const completedBaseSteps = 0;
-  const weightedCurrent =
-    currentStepPercent >= 80 ? 1 : currentStepPercent >= 55 ? 0.5 : 0;
-  const completedEquivalent = completedBaseSteps + weightedCurrent;
-  return {
-    percent: Math.round((completedEquivalent / totalSteps) * 100),
-    completedSteps: Math.floor(completedEquivalent),
-    totalSteps,
-    label: "Avance total del Constructor CRM",
-  };
 }
 
 function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
@@ -721,9 +705,10 @@ export default function EmpresaPage() {
           <StepReadinessPanel
             title="Estado de carga"
             readiness={readiness}
-            overallProgress={getConstructorOverallProgress(
-              readiness.completionPercent
-            )}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "empresa",
+              currentStepPercent: readiness.completionPercent,
+            })}
           />
 
           {/* ── Formulario ───────────────────────────────────────────────────── */}
