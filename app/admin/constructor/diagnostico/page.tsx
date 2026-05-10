@@ -83,6 +83,11 @@ type LocalSuggestion = {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
+// Flag local para mostrar/ocultar el botón mock dentro de la UI principal.
+// Se mantiene en false para que la pantalla quede con dos caminos claros
+// (sugerencia rápida + IA sandbox). Cambiar a true sólo para debug interno.
+const SHOW_MOCK_DIAGNOSTICO_BUTTON = false;
+
 const MODELOS_COMERCIALES: { value: ModeloComercial; label: string }[] = [
   { value: "simple", label: "Venta simple" },
   { value: "consultiva", label: "Venta consultiva" },
@@ -664,10 +669,10 @@ export default function DiagnosticoPage() {
     localSuggestions.push({
       id: "riesgos-vacios",
       targetField: "riesgos",
-      title: "Podés cargar riesgos comerciales típicos",
+      title: "Sugerencia rápida",
       description:
-        "Falta de seguimiento, baja trazabilidad, dependencia de personas clave, pérdida de información y criterios poco claros.",
-      actionLabel: "Aplicar sugerencia",
+        "Aplicá una base general de riesgos comerciales si todavía no querés usar IA.",
+      actionLabel: "Aplicar riesgos típicos",
       apply: () => setField("riesgos", appendTextIfMissing(form.riesgos, RIESGOS_SUGERIDOS)),
     });
   }
@@ -976,21 +981,29 @@ export default function DiagnosticoPage() {
                 />
                 {renderFieldSuggestions("riesgos")}
                 <div className="mt-3 rounded-xl border border-violet-100 bg-white/70 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-slate-500">
-                      Prototipo: usa endpoint mock y sandbox opcional.
-                    </p>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-slate-800">
+                        IA recomendada
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+                        Analiza Empresa + Cuestionario para sugerir riesgos
+                        específicos del caso. Revisión humana obligatoria.
+                      </p>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={requestMockAISuggestionForRiesgos}
-                        disabled={mockAIRiesgosLoading || sandboxAIRiesgosLoading}
-                        className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {mockAIRiesgosLoading
-                          ? "Consultando IA mock..."
-                          : "Consultar IA mock"}
-                      </button>
+                      {SHOW_MOCK_DIAGNOSTICO_BUTTON && (
+                        <button
+                          type="button"
+                          onClick={requestMockAISuggestionForRiesgos}
+                          disabled={mockAIRiesgosLoading || sandboxAIRiesgosLoading}
+                          className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {mockAIRiesgosLoading
+                            ? "Consultando IA mock..."
+                            : "Consultar IA mock"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={requestSandboxAISuggestionForRiesgos}
@@ -998,15 +1011,11 @@ export default function DiagnosticoPage() {
                         className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {sandboxAIRiesgosLoading
-                          ? "Consultando IA real sandbox..."
-                          : "Consultar IA real sandbox"}
+                          ? "Consultando IA sandbox..."
+                          : "Consultar IA sandbox"}
                       </button>
                     </div>
                   </div>
-                  <p className="mt-2 text-[11px] text-slate-500">
-                    Sandbox: usa IA real server-side si OPENAI_API_KEY está
-                    configurada. Revisión humana obligatoria.
-                  </p>
 
                   {mockAIRiesgosError && (
                     <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
@@ -1024,18 +1033,6 @@ export default function DiagnosticoPage() {
                     </div>
                   ) : null}
 
-                  {mockAIRiesgosSuggestions.length > 0 && (
-                    <div className="mt-2 space-y-2">
-                      {mockAIRiesgosSuggestions.map((suggestion) => (
-                        <MockAISuggestionCard
-                          key={suggestion.id}
-                          suggestion={suggestion}
-                          onApply={applyMockAIRiesgosSuggestion}
-                          showApply={Array.isArray(suggestion.suggestedValue)}
-                        />
-                      ))}
-                    </div>
-                  )}
                   {sandboxAIRiesgosSuggestions.length > 0 && (
                     <div className="mt-2 space-y-2">
                       {sandboxAIRiesgosSuggestions.map((suggestion) => (
@@ -1048,6 +1045,19 @@ export default function DiagnosticoPage() {
                       ))}
                     </div>
                   )}
+                  {SHOW_MOCK_DIAGNOSTICO_BUTTON &&
+                    mockAIRiesgosSuggestions.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {mockAIRiesgosSuggestions.map((suggestion) => (
+                          <MockAISuggestionCard
+                            key={suggestion.id}
+                            suggestion={suggestion}
+                            onApply={applyMockAIRiesgosSuggestion}
+                            showApply={Array.isArray(suggestion.suggestedValue)}
+                          />
+                        ))}
+                      </div>
+                    )}
                   {aiApplyMessage ? (
                     <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                       {aiApplyMessage}
