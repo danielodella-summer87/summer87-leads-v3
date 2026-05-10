@@ -14,8 +14,25 @@ import {
   ZapOff,
 } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import type {
+  BaseReadiness,
+  QualityStatus,
+  SectionQuality,
+} from "@/lib/constructor/readiness/types";
+import {
+  READINESS_SUMMARY_LABEL,
+  STATUS_VALUE,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  clampCompletionPercent,
+  countSelectedValues,
+  hasRelevantText,
+  hasText,
+} from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorAIAudit } from "@/lib/constructor-ai/useConstructorAIAudit";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
@@ -380,6 +397,229 @@ function PillSelect<T extends string>({
       ))}
     </div>
   );
+}
+
+function evaluateReportesReadiness(args: {
+  reportes: ReporteSugerido[];
+  reglas: ReglasReportes;
+}): BaseReadiness {
+  const reportesSafe = Array.isArray(args.reportes) ? args.reportes : [];
+  const reglasIn = args.reglas;
+  const reglas: ReglasReportes =
+    reglasIn && typeof reglasIn === "object"
+      ? {
+          generacionAutomatica:
+            typeof reglasIn.generacionAutomatica === "string"
+              ? reglasIn.generacionAutomatica
+              : "",
+          distribucion:
+            typeof reglasIn.distribucion === "string" ? reglasIn.distribucion : "",
+          formatoPreferido:
+            typeof reglasIn.formatoPreferido === "string"
+              ? reglasIn.formatoPreferido
+              : "",
+          alertasUmbral:
+            typeof reglasIn.alertasUmbral === "string" ? reglasIn.alertasUmbral : "",
+        }
+      : {
+          generacionAutomatica: "",
+          distribucion: "",
+          formatoPreferido: "",
+          alertasUmbral: "",
+        };
+
+  const activos = reportesSafe.filter((r) => Boolean(r?.activo));
+  const nombresOk = activos.filter((r) => hasText(r?.nombre ?? ""));
+
+  let definicionStatus: QualityStatus;
+  let definicionDetail: string;
+  if (reportesSafe.length === 0) {
+    definicionStatus = "danger";
+    definicionDetail = "Definí al menos un reporte sugerido con nombre.";
+  } else if (activos.length === 0) {
+    definicionStatus = "danger";
+    definicionDetail = "Activá al menos un reporte para que esta etapa sea usable.";
+  } else if (nombresOk.length === 0) {
+    definicionStatus = "danger";
+    definicionDetail = "Completá el nombre en los reportes activos.";
+  } else if (nombresOk.length >= Math.max(3, Math.ceil(activos.length * 0.5))) {
+    definicionStatus = "good";
+    definicionDetail = "La mayoría de los reportes activos tienen nombre claro.";
+  } else if (nombresOk.length < Math.ceil(activos.length * 0.25)) {
+    definicionStatus = "warning";
+    definicionDetail = "Revisá nombres faltantes o genéricos en varios reportes.";
+  } else {
+    definicionStatus = "warning";
+    definicionDetail = "Podés ampliar o precisar nombres de reportes clave.";
+  }
+
+  let metricasStatus: QualityStatus;
+  let metricasDetail: string;
+  const conMetricas = activos.filter((r) =>
+    hasRelevantText(r?.metricas ?? "", 14)
+  );
+  if (activos.length === 0) {
+    metricasStatus = "warning";
+    metricasDetail = "Sin reportes activos no se evalúan métricas o KPIs todavía.";
+  } else if (conMetricas.length === 0) {
+    metricasStatus = "danger";
+    metricasDetail = "Describí qué datos o KPIs muestra al menos un reporte.";
+  } else if (
+    conMetricas.length >= Math.max(2, Math.ceil(activos.length * 0.5))
+  ) {
+    metricasStatus = "good";
+    metricasDetail = "Varios reportes detallan métricas suficientemente.";
+  } else {
+    metricasStatus = "warning";
+    metricasDetail = "Ampliá descripciones de métricas en más reportes activos.";
+  }
+
+  let filtrosStatus: QualityStatus;
+  let filtrosDetail: string;
+  const conFiltros = activos.filter((r) => hasRelevantText(r?.filtros ?? "", 12));
+  if (activos.length === 0) {
+    filtrosStatus = "warning";
+    filtrosDetail =
+      "Sin reportes activos no se pueden evaluar filtros ni frecuencias de uso.";
+  } else if (conFiltros.length === 0) {
+    filtrosStatus = "danger";
+    filtrosDetail = "Indicá filtros típicos (período, etapa, responsable, etc.).";
+  } else if (conFiltros.length >= Math.max(2, Math.ceil(activos.length * 0.5))) {
+    filtrosStatus = "good";
+    filtrosDetail = "Varios reportes explicitan filtros y dimensiones habituales.";
+  } else {
+    filtrosStatus = "warning";
+    filtrosDetail = "Completá filtros en más tarjetas de reporte.";
+  }
+
+  let audienciaStatus: QualityStatus;
+  let audienciaDetail: string;
+  const conAud = activos.filter((r) => hasText(r?.audiencia ?? ""));
+  const audienciasDistintas = new Set(
+    conAud.map((r) => String(r?.audiencia ?? "").trim().toLowerCase()).filter(Boolean)
+  );
+  if (activos.length === 0) {
+    audienciaStatus = "warning";
+    audienciaDetail = "Sin reportes activos no hay audiencia que evaluar.";
+  } else if (conAud.length === 0) {
+    audienciaStatus = "danger";
+    audienciaDetail = "Asigná audiencia (rol o perfil) a cada reporte activo.";
+  } else if (
+    audienciasDistintas.size >= 2 ||
+    conAud.length >= Math.ceil(activos.length * 0.75)
+  ) {
+    audienciaStatus = "good";
+    audienciaDetail = "Hay audiencias definidas para el uso esperado de los reportes.";
+  } else {
+    audienciaStatus = "warning";
+    audienciaDetail = "Diversificá audiencias entre reportes cuando aplique.";
+  }
+
+  const reglasScore = countSelectedValues([
+    hasRelevantText(reglas.generacionAutomatica ?? "", 14),
+    hasRelevantText(reglas.distribucion ?? "", 14),
+    hasRelevantText(reglas.alertasUmbral ?? "", 12),
+  ]);
+  const hayReporteIa = activos.some((r) => r?.tipo === "ia");
+
+  let reglasIaStatus: QualityStatus;
+  let reglasIaDetail: string;
+  if (reglasScore === 0 && !hayReporteIa) {
+    reglasIaStatus = "danger";
+    reglasIaDetail =
+      "Documentá cadencia/generación, distribución o alertas; si hay IA, aclarás umbrales.";
+  } else if (reglasScore >= 3 || (hayReporteIa && reglasScore >= 2)) {
+    reglasIaStatus = "good";
+    reglasIaDetail =
+      hayReporteIa
+        ? "Reglas coherentes para operación de reportes; hay cobertura de reportes IA o alertas."
+        : "Hay buena definición de gobierno (generación, distribución y alertas).";
+  } else if (hayReporteIa || reglasScore >= 1) {
+    reglasIaStatus = "warning";
+    reglasIaDetail =
+      "Completá generación/distribución o alertas con más detalle antes de Auditoría.";
+  } else {
+    reglasIaStatus = "warning";
+    reglasIaDetail = "Los bloques de reglas pueden estar más desarrollados.";
+  }
+
+  const sections: SectionQuality[] = [
+    {
+      key: "def-reportes",
+      label: "Definición sugerida",
+      status: definicionStatus,
+      detail: definicionDetail,
+    },
+    {
+      key: "metricas-kpis",
+      label: "Métricas y KPIs",
+      status: metricasStatus,
+      detail: metricasDetail,
+    },
+    {
+      key: "filtros-frec",
+      label: "Filtros / frecuencia",
+      status: filtrosStatus,
+      detail: filtrosDetail,
+    },
+    {
+      key: "audiencia",
+      label: "Audiencia y uso",
+      status: audienciaStatus,
+      detail: audienciaDetail,
+    },
+    {
+      key: "reglas-ia-alertas",
+      label: "Reglas, IA y alertas",
+      status: reglasIaStatus,
+      detail: reglasIaDetail,
+    },
+  ];
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      20 * STATUS_VALUE[definicionStatus] +
+        20 * STATUS_VALUE[metricasStatus] +
+        20 * STATUS_VALUE[filtrosStatus] +
+        20 * STATUS_VALUE[audienciaStatus] +
+        20 * STATUS_VALUE[reglasIaStatus]
+    )
+  );
+
+  const hasDanger = sections.some((s) => s.status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction =
+    "Podés guardar y continuar a Auditoría cuando la etapa lo permita.";
+  if (definicionStatus === "danger") {
+    nextAction = "Activá reportes sugeridos con nombres claros.";
+  } else if (metricasStatus === "danger") {
+    nextAction =
+      "Completá métricas o KPIs en los reportes activos prioritarios.";
+  } else if (filtrosStatus === "danger") {
+    nextAction = "Agregá filtros habituales en los reportes clave.";
+  } else if (audienciaStatus === "danger") {
+    nextAction = "Asigná audiencia en cada tarjeta de reporte activa.";
+  } else if (reglasIaStatus === "danger") {
+    nextAction =
+      "Completá reglas de generación, distribución o alertas antes de cerrar esta etapa.";
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections,
+    fieldHints: {},
+  };
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
@@ -1228,6 +1468,7 @@ export default function ReportesPage() {
     ia: reportes.filter((r) => r.tipo === "ia").length,
   };
   const step = CRM_SETUP_STEPS.find((s) => s.id === "reportes");
+  const readiness = evaluateReportesReadiness({ reportes, reglas });
 
   return (
     <PageContainer>
@@ -1306,6 +1547,15 @@ export default function ReportesPage() {
               {" "}Esta configuración no crea dashboards reales todavía.
             </p>
           </div>
+
+          <StepReadinessPanel
+            title="Estado de Reportes"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "reportes",
+              currentStepPercent: readiness.completionPercent,
+            })}
+          />
 
           {/* Aviso */}
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
