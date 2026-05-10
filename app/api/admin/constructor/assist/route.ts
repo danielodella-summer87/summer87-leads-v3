@@ -107,8 +107,8 @@ function buildMockSuggestions(input: {
 
   if (
     step === "empresa" &&
-    normalizedField === "pais" &&
-    textIncludes(value, ["quito"])
+    ((normalizedField === "pais" && textIncludes(value, ["quito"])) ||
+      textIncludes(currentForm.pais, ["quito"]))
   ) {
     suggestions.push({
       id: "mock-country-ecuador",
@@ -126,6 +126,86 @@ function buildMockSuggestions(input: {
       confidence: 0.92,
       source: "mock",
     });
+  }
+
+  if (step === "empresa") {
+    const paisHasBuenosAires = textIncludes(currentForm.pais, ["buenos aires"]);
+    const ciudadHasChile = textIncludes(currentForm.ciudad, ["chile"]);
+    const valueHasBoth =
+      textIncludes(value, ["buenos aires"]) && textIncludes(value, ["chile"]);
+
+    if ((paisHasBuenosAires && ciudadHasChile) || valueHasBoth) {
+      suggestions.push({
+        id: "mock-empresa-pais-ciudad-buenos-aires-chile",
+        type: "correction",
+        severity: "medium",
+        title: "Revisar país y ciudad",
+        message:
+          "Parece que país y ciudad podrían estar invertidos o cargados incorrectamente.",
+        reason:
+          "Buenos Aires suele corresponder a ciudad/región de Argentina, mientras que Chile corresponde a país.",
+        targetStep: "empresa",
+        targetField: "pais",
+        suggestedPatch: {
+          pais: "Argentina",
+          ciudad: "Buenos Aires",
+        },
+        requiresHumanApproval: true,
+        confidence: 0.9,
+        source: "mock",
+      });
+    }
+  }
+
+  if (step === "empresa") {
+    const automotrizKeywords = [
+      "pickup",
+      "4x4",
+      "accesorio",
+      "camioneta",
+      "tapa rígida",
+      "tapa rigida",
+      "lona",
+      "baca",
+      "rejilla de techo",
+    ];
+    const automotrizContextValues = [
+      value,
+      currentForm.giro,
+      currentForm.vertical,
+      currentForm.queVende,
+      currentForm.sitioWeb,
+      currentForm.redes,
+      currentForm.nombreComercial,
+    ];
+    const matchesAutomotriz = automotrizContextValues.some((item) =>
+      textIncludes(item, automotrizKeywords)
+    );
+
+    if (matchesAutomotriz) {
+      suggestions.push({
+        id: "mock-empresa-rubro-automotriz-4x4",
+        type: "enrichment",
+        severity: "medium",
+        title: "Clasificar empresa como accesorios automotrices 4x4",
+        message:
+          "Por los productos y canales cargados, la empresa parece enfocada en accesorios para pickups, autos y camionetas.",
+        reason:
+          "El sitio, Instagram, giro y productos mencionan accesorios, pickups, camionetas, tapas rígidas, lonas y equipamiento automotriz.",
+        targetStep: "empresa",
+        targetField: "rubro",
+        suggestedPatch: {
+          rubro: "Otro",
+          rubroPersonalizado: "Automotriz / accesorios 4x4",
+          giro: "Venta e instalación de accesorios para pickups, autos y camionetas",
+          vertical: "Accesorios automotrices 4x4",
+          tiposCliente: ["B2B", "B2C"],
+        },
+        requiresHumanApproval: true,
+        confidence: 0.86,
+        source: "mock",
+      });
+    }
   }
 
   if (

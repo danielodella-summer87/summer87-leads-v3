@@ -28,6 +28,7 @@ type EmpresaForm = {
   redes: string;
   // B. Rubro y vertical
   rubro: string;
+  rubroPersonalizado: string;
   giro: string;
   tiposCliente: string[];
   vertical: string;
@@ -50,6 +51,7 @@ const INITIAL_FORM: EmpresaForm = {
   sitioWeb: "",
   redes: "",
   rubro: "",
+  rubroPersonalizado: "",
   giro: "",
   tiposCliente: [],
   vertical: "",
@@ -137,6 +139,7 @@ export default function EmpresaPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [aiApplyMessage, setAIApplyMessage] = useState<string | null>(null);
   const {
     suggestions: mockAISuggestions,
     loading: mockAILoading,
@@ -236,25 +239,82 @@ export default function EmpresaPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function requestMockAISuggestionForPais() {
+  async function requestMockAISuggestionForEmpresa() {
+    setAIApplyMessage(null);
+    const consolidatedValue = [
+      form.nombreComercial,
+      form.rubro,
+      form.rubroPersonalizado,
+      form.giro,
+      form.vertical,
+      form.queVende,
+      form.sitioWeb,
+      form.redes,
+      form.pais,
+    ]
+      .filter((item) => item.trim().length > 0)
+      .join(" ");
+
     await requestMockAI({
       mode: "field_suggestion",
       step: "empresa",
-      field: "pais",
-      value: form.pais,
+      field: "rubro",
+      value: consolidatedValue,
       currentForm: form,
       constructorContext: {},
     });
   }
 
   function applyMockAISuggestion(suggestion: ConstructorMockAISuggestion) {
-    const patch = pickAllowedPatch(suggestion.suggestedPatch, ["pais", "ciudad"]);
+    const patch = pickAllowedPatch(suggestion.suggestedPatch, [
+      "pais",
+      "ciudad",
+      "rubro",
+      "rubroPersonalizado",
+      "giro",
+      "vertical",
+      "tiposCliente",
+    ]);
 
-    setForm((prev) => ({
-      ...prev,
-      ...(typeof patch.pais === "string" ? { pais: patch.pais } : {}),
-      ...(typeof patch.ciudad === "string" ? { ciudad: patch.ciudad } : {}),
-    }));
+    const nextPatch: Partial<EmpresaForm> = {};
+    let changed = false;
+
+    function applyStringField<K extends keyof EmpresaForm>(key: K) {
+      const incoming = patch[key as string];
+      if (typeof incoming !== "string") return;
+      if (incoming === form[key]) return;
+      (nextPatch[key] as string) = incoming;
+      changed = true;
+    }
+
+    applyStringField("pais");
+    applyStringField("ciudad");
+    applyStringField("rubro");
+    applyStringField("rubroPersonalizado");
+    applyStringField("giro");
+    applyStringField("vertical");
+
+    if (Array.isArray(patch.tiposCliente)) {
+      const incoming = patch.tiposCliente.filter(
+        (item): item is string => typeof item === "string"
+      );
+      const merged = Array.from(new Set([...form.tiposCliente, ...incoming]));
+      const grew = merged.length !== form.tiposCliente.length;
+      const reordered = merged.some(
+        (item, index) => item !== form.tiposCliente[index]
+      );
+      if (grew || reordered) {
+        nextPatch.tiposCliente = merged;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      setForm((prev) => ({ ...prev, ...nextPatch }));
+      setAIApplyMessage("Sugerencia IA aplicada correctamente.");
+    } else {
+      setAIApplyMessage("Esta sugerencia IA ya estaba aplicada.");
+    }
   }
 
   function toggleFuente(fuente: string) {
@@ -403,14 +463,26 @@ export default function EmpresaPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={requestMockAISuggestionForPais}
-                        disabled={mockAILoading || !form.pais.trim()}
+                        onClick={requestMockAISuggestionForEmpresa}
+                        disabled={
+                          mockAILoading ||
+                          !(
+                            form.pais.trim() ||
+                            form.nombreComercial.trim() ||
+                            form.rubro.trim() ||
+                            form.giro.trim() ||
+                            form.vertical.trim() ||
+                            form.queVende.trim() ||
+                            form.sitioWeb.trim() ||
+                            form.redes.trim()
+                          )
+                        }
                         className="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {mockAILoading ? "Consultando IA mock..." : "Consultar IA mock"}
                       </button>
                       <span className="text-[11px] text-violet-700">
-                        Prototipo: usa endpoint mock, no OpenAI.
+                        Prototipo: analiza país, rubro y giro de la empresa con endpoint mock.
                       </span>
                     </div>
 
@@ -432,6 +504,12 @@ export default function EmpresaPage() {
                         ))}
                       </div>
                     )}
+
+                    {aiApplyMessage ? (
+                      <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                        {aiApplyMessage}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div>
@@ -486,6 +564,29 @@ export default function EmpresaPage() {
                         </option>
                       ))}
                     </select>
+                    {(form.rubro === "Otro" ||
+                      !form.rubro ||
+                      form.rubroPersonalizado.trim().length > 0) && (
+                      <div className="mt-3">
+                        <label className={LABEL_CLASS}>
+                          Rubro personalizado o no listado
+                        </label>
+                        <input
+                          type="text"
+                          value={form.rubroPersonalizado}
+                          onChange={(e) =>
+                            setField("rubroPersonalizado", e.target.value)
+                          }
+                          placeholder="Ej: Automotriz / accesorios 4x4"
+                          className={INPUT_CLASS}
+                        />
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          Si el rubro no está en la lista, escribilo acá. El
+                          Constructor usará este valor para interpretar mejor la
+                          empresa.
+                        </p>
+                      </div>
+                    )}
                     {shouldSuggestEducation && (
                       <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                         <p className="text-[11px] font-semibold text-indigo-800">
