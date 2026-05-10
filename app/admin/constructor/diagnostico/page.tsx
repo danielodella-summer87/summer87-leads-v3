@@ -296,6 +296,354 @@ function countNewRiesgosLines(current: string, additions: string[]): number {
   return count;
 }
 
+// ─── Calidad / readiness (helpers locales fase 4K) ────────────────────────────
+
+type QualityStatus = "good" | "warning" | "danger" | "neutral";
+
+type SectionQuality = {
+  key: string;
+  label: string;
+  status: QualityStatus;
+  detail: string;
+};
+
+type DiagnosticoReadiness = {
+  completionPercent: number;
+  overallStatus: QualityStatus;
+  overallLabel: string;
+  nextAction: string;
+  sections: SectionQuality[];
+  fieldHints: Record<string, { status: QualityStatus; text: string }>;
+};
+
+const STATUS_CHIP_CLASS: Record<QualityStatus, string> = {
+  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  neutral: "border-slate-200 bg-slate-50 text-slate-700",
+};
+
+const STATUS_DOT_CLASS: Record<QualityStatus, string> = {
+  good: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-400",
+};
+
+const STATUS_BAR_CLASS: Record<QualityStatus, string> = {
+  good: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-300",
+};
+
+const STATUS_TEXT_CLASS: Record<QualityStatus, string> = {
+  good: "text-emerald-700",
+  warning: "text-amber-700",
+  danger: "text-rose-700",
+  neutral: "text-slate-600",
+};
+
+const STATUS_VALUE: Record<QualityStatus, number> = {
+  good: 1,
+  warning: 0.5,
+  danger: 0,
+  neutral: 0.25,
+};
+
+const STATUS_OVERALL_LABEL: Record<QualityStatus, string> = {
+  good: "Listo para avanzar",
+  warning: "Suficiente, pero conviene revisar",
+  danger: "Faltan datos importantes",
+  neutral: "Sin datos suficientes",
+};
+
+function hasText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function textLength(value: unknown): number {
+  return typeof value === "string" ? value.trim().length : 0;
+}
+
+function countSelectedValues(value: unknown): number {
+  return Array.isArray(value)
+    ? value.filter((item) => Boolean(item)).length
+    : 0;
+}
+
+function evaluateDiagnosticoReadiness(
+  form: DiagnosticoForm
+): DiagnosticoReadiness {
+  // A. Resumen esperado
+  const resumenSelected = [
+    form.modeloComercial,
+    form.complejidad,
+    form.madurez,
+    form.dependenciaHumana,
+  ].filter((value) => hasText(value)).length;
+  let resumenStatus: QualityStatus;
+  let resumenDetail: string;
+  if (hasText(form.modeloComercial) && resumenSelected >= 3) {
+    resumenStatus = "good";
+    resumenDetail = "Modelo, complejidad y madurez ya definidos.";
+  } else if (resumenSelected >= 1) {
+    resumenStatus = "warning";
+    resumenDetail = hasText(form.modeloComercial)
+      ? "Sumá complejidad, madurez o dependencia humana."
+      : "Falta el modelo comercial principal.";
+  } else {
+    resumenStatus = "danger";
+    resumenDetail = "Resumen del diagnóstico sin definir.";
+  }
+
+  // B. Hallazgos principales
+  const comoVendeLen = textLength(form.comoVende);
+  const oportunidadesLen = textLength(form.oportunidades);
+  const riesgosLen = textLength(form.riesgos);
+  const puntosCiegosLen = textLength(form.puntosCiegos);
+  const hallazgosRelevantes = [
+    comoVendeLen >= 30,
+    oportunidadesLen >= 30,
+    riesgosLen >= 30,
+    puntosCiegosLen >= 30,
+  ].filter(Boolean).length;
+  let hallazgosStatus: QualityStatus;
+  let hallazgosDetail: string;
+  if (!hasText(form.riesgos)) {
+    hallazgosStatus = "danger";
+    hallazgosDetail = "Riesgos comerciales sin completar.";
+  } else if (hallazgosRelevantes >= 3) {
+    hallazgosStatus = "good";
+    hallazgosDetail = "Hallazgos sólidos para diseñar el CRM.";
+  } else if (hallazgosRelevantes >= 1) {
+    hallazgosStatus = "warning";
+    hallazgosDetail = "Sumá detalle en proceso, oportunidades o puntos ciegos.";
+  } else {
+    hallazgosStatus = "danger";
+    hallazgosDetail = "Hallazgos vacíos: sin contexto para diagnóstico.";
+  }
+
+  // C. Matriz de diagnóstico
+  const matrizBloquesEval = [
+    form.matrizProceso,
+    form.matrizDatos,
+    form.matrizEquipo,
+    form.matrizAutomatizacion,
+  ];
+  const matrizEvaluados = matrizBloquesEval.filter((bloque) => {
+    const estadoUtil = bloque.estado !== "" && bloque.estado !== "pendiente";
+    const notaUtil = textLength(bloque.nota) >= 10;
+    return estadoUtil || notaUtil;
+  }).length;
+  let matrizStatus: QualityStatus;
+  let matrizDetail: string;
+  if (matrizEvaluados >= 3) {
+    matrizStatus = "good";
+    matrizDetail = "Matriz evaluada en la mayoría de las dimensiones.";
+  } else if (matrizEvaluados >= 1) {
+    matrizStatus = "warning";
+    matrizDetail = "Faltan dimensiones por evaluar.";
+  } else {
+    matrizStatus = "danger";
+    matrizDetail = "Matriz sin evaluar todavía.";
+  }
+
+  // D. Recomendaciones
+  const recCount = countSelectedValues(form.recomendaciones);
+  const preguntasFilled = form.preguntas.filter(
+    (pregunta) => textLength(pregunta) >= 5
+  ).length;
+  let recomendacionesStatus: QualityStatus;
+  let recomendacionesDetail: string;
+  if (recCount >= 4) {
+    recomendacionesStatus = "good";
+    recomendacionesDetail = "Recomendaciones base seleccionadas.";
+  } else if (recCount >= 1) {
+    recomendacionesStatus = "warning";
+    recomendacionesDetail =
+      preguntasFilled >= 3
+        ? "Pocas recomendaciones marcadas (preguntas abiertas ya cubiertas)."
+        : "Pocas recomendaciones marcadas todavía.";
+  } else {
+    recomendacionesStatus = "warning";
+    recomendacionesDetail = "Sin recomendaciones marcadas todavía.";
+  }
+
+  // Porcentaje ponderado
+  const completionPercent = Math.round(
+    20 * STATUS_VALUE[resumenStatus] +
+      40 * STATUS_VALUE[hallazgosStatus] +
+      25 * STATUS_VALUE[matrizStatus] +
+      15 * STATUS_VALUE[recomendacionesStatus]
+  );
+
+  // Estado general
+  const hasDanger = [
+    resumenStatus,
+    hallazgosStatus,
+    matrizStatus,
+    recomendacionesStatus,
+  ].some((status) => status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  // Próxima acción priorizada
+  let nextAction = "Podés guardar y continuar a Proceso/Pipeline.";
+  if (!hasText(form.riesgos)) {
+    nextAction = "Completá Riesgos comerciales o consultá IA sandbox.";
+  } else if (!hasText(form.oportunidades)) {
+    nextAction =
+      "Completá Oportunidades detectadas para orientar el diseño del CRM.";
+  } else if (!hasText(form.comoVende)) {
+    nextAction = "Describí cómo vende hoy la empresa.";
+  } else if (matrizStatus !== "good") {
+    nextAction = "Evaluá la matriz de diagnóstico antes de avanzar.";
+  } else if (recCount === 0) {
+    nextAction =
+      "Seleccioná recomendaciones preliminares para guiar el siguiente paso.";
+  }
+
+  // Hints por campo
+  const fieldHints: Record<string, { status: QualityStatus; text: string }> = {};
+
+  if (!hasText(form.modeloComercial)) {
+    fieldHints.modeloComercial = {
+      status: "danger",
+      text: "Definí el modelo comercial principal.",
+    };
+  }
+  if (!hasText(form.complejidad)) {
+    fieldHints.complejidad = {
+      status: "warning",
+      text: "Marcá el nivel de complejidad para calibrar el CRM.",
+    };
+  }
+  if (!hasText(form.madurez)) {
+    fieldHints.madurez = {
+      status: "warning",
+      text: "Marcá la madurez comercial actual para priorizar acciones.",
+    };
+  }
+  if (!hasText(form.dependenciaHumana)) {
+    fieldHints.dependenciaHumana = {
+      status: "warning",
+      text: "Marcá cuánto depende el proceso del criterio humano.",
+    };
+  }
+
+  if (!hasText(form.comoVende)) {
+    fieldHints.comoVende = {
+      status: "warning",
+      text: "Describir el proceso actual mejora la calidad del diagnóstico.",
+    };
+  } else if (comoVendeLen < 30) {
+    fieldHints.comoVende = {
+      status: "warning",
+      text: "Sumá detalle: cómo se origina, califica, propone y cierra.",
+    };
+  }
+  if (!hasText(form.oportunidades)) {
+    fieldHints.oportunidades = {
+      status: "warning",
+      text: "Ayuda a definir qué módulos y automatizaciones conviene priorizar.",
+    };
+  } else if (oportunidadesLen < 30) {
+    fieldHints.oportunidades = {
+      status: "warning",
+      text: "Sumá oportunidades específicas para que el CRM las cubra.",
+    };
+  }
+  if (!hasText(form.riesgos)) {
+    fieldHints.riesgos = {
+      status: "danger",
+      text: "Campo clave: agregá riesgos o usá IA sandbox.",
+    };
+  } else if (riesgosLen < 30) {
+    fieldHints.riesgos = {
+      status: "warning",
+      text: "Sumá más detalle de riesgos para alimentar la IA.",
+    };
+  }
+  if (!hasText(form.puntosCiegos)) {
+    fieldHints.puntosCiegos = {
+      status: "warning",
+      text: "Registrá información faltante para evitar supuestos.",
+    };
+  }
+
+  // Matriz: hint por dimensión sin evaluar
+  const matrizFieldKeys: Array<keyof DiagnosticoForm> = [
+    "matrizProceso",
+    "matrizDatos",
+    "matrizEquipo",
+    "matrizAutomatizacion",
+  ];
+  for (const key of matrizFieldKeys) {
+    const bloque = form[key] as BloqueMatriz;
+    const estadoVacio = bloque.estado === "" || bloque.estado === "pendiente";
+    if (estadoVacio) {
+      fieldHints[key as string] = {
+        status: "warning",
+        text: "Marcá el estado de esta dimensión para medir readiness.",
+      };
+    }
+  }
+
+  // Recomendaciones
+  if (recCount === 0) {
+    fieldHints.recomendaciones = {
+      status: "warning",
+      text: "Seleccioná al menos algunas acciones preliminares.",
+    };
+  } else if (recCount < 4) {
+    fieldHints.recomendaciones = {
+      status: "warning",
+      text: "Marcá más recomendaciones para tener un plan más completo.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: STATUS_OVERALL_LABEL[overallStatus],
+    nextAction,
+    sections: [
+      {
+        key: "resumen",
+        label: "Resumen esperado",
+        status: resumenStatus,
+        detail: resumenDetail,
+      },
+      {
+        key: "hallazgos",
+        label: "Hallazgos principales",
+        status: hallazgosStatus,
+        detail: hallazgosDetail,
+      },
+      {
+        key: "matriz",
+        label: "Matriz de diagnóstico",
+        status: matrizStatus,
+        detail: matrizDetail,
+      },
+      {
+        key: "recomendaciones",
+        label: "Recomendaciones",
+        status: recomendacionesStatus,
+        detail: recomendacionesDetail,
+      },
+    ],
+    fieldHints,
+  };
+}
+
 // ─── Estilos compartidos ──────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-xs font-semibold text-slate-600 mb-1";
@@ -789,6 +1137,10 @@ export default function DiagnosticoPage() {
     { key: "matrizAutomatizacion", title: "Automatización e IA", icon: Bot },
   ];
 
+  const readiness = evaluateDiagnosticoReadiness(form);
+  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
+  const progressBarWidth = `${Math.min(100, Math.max(0, readiness.completionPercent))}%`;
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -838,7 +1190,7 @@ export default function DiagnosticoPage() {
           </div>
 
           {/* Aviso de bloque */}
-          <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-xs leading-relaxed text-amber-700">
               <span className="font-semibold">
@@ -849,6 +1201,65 @@ export default function DiagnosticoPage() {
               El diagnóstico todavía no se genera con IA; esta pantalla prepara
               la estructura del futuro motor de diagnóstico comercial.
             </p>
+          </div>
+
+          {/* ── Panel: Estado del diagnóstico ─────────────────────────────── */}
+          <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800">
+                  Estado del diagnóstico
+                </p>
+                <p
+                  className={`mt-0.5 text-xs font-medium ${STATUS_TEXT_CLASS[readiness.overallStatus]}`}
+                >
+                  {readiness.overallLabel}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-semibold leading-none text-slate-900">
+                  {readiness.completionPercent}%
+                </p>
+                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
+                  completado
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
+              role="progressbar"
+              aria-valuenow={readiness.completionPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className={`h-full rounded-full transition-all ${progressBarColor}`}
+                style={{ width: progressBarWidth }}
+              />
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
+              <span className="font-semibold text-slate-700">
+                Siguiente recomendado:
+              </span>{" "}
+              {readiness.nextAction}
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {readiness.sections.map((section) => (
+                <span
+                  key={section.key}
+                  title={section.detail}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${STATUS_CHIP_CLASS[section.status]}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASS[section.status]}`}
+                  />
+                  {section.label}
+                </span>
+              ))}
+            </div>
           </div>
 
           {/* ── A: Resumen del diagnóstico esperado ─────────────────────── */}
@@ -872,6 +1283,13 @@ export default function DiagnosticoPage() {
                     </option>
                   ))}
                 </select>
+                {readiness.fieldHints.modeloComercial ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.modeloComercial.status]}`}
+                  >
+                    {readiness.fieldHints.modeloComercial.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("modeloComercial")}
               </div>
 
@@ -886,6 +1304,13 @@ export default function DiagnosticoPage() {
                   value={form.complejidad}
                   onChange={(v) => setField("complejidad", v)}
                 />
+                {readiness.fieldHints.complejidad ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.complejidad.status]}`}
+                  >
+                    {readiness.fieldHints.complejidad.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("complejidad")}
               </div>
 
@@ -901,6 +1326,13 @@ export default function DiagnosticoPage() {
                   value={form.madurez}
                   onChange={(v) => setField("madurez", v)}
                 />
+                {readiness.fieldHints.madurez ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.madurez.status]}`}
+                  >
+                    {readiness.fieldHints.madurez.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("madurez")}
               </div>
 
@@ -915,6 +1347,13 @@ export default function DiagnosticoPage() {
                   value={form.dependenciaHumana}
                   onChange={(v) => setField("dependenciaHumana", v)}
                 />
+                {readiness.fieldHints.dependenciaHumana ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.dependenciaHumana.status]}`}
+                  >
+                    {readiness.fieldHints.dependenciaHumana.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("dependenciaHumana")}
               </div>
 
@@ -944,6 +1383,13 @@ export default function DiagnosticoPage() {
                   value={form.comoVende}
                   onChange={(e) => setField("comoVende", e.target.value)}
                 />
+                {readiness.fieldHints.comoVende ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.comoVende.status]}`}
+                  >
+                    {readiness.fieldHints.comoVende.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("comoVende")}
               </div>
 
@@ -961,6 +1407,13 @@ export default function DiagnosticoPage() {
                   value={form.oportunidades}
                   onChange={(e) => setField("oportunidades", e.target.value)}
                 />
+                {readiness.fieldHints.oportunidades ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.oportunidades.status]}`}
+                  >
+                    {readiness.fieldHints.oportunidades.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("oportunidades")}
               </div>
 
@@ -983,6 +1436,13 @@ export default function DiagnosticoPage() {
                     setSandboxAIWarning(null);
                   }}
                 />
+                {readiness.fieldHints.riesgos ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.riesgos.status]}`}
+                  >
+                    {readiness.fieldHints.riesgos.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("riesgos")}
                 <div className="mt-3 rounded-xl border border-violet-100 bg-white/70 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1084,6 +1544,13 @@ export default function DiagnosticoPage() {
                   value={form.puntosCiegos}
                   onChange={(e) => setField("puntosCiegos", e.target.value)}
                 />
+                {readiness.fieldHints.puntosCiegos ? (
+                  <p
+                    className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.puntosCiegos.status]}`}
+                  >
+                    {readiness.fieldHints.puntosCiegos.text}
+                  </p>
+                ) : null}
                 {renderFieldSuggestions("puntosCiegos")}
               </div>
 
@@ -1156,6 +1623,13 @@ export default function DiagnosticoPage() {
                         </span>
                       </p>
                     )}
+                    {readiness.fieldHints[key] ? (
+                      <p
+                        className={`mt-2 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints[key].status]}`}
+                      >
+                        {readiness.fieldHints[key].text}
+                      </p>
+                    ) : null}
                   </div>
                 );
               })}
@@ -1195,6 +1669,13 @@ export default function DiagnosticoPage() {
                 );
               })}
             </div>
+            {readiness.fieldHints.recomendaciones ? (
+              <p
+                className={`mt-3 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.recomendaciones.status]}`}
+              >
+                {readiness.fieldHints.recomendaciones.text}
+              </p>
+            ) : null}
           </div>
 
           {/* ── E: Preguntas abiertas ────────────────────────────────────── */}
