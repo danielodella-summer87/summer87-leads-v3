@@ -21,7 +21,20 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
+import { clampCompletionPercent, countSelectedValues, textLength } from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
+import {
+  READINESS_SUMMARY_LABEL,
+  STATUS_VALUE,
+} from "@/lib/constructor/readiness/statusStyles";
+import type {
+  BaseReadiness,
+  FieldQualityHintValue,
+  QualityStatus,
+} from "@/lib/constructor/readiness/types";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -219,6 +232,238 @@ function normalizeDocumentoRegistrado(
   };
 }
 
+type DocumentosReadiness = BaseReadiness;
+
+type DocumentosReadinessInput = {
+  form: DocumentoForm;
+  lista: DocumentoRegistrado[];
+  tiposSeleccionados: TipoDocumento[];
+};
+
+function includesAnyKeyword(haystack: string, keywords: readonly string[]): boolean {
+  const h = haystack.toLowerCase();
+  return keywords.some((k) => h.includes(k));
+}
+
+function evaluateDocumentosReadiness(
+  data: DocumentosReadinessInput
+): DocumentosReadiness {
+  const { form, lista, tiposSeleccionados } = data;
+  const tiposCount = countSelectedValues(tiposSeleccionados);
+
+  let tiposStatus: QualityStatus;
+  let tiposDetail: string;
+  if (tiposCount === 0) {
+    tiposStatus = "danger";
+    tiposDetail = "Sin tipos seleccionados.";
+  } else if (tiposCount === 1) {
+    tiposStatus = "warning";
+    tiposDetail = "Un solo tipo seleccionado; sumá más si aplica.";
+  } else {
+    tiposStatus = "good";
+    tiposDetail = "Variedad de tipos de fuente marcada.";
+  }
+
+  let materialesLen = 0;
+  for (const doc of lista) {
+    materialesLen += textLength(doc.nombre) + textLength(doc.usoActual);
+  }
+
+  let materialesStatus: QualityStatus;
+  let materialesDetail: string;
+  if (lista.length === 0) {
+    materialesStatus = "danger";
+    materialesDetail = "Sin documentos registrados en la lista.";
+  } else if (materialesLen < 30) {
+    materialesStatus = "warning";
+    materialesDetail = "Pocos detalles sobre los materiales disponibles.";
+  } else {
+    materialesStatus = "good";
+    materialesDetail = "Buen nivel de detalle sobre materiales.";
+  }
+
+  const calidadHaystack = lista.map((d) => `${d.nombre} ${d.usoActual}`).join(" ");
+  const CALIDAD_KEYWORDS = [
+    "actualizado",
+    "actualizados",
+    "vigente",
+    "ordenado",
+    "ordenados",
+    "organizado",
+    "desactualizado",
+    "desactualizados",
+    "incompleto",
+    "incompletos",
+    "faltante",
+    "faltantes",
+  ];
+  const hasCalidadKeyword = includesAnyKeyword(calidadHaystack, CALIDAD_KEYWORDS);
+  const docsConImportancia = lista.filter((d) => d.importancia !== "").length;
+
+  let calidadStatus: QualityStatus;
+  let calidadDetail: string;
+  if (lista.length === 0) {
+    calidadStatus = "warning";
+    calidadDetail = "Registrá documentos para describir calidad y vigencia.";
+  } else if (
+    hasCalidadKeyword ||
+    docsConImportancia >= Math.ceil(lista.length / 2)
+  ) {
+    calidadStatus = "good";
+    calidadDetail = "Hay señales de orden, vigencia o importancia marcada.";
+  } else {
+    calidadStatus = "warning";
+    calidadDetail = "Indicá si los materiales están actualizados u ordenados.";
+  }
+
+  const contextoPieces = [...lista.map((d) => d.usoActual), form.usoActual];
+  let contextoLen = 0;
+  for (const s of contextoPieces) {
+    contextoLen += textLength(s);
+  }
+  const contextoHaystack = contextoPieces.join(" ");
+  const CONTEXTO_KEYWORDS = [
+    "faltante",
+    "faltan",
+    "no tenemos",
+    "duda",
+    "dudas",
+    "pendiente",
+    "revisar",
+    "necesitamos",
+  ];
+  const hasContextoKeyword = includesAnyKeyword(contextoHaystack, CONTEXTO_KEYWORDS);
+
+  let contextStatus: QualityStatus;
+  let contextDetail: string;
+  if (contextoLen >= 30) {
+    contextStatus = "good";
+    contextDetail = "Contexto útil sobre uso, faltantes o revisión.";
+  } else if (contextoLen > 0 || hasContextoKeyword) {
+    contextStatus = "warning";
+    contextDetail = "Ampliá qué falta o qué debería revisar el diagnóstico.";
+  } else {
+    contextStatus = "warning";
+    contextDetail = "Anotá faltantes o dudas para la IA.";
+  }
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      30 * STATUS_VALUE[tiposStatus] +
+        35 * STATUS_VALUE[materialesStatus] +
+        15 * STATUS_VALUE[calidadStatus] +
+        20 * STATUS_VALUE[contextStatus]
+    )
+  );
+
+  const hasDanger = [
+    tiposStatus,
+    materialesStatus,
+    calidadStatus,
+    contextStatus,
+  ].some((s) => s === "danger");
+
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction = "Podés guardar y continuar a Diagnóstico.";
+  if (tiposCount === 0) {
+    nextAction = "Seleccioná al menos un tipo de documento fuente.";
+  } else if (lista.length === 0) {
+    nextAction =
+      "Describí qué documentos o materiales tiene hoy la empresa.";
+  } else if (materialesLen < 30) {
+    nextAction = "Agregá más detalle sobre los materiales disponibles.";
+  } else if (contextoLen < 30 && !hasContextoKeyword) {
+    nextAction =
+      "Agregá qué documentos faltan o qué debería revisar la IA.";
+  }
+
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
+
+  if (tiposCount === 0) {
+    fieldHints.tiposDocumentos = {
+      status: "danger",
+      text: "Seleccioná los tipos de fuentes disponibles para orientar el diagnóstico.",
+    };
+  } else if (tiposCount === 1) {
+    fieldHints.tiposDocumentos = {
+      status: "warning",
+      text: "Agregar más tipos de documentos mejora el contexto del CRM.",
+    };
+  }
+
+  if (lista.length === 0) {
+    fieldHints.materialesDisponibles = {
+      status: "danger",
+      text: "Campo clave: describí qué materiales existen hoy.",
+    };
+  } else if (materialesLen < 30) {
+    fieldHints.materialesDisponibles = {
+      status: "warning",
+      text: "Agregá más detalle: origen, formato, vigencia y utilidad.",
+    };
+  }
+
+  if (
+    lista.length > 0 &&
+    !hasCalidadKeyword &&
+    docsConImportancia < Math.ceil(lista.length / 2)
+  ) {
+    fieldHints.calidadDocumentos = {
+      status: "warning",
+      text: "Indicá si los documentos están actualizados, completos o desordenados.",
+    };
+  }
+
+  if (contextoLen < 30 && tiposCount > 0) {
+    fieldHints.contextoIA = {
+      status: "warning",
+      text: "Anotá documentos faltantes o dudas para evitar supuestos en Diagnóstico.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections: [
+      {
+        key: "tipos",
+        label: "Tipos de documentos",
+        status: tiposStatus,
+        detail: tiposDetail,
+      },
+      {
+        key: "materiales",
+        label: "Materiales disponibles",
+        status: materialesStatus,
+        detail: materialesDetail,
+      },
+      {
+        key: "calidad",
+        label: "Calidad y actualización",
+        status: calidadStatus,
+        detail: calidadDetail,
+      },
+      {
+        key: "contexto",
+        label: "Faltantes / contexto IA",
+        status: contextStatus,
+        detail: contextDetail,
+      },
+    ],
+    fieldHints,
+  };
+}
+
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const LABEL_CLASS = "block text-xs font-semibold text-slate-600 mb-1";
@@ -408,6 +653,12 @@ export default function DocumentosPage() {
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "documentos");
 
+  const readiness = evaluateDocumentosReadiness({
+    form,
+    lista,
+    tiposSeleccionados,
+  });
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -465,12 +716,22 @@ export default function DocumentosPage() {
             </div>
           </div>
 
+          <StepReadinessPanel
+            title="Estado de documentos fuente"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "documentos",
+              currentStepPercent: readiness.completionPercent,
+            })}
+          />
+
           {/* ── A: Tipos de documentos ──────────────────────────────────── */}
           <div className="mb-8">
             <SectionHeader letter="A" title="¿Qué tipos de documentos tenés?" />
             <p className="mb-4 text-xs text-slate-500">
               Seleccioná todos los tipos que aplican a tu negocio. Podés marcar más de uno.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.tiposDocumentos} />
             {tiposSeleccionados.length > 0 && (
               <p className="mb-3 text-[11px] text-slate-500">
                 <span className="font-semibold text-slate-700">{tiposSeleccionados.length}</span> tipo{tiposSeleccionados.length !== 1 ? "s" : ""} seleccionado{tiposSeleccionados.length !== 1 ? "s" : ""}
@@ -615,6 +876,7 @@ export default function DocumentosPage() {
                       setForm((p) => ({ ...p, usoActual: e.target.value }))
                     }
                   />
+                  <FieldQualityHint hint={readiness.fieldHints.contextoIA} />
                 </div>
 
                 <div className="sm:col-span-2">
@@ -642,6 +904,7 @@ export default function DocumentosPage() {
                       </button>
                     ))}
                   </div>
+                  <FieldQualityHint hint={readiness.fieldHints.calidadDocumentos} />
                 </div>
 
               </div>
@@ -668,6 +931,7 @@ export default function DocumentosPage() {
           {/* ── D: Lista de documentos registrados ──────────────────────── */}
           <div className="mb-8">
             <SectionHeader letter="D" title="Documentos registrados en esta sesión" />
+            <FieldQualityHint hint={readiness.fieldHints.materialesDisponibles} />
             {lista.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center">
                 <AlertCircle className="h-8 w-8 text-slate-300" />
