@@ -98,6 +98,366 @@ const OPCIONES_VISITA = ["Sí", "No", "Depende"];
 
 const OPCIONES_COTIZACION = ["Estándar", "Personalizada", "Mixta"];
 
+// ─── Calidad / readiness (helpers locales fase 4I) ────────────────────────────
+
+type QualityStatus = "good" | "warning" | "danger" | "neutral";
+
+type SectionQuality = {
+  key: string;
+  label: string;
+  status: QualityStatus;
+  detail: string;
+};
+
+type EmpresaReadiness = {
+  completionPercent: number;
+  overallStatus: QualityStatus;
+  overallLabel: string;
+  nextAction: string;
+  sections: SectionQuality[];
+  fieldHints: Record<string, { status: QualityStatus; text: string }>;
+};
+
+const STATUS_CHIP_CLASS: Record<QualityStatus, string> = {
+  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  neutral: "border-slate-200 bg-slate-50 text-slate-700",
+};
+
+const STATUS_DOT_CLASS: Record<QualityStatus, string> = {
+  good: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-400",
+};
+
+const STATUS_BAR_CLASS: Record<QualityStatus, string> = {
+  good: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-300",
+};
+
+const STATUS_TEXT_CLASS: Record<QualityStatus, string> = {
+  good: "text-emerald-700",
+  warning: "text-amber-700",
+  danger: "text-rose-700",
+  neutral: "text-slate-600",
+};
+
+const STATUS_VALUE: Record<QualityStatus, number> = {
+  good: 1,
+  warning: 0.5,
+  danger: 0,
+  neutral: 0.25,
+};
+
+const STATUS_OVERALL_LABEL: Record<QualityStatus, string> = {
+  good: "Listo para avanzar",
+  warning: "Suficiente, pero conviene revisar",
+  danger: "Faltan datos importantes",
+  neutral: "Sin datos suficientes",
+};
+
+const PAIS_LIKELY_CITY_TERMS = [
+  "buenos aires",
+  "montevideo",
+  "quito",
+  "guayaquil",
+];
+
+const CIUDAD_LIKELY_COUNTRY_TERMS = [
+  "uruguay",
+  "argentina",
+  "chile",
+  "ecuador",
+];
+
+function hasText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function textLength(value: unknown): number {
+  return typeof value === "string" ? value.trim().length : 0;
+}
+
+function includesAny(value: string, terms: string[]): boolean {
+  const normalized = value.toLowerCase();
+  return terms.some((term) => normalized.includes(term));
+}
+
+function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
+  // Detección de campos invertidos País/Ciudad
+  const paisLooksLikeCity =
+    hasText(form.pais) && includesAny(form.pais, PAIS_LIKELY_CITY_TERMS);
+  const ciudadLooksLikeCountry =
+    hasText(form.ciudad) &&
+    includesAny(form.ciudad, CIUDAD_LIKELY_COUNTRY_TERMS);
+  const swappedGeo = paisLooksLikeCity || ciudadLooksLikeCountry;
+
+  // A. Identidad
+  let identidadStatus: QualityStatus;
+  let identidadDetail: string;
+  if (!hasText(form.nombreComercial) || !hasText(form.pais)) {
+    identidadStatus = "danger";
+    identidadDetail = "Faltan datos básicos de identidad.";
+  } else if (paisLooksLikeCity && ciudadLooksLikeCountry) {
+    identidadStatus = "danger";
+    identidadDetail = "País y ciudad parecen invertidos.";
+  } else if (swappedGeo) {
+    identidadStatus = "warning";
+    identidadDetail = "Revisar coherencia de país y ciudad.";
+  } else if (!hasText(form.ciudad)) {
+    identidadStatus = "warning";
+    identidadDetail = "Falta la ciudad o región.";
+  } else {
+    identidadStatus = "good";
+    identidadDetail = "Identidad clara y coherente.";
+  }
+
+  // B. Rubro y vertical
+  let rubroStatus: QualityStatus;
+  let rubroDetail: string;
+  const rubroIsOtro = form.rubro === "Otro";
+  const giroLen = textLength(form.giro);
+  const verticalLen = textLength(form.vertical);
+  if (!hasText(form.rubro) && !hasText(form.rubroPersonalizado)) {
+    rubroStatus = "danger";
+    rubroDetail = "Sin rubro asignado todavía.";
+  } else if (rubroIsOtro && !hasText(form.rubroPersonalizado)) {
+    rubroStatus = "warning";
+    rubroDetail = "Completá rubro personalizado.";
+  } else if (giroLen < 10 && verticalLen < 10) {
+    rubroStatus = "warning";
+    rubroDetail = "Sumá detalle de giro o vertical.";
+  } else {
+    rubroStatus = "good";
+    rubroDetail = "Rubro y vertical claros.";
+  }
+
+  // C. Modelo comercial
+  let modeloStatus: QualityStatus;
+  let modeloDetail: string;
+  const queVendeLen = textLength(form.queVende);
+  const tieneTipoCliente = form.tiposCliente.length > 0;
+  const tieneFuente = form.fuentesProspectos.length > 0;
+  if (!hasText(form.queVende)) {
+    modeloStatus = "danger";
+    modeloDetail = "Falta describir qué vende la empresa.";
+  } else if (queVendeLen < 30) {
+    modeloStatus = "warning";
+    modeloDetail = "La descripción de venta es breve.";
+  } else if (!tieneTipoCliente && !tieneFuente) {
+    modeloStatus = "warning";
+    modeloDetail = "Marcá tipo de cliente o canales de origen.";
+  } else {
+    modeloStatus = "good";
+    modeloDetail = "Modelo comercial bien delineado.";
+  }
+
+  // D. Contexto IA
+  const contextoFilled = [
+    form.comoTrabajaHoy,
+    form.queEsperaLograr,
+    form.queDeberiaAnalizarIA,
+  ].filter((value) => textLength(value) >= 20).length;
+  let contextoStatus: QualityStatus;
+  let contextoDetail: string;
+  if (contextoFilled === 0) {
+    contextoStatus = "danger";
+    contextoDetail = "Sin contexto para IA todavía.";
+  } else if (contextoFilled === 1) {
+    contextoStatus = "warning";
+    contextoDetail = "Sumá un campo más de contexto IA.";
+  } else {
+    contextoStatus = "good";
+    contextoDetail = "Buen contexto para futuras IA.";
+  }
+
+  // Porcentaje ponderado
+  const completionPercent = Math.round(
+    25 * STATUS_VALUE[identidadStatus] +
+      25 * STATUS_VALUE[rubroStatus] +
+      30 * STATUS_VALUE[modeloStatus] +
+      20 * STATUS_VALUE[contextoStatus]
+  );
+
+  // Estado general
+  const hasDanger = [
+    identidadStatus,
+    rubroStatus,
+    modeloStatus,
+    contextoStatus,
+  ].some((status) => status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  // Próxima acción priorizada
+  let nextAction = "Podés guardar y continuar al Cuestionario.";
+  if (swappedGeo) {
+    nextAction =
+      "Revisá País/Ciudad. Hay datos que parecen estar en el campo equivocado.";
+  } else if (!hasText(form.nombreComercial)) {
+    nextAction = "Completá el nombre comercial de la empresa.";
+  } else if (!hasText(form.rubro) && !hasText(form.rubroPersonalizado)) {
+    nextAction = "Completá Rubro personalizado o elegí un rubro principal.";
+  } else if (rubroIsOtro && !hasText(form.rubroPersonalizado)) {
+    nextAction =
+      "Completá Rubro personalizado para que el Constructor entienda mejor el sector.";
+  } else if (!hasText(form.queVende)) {
+    nextAction = "Completá qué vende la empresa antes de avanzar.";
+  } else if (contextoFilled === 0) {
+    nextAction =
+      "Agregá contexto para IA futura para mejorar las sugerencias posteriores.";
+  }
+
+  // Hints por campo
+  const fieldHints: Record<string, { status: QualityStatus; text: string }> = {};
+
+  if (!hasText(form.nombreComercial)) {
+    fieldHints.nombreComercial = {
+      status: "danger",
+      text: "Campo clave: completá el nombre comercial.",
+    };
+  }
+
+  if (paisLooksLikeCity) {
+    fieldHints.pais = {
+      status: "warning",
+      text: "Revisar: parece una ciudad, no un país.",
+    };
+  } else if (!hasText(form.pais)) {
+    fieldHints.pais = {
+      status: "danger",
+      text: "Falta el país de la empresa.",
+    };
+  }
+
+  if (ciudadLooksLikeCountry) {
+    fieldHints.ciudad = {
+      status: "warning",
+      text: "Revisar: parece un país, no una ciudad.",
+    };
+  } else if (!hasText(form.ciudad)) {
+    fieldHints.ciudad = {
+      status: "warning",
+      text: "Sumá la ciudad o región para mayor contexto.",
+    };
+  }
+
+  if (!hasText(form.rubro) && !hasText(form.rubroPersonalizado)) {
+    fieldHints.rubro = {
+      status: "danger",
+      text: "Elegí un rubro principal o completá el personalizado.",
+    };
+  } else if (rubroIsOtro && !hasText(form.rubroPersonalizado)) {
+    fieldHints.rubro = {
+      status: "warning",
+      text: "Marcaste 'Otro': completá el rubro personalizado abajo.",
+    };
+  }
+
+  if (rubroIsOtro && !hasText(form.rubroPersonalizado)) {
+    fieldHints.rubroPersonalizado = {
+      status: "warning",
+      text: "Completá rubro personalizado para clasificar mejor la empresa.",
+    };
+  } else if (hasText(form.rubroPersonalizado)) {
+    fieldHints.rubroPersonalizado = {
+      status: "good",
+      text: "Correcto: ayuda a clasificar mejor empresas fuera del listado.",
+    };
+  }
+
+  if (hasText(form.rubro) && giroLen < 10) {
+    fieldHints.giro = {
+      status: "warning",
+      text: "Sumá detalle del giro para precisar la actividad real.",
+    };
+  }
+
+  if (hasText(form.rubro) && verticalLen < 10) {
+    fieldHints.vertical = {
+      status: "warning",
+      text: "Sumá la vertical para precisar el segmento atendido.",
+    };
+  }
+
+  if (!hasText(form.queVende)) {
+    fieldHints.queVende = {
+      status: "danger",
+      text: "Campo clave para que la IA entienda productos y servicios.",
+    };
+  } else if (queVendeLen < 30) {
+    fieldHints.queVende = {
+      status: "warning",
+      text: "Agregá más detalle para que la IA entienda productos y servicios.",
+    };
+  }
+
+  if (textLength(form.comoTrabajaHoy) < 20) {
+    fieldHints.comoTrabajaHoy = {
+      status: "warning",
+      text: "Este dato mejora la calidad de Diagnóstico y Motores IA.",
+    };
+  }
+
+  if (textLength(form.queEsperaLograr) < 20) {
+    fieldHints.queEsperaLograr = {
+      status: "warning",
+      text: "Este dato mejora la calidad de Diagnóstico y Motores IA.",
+    };
+  }
+
+  if (textLength(form.queDeberiaAnalizarIA) < 20) {
+    fieldHints.queDeberiaAnalizarIA = {
+      status: "warning",
+      text: "Este dato mejora la calidad de Diagnóstico y Motores IA.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: STATUS_OVERALL_LABEL[overallStatus],
+    nextAction,
+    sections: [
+      {
+        key: "identidad",
+        label: "Identidad",
+        status: identidadStatus,
+        detail: identidadDetail,
+      },
+      {
+        key: "rubro",
+        label: "Rubro y vertical",
+        status: rubroStatus,
+        detail: rubroDetail,
+      },
+      {
+        key: "modelo",
+        label: "Modelo comercial",
+        status: modeloStatus,
+        detail: modeloDetail,
+      },
+      {
+        key: "contexto",
+        label: "Contexto IA",
+        status: contextoStatus,
+        detail: contextoDetail,
+      },
+    ],
+    fieldHints,
+  };
+}
+
 const EDUCACION_SEGMENTOS =
   "Colegios privados, universidades, institutos técnicos, academias online y centros de capacitación.";
 
@@ -349,6 +709,9 @@ export default function EmpresaPage() {
   const shouldSuggestObjetivo = form.queEsperaLograr.trim().length < 50;
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "empresa");
+  const readiness = evaluateEmpresaReadiness(form);
+  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
+  const progressBarWidth = `${Math.min(100, Math.max(0, readiness.completionPercent))}%`;
 
   return (
     <PageContainer>
@@ -397,6 +760,65 @@ export default function EmpresaPage() {
             </p>
           </div>
 
+          {/* ── Panel: Estado de carga ───────────────────────────────────────── */}
+          <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800">
+                  Estado de carga
+                </p>
+                <p
+                  className={`mt-0.5 text-xs font-medium ${STATUS_TEXT_CLASS[readiness.overallStatus]}`}
+                >
+                  {readiness.overallLabel}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-semibold leading-none text-slate-900">
+                  {readiness.completionPercent}%
+                </p>
+                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
+                  completado
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
+              role="progressbar"
+              aria-valuenow={readiness.completionPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className={`h-full rounded-full transition-all ${progressBarColor}`}
+                style={{ width: progressBarWidth }}
+              />
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
+              <span className="font-semibold text-slate-700">
+                Siguiente recomendado:
+              </span>{" "}
+              {readiness.nextAction}
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {readiness.sections.map((section) => (
+                <span
+                  key={section.key}
+                  title={section.detail}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${STATUS_CHIP_CLASS[section.status]}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASS[section.status]}`}
+                  />
+                  {section.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
           {/* ── Formulario ───────────────────────────────────────────────────── */}
           <div className="space-y-8">
 
@@ -413,6 +835,13 @@ export default function EmpresaPage() {
                     placeholder="Ej: Casalimpia"
                     className={INPUT_CLASS}
                   />
+                  {readiness.fieldHints.nombreComercial ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.nombreComercial.status]}`}
+                    >
+                      {readiness.fieldHints.nombreComercial.text}
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>Nombre legal</label>
@@ -436,6 +865,13 @@ export default function EmpresaPage() {
                     placeholder="Ej: Ecuador"
                     className={INPUT_CLASS}
                   />
+                  {readiness.fieldHints.pais ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.pais.status]}`}
+                    >
+                      {readiness.fieldHints.pais.text}
+                    </p>
+                  ) : null}
                   {shouldSuggestQuito && (
                     <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                       <p className="text-[11px] font-semibold text-indigo-800">
@@ -521,6 +957,13 @@ export default function EmpresaPage() {
                     placeholder="Ej: Guayaquil"
                     className={INPUT_CLASS}
                   />
+                  {readiness.fieldHints.ciudad ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.ciudad.status]}`}
+                    >
+                      {readiness.fieldHints.ciudad.text}
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>Sitio web</label>
@@ -564,6 +1007,13 @@ export default function EmpresaPage() {
                         </option>
                       ))}
                     </select>
+                    {readiness.fieldHints.rubro ? (
+                      <p
+                        className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.rubro.status]}`}
+                      >
+                        {readiness.fieldHints.rubro.text}
+                      </p>
+                    ) : null}
                     {(form.rubro === "Otro" ||
                       !form.rubro ||
                       form.rubroPersonalizado.trim().length > 0) && (
@@ -580,6 +1030,13 @@ export default function EmpresaPage() {
                           placeholder="Ej: Automotriz / accesorios 4x4"
                           className={INPUT_CLASS}
                         />
+                        {readiness.fieldHints.rubroPersonalizado ? (
+                          <p
+                            className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.rubroPersonalizado.status]}`}
+                          >
+                            {readiness.fieldHints.rubroPersonalizado.text}
+                          </p>
+                        ) : null}
                         <p className="mt-1 text-[11px] text-slate-500">
                           Si el rubro no está en la lista, escribilo acá. El
                           Constructor usará este valor para interpretar mejor la
@@ -621,6 +1078,13 @@ export default function EmpresaPage() {
                       placeholder="Ej: limpieza de hospitales y laboratorios"
                       className={INPUT_CLASS}
                     />
+                    {readiness.fieldHints.giro ? (
+                      <p
+                        className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.giro.status]}`}
+                      >
+                        {readiness.fieldHints.giro.text}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -656,6 +1120,13 @@ export default function EmpresaPage() {
                     placeholder="Ej: limpieza corporativa, servicios contables para pymes, laboratorio clínico…"
                     className={INPUT_CLASS}
                   />
+                  {readiness.fieldHints.vertical ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.vertical.status]}`}
+                    >
+                      {readiness.fieldHints.vertical.text}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </section>
@@ -673,6 +1144,13 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.queVende ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queVende.status]}`}
+                    >
+                      {readiness.fieldHints.queVende.text}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -762,6 +1240,13 @@ export default function EmpresaPage() {
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.comoTrabajaHoy ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.comoTrabajaHoy.status]}`}
+                    >
+                      {readiness.fieldHints.comoTrabajaHoy.text}
+                    </p>
+                  ) : null}
                   {shouldSuggestProceso && (
                     <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                       <p className="text-[11px] font-semibold text-indigo-800">
@@ -793,6 +1278,13 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.queEsperaLograr ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queEsperaLograr.status]}`}
+                    >
+                      {readiness.fieldHints.queEsperaLograr.text}
+                    </p>
+                  ) : null}
                   {shouldSuggestObjetivo && (
                     <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
                       <p className="text-[11px] font-semibold text-indigo-800">
@@ -824,6 +1316,13 @@ export default function EmpresaPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.queDeberiaAnalizarIA ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queDeberiaAnalizarIA.status]}`}
+                    >
+                      {readiness.fieldHints.queDeberiaAnalizarIA.text}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </section>
