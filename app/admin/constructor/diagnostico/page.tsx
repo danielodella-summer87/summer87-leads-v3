@@ -924,7 +924,11 @@ export default function DiagnosticoPage() {
           {/* ── B: Hallazgos principales ─────────────────────────────────── */}
           <div className="mb-8">
             <SectionHeader letter="B" title="Hallazgos principales" />
-            <div className="grid gap-4 sm:grid-cols-2">
+            <p className="mb-4 text-xs text-slate-500">
+              Cargá cada hallazgo en orden. Las sugerencias y la asistencia IA aparecen
+              debajo del campo correspondiente.
+            </p>
+            <div className="space-y-5">
 
               <div>
                 <label className={LABEL_CLASS}>
