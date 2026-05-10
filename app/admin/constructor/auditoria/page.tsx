@@ -67,6 +67,45 @@ type ValidationRow = {
 };
 type AuditoriaReadiness = BaseReadiness;
 
+type ConstructorFinalContractMetadata = {
+  version: string;
+  source: string;
+  generatedFrom: string;
+  prototypeMode: boolean;
+};
+
+type ConstructorFinalContract = {
+  metadata: ConstructorFinalContractMetadata;
+  empresa: Record<string, unknown>;
+  cuestionario: Record<string, unknown>;
+  documentos: Record<string, unknown>;
+  diagnostico: Record<string, unknown>;
+  procesoPipeline: Record<string, unknown>;
+  motoresIA: Record<string, unknown>;
+  reportes: Record<string, unknown>;
+  auditoria: {
+    persistedFromSetup: Record<string, unknown>;
+    readiness: {
+      completionPercent: number;
+      overallStatus: QualityStatus;
+      overallLabel: string;
+      nextAction: string;
+      sections: Array<{
+        key: string;
+        label: string;
+        status: QualityStatus;
+        detail: string;
+      }>;
+    };
+    activation: {
+      prototypeMode: boolean;
+      realActivationEnabled: boolean;
+      message: string;
+    };
+  };
+  pendientes: string[];
+};
+
 // ─── Datos estáticos ──────────────────────────────────────────────────────────
 
 const PASOS_RESUMEN = [
@@ -738,6 +777,79 @@ function asRecord(value: unknown): SetupRecord {
     : {};
 }
 
+function buildPendingFromReadiness(readiness: AuditoriaReadiness): string[] {
+  return Array.from(
+    new Set(
+      [
+        readiness.overallStatus !== "good" ? readiness.nextAction : "",
+        ...readiness.sections
+          .filter((section) => section.status !== "good")
+          .map((section) => `${section.label}: ${section.detail}`),
+      ].filter((item): item is string => Boolean(item))
+    )
+  );
+}
+
+function buildConstructorFinalContract(
+  setup: ConstructorSetup,
+  readiness: AuditoriaReadiness
+): ConstructorFinalContract {
+  const setupRecord = setup ? asRecord(setup) : {};
+  const empresa = asRecord(setupRecord.empresa);
+  const cuestionario = asRecord(setupRecord.cuestionario);
+  const documentos = asRecord(setupRecord.documentos);
+  const diagnostico = asRecord(setupRecord.diagnostico);
+  const procesoPipeline = asRecord(
+    setupRecord.proceso_pipeline ??
+      setupRecord["proceso-pipeline"] ??
+      setupRecord.procesoPipeline
+  );
+  const motoresIA = asRecord(
+    setupRecord.motores_ia ??
+      setupRecord["motores-ia"] ??
+      setupRecord.motoresIA
+  );
+  const reportes = asRecord(setupRecord.reportes);
+  const persistedAuditoria = asRecord(setupRecord.auditoria);
+
+  return {
+    metadata: {
+      version: "prototype-v1",
+      source: "constructor_auditoria_frontend",
+      generatedFrom: "crm_setup_config",
+      prototypeMode: true,
+    },
+    empresa,
+    cuestionario,
+    documentos,
+    diagnostico,
+    procesoPipeline,
+    motoresIA,
+    reportes,
+    auditoria: {
+      persistedFromSetup: persistedAuditoria,
+      readiness: {
+        completionPercent: readiness.completionPercent,
+        overallStatus: readiness.overallStatus,
+        overallLabel: readiness.overallLabel,
+        nextAction: readiness.nextAction,
+        sections: readiness.sections.map((section) => ({
+          key: section.key,
+          label: section.label,
+          status: section.status,
+          detail: section.detail,
+        })),
+      },
+      activation: {
+        prototypeMode: true,
+        realActivationEnabled: false,
+        message: "La activación real permanece bloqueada en esta fase.",
+      },
+    },
+    pendientes: buildPendingFromReadiness(readiness),
+  };
+}
+
 function getText(record: SetupRecord, key: string): string {
   return formatReportValue(record[key]);
 }
@@ -1099,6 +1211,10 @@ export default function AuditoriaPage() {
   ];
   const auditoriaReadiness: AuditoriaReadiness | null =
     setupLoading ? null : evaluateAuditoriaReadiness(setupData);
+  const readinessForContract: AuditoriaReadiness =
+    auditoriaReadiness ?? evaluateAuditoriaReadiness(setupData);
+  const finalContract = buildConstructorFinalContract(setupData, readinessForContract);
+  const finalContractJson = JSON.stringify(finalContract, null, 2);
 
   const clientReportBlocks = [
     {
@@ -1674,6 +1790,62 @@ export default function AuditoriaPage() {
                 );
               })()}
             </div>
+          </div>
+
+          {/* ── H: Vista técnica consolidada del Constructor ───────────────────── */}
+          <div className="mb-8">
+            <SectionHeader
+              letter="H"
+              title="Vista técnica consolidada del Constructor"
+            />
+            <p className="mb-4 max-w-2xl text-xs text-slate-500">
+              Contrato técnico de prototipo generado sólo desde el estado actual
+              de la página. Sin escritura en backend ni activación real.
+            </p>
+            <div className="mb-4 flex flex-col gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <p className="text-xs leading-relaxed text-blue-800">
+                Este JSON consolida la configuración cargada en el Constructor.
+                No activa el CRM, no escribe datos operativos y sirve como
+                contrato técnico de prototipo.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border border-blue-200/80 bg-white/70 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Versión
+                  </p>
+                  <p className="mt-0.5 text-xs font-semibold text-blue-900">
+                    prototype-v1
+                  </p>
+                </div>
+                <div className="rounded-lg border border-blue-200/80 bg-white/70 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Origen
+                  </p>
+                  <p className="mt-0.5 text-xs font-semibold text-blue-900">
+                    crm_setup_config
+                  </p>
+                </div>
+                <div className="rounded-lg border border-blue-200/80 bg-white/70 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Modo
+                  </p>
+                  <p className="mt-0.5 text-xs font-semibold text-blue-900">
+                    Prototipo
+                  </p>
+                </div>
+                <div className="rounded-lg border border-blue-200/80 bg-white/70 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                    Activación real
+                  </p>
+                  <p className="mt-0.5 text-xs font-semibold text-blue-900">
+                    Bloqueada
+                  </p>
+                </div>
+              </div>
+            </div>
+            <pre className="max-h-[min(70vh,520px)] overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-[11px] leading-relaxed text-slate-100">
+              {finalContractJson}
+            </pre>
           </div>
 
           {/* Aviso */}
@@ -2961,7 +3133,7 @@ export default function AuditoriaPage() {
             </div>
           </div>
 
-          {/* ── H: Preactivación ──────────────────────────────────────────── */}
+          {/* ── I: Preactivación ──────────────────────────────────────────── */}
           <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
             <div className="mb-3 flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-green-600" />
@@ -3011,7 +3183,7 @@ export default function AuditoriaPage() {
             </div>
           ) : null}
 
-          {/* ── I: Navegación ────────────────────────────────────────────── */}
+          {/* ── J: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap gap-2">
               <Link
