@@ -21,6 +21,15 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import type {
+  BaseReadiness,
+  SectionQuality,
+  QualityStatus,
+} from "@/lib/constructor/readiness/types";
+import { STATUS_VALUE, READINESS_SUMMARY_LABEL } from "@/lib/constructor/readiness/statusStyles";
+import { clampCompletionPercent, countSelectedValues } from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +52,7 @@ type Riesgo = {
 };
 
 type SetupRecord = Record<string, unknown>;
+type ConstructorSetup = Record<string, unknown> | null;
 type ValidationRow = {
   question: string;
   value: string;
@@ -341,6 +351,176 @@ const TEXTAREA_CLASS =
 function hasSetupData(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return Object.keys(value).length > 0;
+}
+
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function evaluateAuditoriaReadiness(setup: ConstructorSetup): BaseReadiness {
+  const empresaOk = hasSetupData(setup?.empresa);
+  const cuestionarioOk = hasSetupData(setup?.cuestionario);
+  const documentosOk = hasSetupData(setup?.documentos);
+  const datosBaseCubiertos = countSelectedValues([
+    empresaOk,
+    cuestionarioOk,
+    documentosOk,
+  ]);
+  const datosBaseFaltantes = 3 - datosBaseCubiertos;
+
+  let datosBaseStatus: QualityStatus;
+  let datosBaseDetail: string;
+  if (datosBaseFaltantes >= 2) {
+    datosBaseStatus = "danger";
+    datosBaseDetail = "Faltan dos o más bloques base (Empresa, Cuestionario o Documentos).";
+  } else if (datosBaseFaltantes === 1) {
+    datosBaseStatus = "warning";
+    datosBaseDetail = "Falta un bloque base por completar o consolidar.";
+  } else {
+    datosBaseStatus = "good";
+    datosBaseDetail = "Empresa, Cuestionario y Documentos tienen contenido cargado.";
+  }
+
+  const diagnosticoOk = hasSetupData(setup?.diagnostico);
+  const procesoOk = hasSetupData(setup?.proceso_pipeline);
+
+  let diagnosticoProcesoStatus: QualityStatus;
+  let diagnosticoProcesoDetail: string;
+  if (!diagnosticoOk && !procesoOk) {
+    diagnosticoProcesoStatus = "danger";
+    diagnosticoProcesoDetail = "Diagnóstico y proceso/pipeline están vacíos.";
+  } else if (!diagnosticoOk || !procesoOk) {
+    diagnosticoProcesoStatus = "warning";
+    diagnosticoProcesoDetail =
+      "Diagnóstico o proceso comercial necesita más definición cargada.";
+  } else {
+    diagnosticoProcesoStatus = "good";
+    diagnosticoProcesoDetail = "Diagnóstico y proceso/pipeline cargados.";
+  }
+
+  const motoresOk = hasSetupData(setup?.motores_ia);
+  const reportesOk = hasSetupData(setup?.reportes);
+
+  let iaReportesStatus: QualityStatus;
+  let iaReportesDetail: string;
+  if (!motoresOk && !reportesOk) {
+    iaReportesStatus = "danger";
+    iaReportesDetail = "Motores IA y reportes sin configuración cargada.";
+  } else if (!motoresOk || !reportesOk) {
+    iaReportesStatus = "warning";
+    iaReportesDetail = "Falta contenido en motores IA o en reportes.";
+  } else {
+    iaReportesStatus = "good";
+    iaReportesDetail = "Motores IA y reportes cargados.";
+  }
+
+  const pasosPreviosCubiertos = countSelectedValues([
+    empresaOk,
+    cuestionarioOk,
+    documentosOk,
+    diagnosticoOk,
+    procesoOk,
+    motoresOk,
+    reportesOk,
+  ]);
+  const pasosMarcadosApi = arrayLength(setup?.completed_steps);
+  const efectivoCompletados = Math.max(pasosMarcadosApi, pasosPreviosCubiertos);
+  const readinessApi =
+    typeof setup?.readiness_score === "number" && setup.readiness_score >= 0
+      ? setup.readiness_score
+      : null;
+  const readinessDerivado = Math.round((pasosPreviosCubiertos / 7) * 100);
+  const readinessUsar = readinessApi !== null ? readinessApi : readinessDerivado;
+
+  let cierreActivacionStatus: QualityStatus;
+  let cierreActivacionDetail: string;
+  if (setup === null) {
+    cierreActivacionStatus = "danger";
+    cierreActivacionDetail = "No hay fila de configuración disponible.";
+  } else if (efectivoCompletados >= 6 || readinessUsar >= 70) {
+    cierreActivacionStatus = "good";
+    cierreActivacionDetail =
+      "Progreso alto: pasos completados o readiness score suficiente para revisión final.";
+  } else if (efectivoCompletados >= 4 || readinessUsar >= 45) {
+    cierreActivacionStatus = "warning";
+    cierreActivacionDetail =
+      "Avance medio: revisá pasos pendientes antes de considerar activación.";
+  } else if (pasosMarcadosApi > 0 || pasosPreviosCubiertos > 0 || readinessDerivado > 0) {
+    cierreActivacionStatus = "warning";
+    cierreActivacionDetail = "Todavía hay huecos materiales antes de cerrar el Constructor.";
+  } else {
+    cierreActivacionStatus = "danger";
+    cierreActivacionDetail = "El Constructor apenas tiene contenido cargado.";
+  }
+
+  const sections: SectionQuality[] = [
+    {
+      key: "datos-base",
+      label: "Datos base",
+      status: datosBaseStatus,
+      detail: datosBaseDetail,
+    },
+    {
+      key: "diagnostico-proceso",
+      label: "Diagnóstico y proceso",
+      status: diagnosticoProcesoStatus,
+      detail: diagnosticoProcesoDetail,
+    },
+    {
+      key: "ia-reportes",
+      label: "IA y reportes",
+      status: iaReportesStatus,
+      detail: iaReportesDetail,
+    },
+    {
+      key: "cierre-activacion",
+      label: "Cierre y activación",
+      status: cierreActivacionStatus,
+      detail: cierreActivacionDetail,
+    },
+  ];
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      25 * STATUS_VALUE[datosBaseStatus] +
+        30 * STATUS_VALUE[diagnosticoProcesoStatus] +
+        25 * STATUS_VALUE[iaReportesStatus] +
+        20 * STATUS_VALUE[cierreActivacionStatus]
+    )
+  );
+
+  const hayDangerSem = sections.some((s) => s.status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hayDangerSem) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction =
+    "El Constructor está listo para revisión final. La activación real sigue bloqueada en prototipo.";
+  if (setup === null) {
+    nextAction = "Cargá o reconectá la configuración del Constructor para evaluar el avance real.";
+  } else if (datosBaseFaltantes >= 1) {
+    nextAction = "Completá Empresa, Cuestionario y Documentos fuente como base mínima.";
+  } else if (!diagnosticoOk || !procesoOk) {
+    nextAction = "Reforzá diagnóstico comercial y proceso/pipeline antes de cerrar.";
+  } else if (!motoresOk || !reportesOk) {
+    nextAction = "Definí motores IA y reportes esperados por la organización.";
+  } else if (cierreActivacionStatus === "danger") {
+    nextAction = "Aumentá el contenido guardado en los pasos previos para estabilizar el cierre.";
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections,
+    fieldHints: {},
+  };
 }
 
 function formatReportValue(value: unknown): string {
@@ -642,6 +822,10 @@ export default function AuditoriaPage() {
   const procesoPipelineSetup = asRecord(setupData?.proceso_pipeline);
   const motoresIASetup = asRecord(setupData?.motores_ia);
   const reportesSetup = asRecord(setupData?.reportes);
+
+  const auditoriaReadinessPanel = evaluateAuditoriaReadiness(
+    setupLoading ? null : setupData
+  );
 
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
@@ -1244,6 +1428,15 @@ export default function AuditoriaPage() {
               localmente el resultado de los 7 pasos anteriores y genera un dictamen preliminar.
             </p>
           </div>
+
+          <StepReadinessPanel
+            title="Auditoría final"
+            readiness={auditoriaReadinessPanel}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "auditoria",
+              currentStepPercent: auditoriaReadinessPanel.completionPercent,
+            })}
+          />
 
           {/* Aviso */}
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
