@@ -21,6 +21,26 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import type {
+  BaseReadiness,
+  FieldQualityHintValue,
+  QualityStatus,
+  SectionQuality,
+} from "@/lib/constructor/readiness/types";
+import {
+  STATUS_VALUE,
+  READINESS_SUMMARY_LABEL,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  clampCompletionPercent,
+  countSelectedValues,
+  hasRelevantText,
+  hasText,
+  textLength,
+} from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +96,9 @@ type ProcesoPipelinePayload = {
   columnas: ColumnaKanban[];
   reglas: ReglasValidacion;
 };
+
+type ProcesoPipelineForm = ProcesoPipelinePayload;
+type ProcesoPipelineReadiness = BaseReadiness;
 
 // ─── Datos iniciales ──────────────────────────────────────────────────────────
 
@@ -588,6 +611,289 @@ function SectionHeader({ letter, title }: { letter: string; title: string }) {
       <h2 className="text-base font-semibold text-slate-800">{title}</h2>
     </div>
   );
+}
+
+function evaluateProcesoPipelineReadiness(
+  form: ProcesoPipelineForm
+): ProcesoPipelineReadiness {
+  const { etapas, columnas, reglas } = form;
+
+  const etapasConNombre = etapas.filter((e) => hasText(e.nombre)).length;
+  let profundidadProcesoTexto = 0;
+  for (const e of etapas) {
+    profundidadProcesoTexto +=
+      textLength(e.objetivo) + textLength(e.tareas) + textLength(e.condicionAvance);
+  }
+  const etapasConCuerpo = etapas.filter(
+    (e) =>
+      hasText(e.nombre) &&
+      textLength(e.objetivo) >= 15 &&
+      textLength(e.condicionAvance) >= 12
+  ).length;
+
+  const textoProcesoAmplio =
+    profundidadProcesoTexto >= 360 ||
+    (etapas.length >= 1 && profundidadProcesoTexto >= 260);
+
+  let procesoStatus: QualityStatus;
+  let procesoDetail: string;
+  if (etapas.length === 0 || etapasConNombre === 0 || profundidadProcesoTexto < 40) {
+    procesoStatus = "danger";
+    procesoDetail = "Sin etapas o sin descripción suficiente del proceso profundo.";
+  } else if (
+    etapas.length >= 3 &&
+    etapasConCuerpo >= Math.max(2, Math.ceil((etapas.length * 2) / 3))
+  ) {
+    procesoStatus = "good";
+    procesoDetail = "Proceso interno con varias etapas y detalle comercial claro.";
+  } else if (textoProcesoAmplio) {
+    procesoStatus = "good";
+    procesoDetail = "Hay suficiente texto que describe cómo trabaja la etapa.";
+  } else if (etapas.length <= 2) {
+    procesoStatus = "warning";
+    procesoDetail = "Pocas etapas o contenido breve: sumá proceso profundo antes del Kanban.";
+  } else {
+    procesoStatus = "warning";
+    procesoDetail =
+      "Completá mejor objetivos, tareas y condiciones de avance en las etapas.";
+  }
+
+  const columnasConNombre = columnas.filter((c) => hasText(c.nombre)).length;
+  let pipelineStatus: QualityStatus;
+  let pipelineDetail: string;
+  if (columnas.length === 0) {
+    pipelineStatus = "danger";
+    pipelineDetail = "Sin columnas del pipeline/Kanban visual.";
+  } else if (columnas.length <= 2) {
+    pipelineStatus = "warning";
+    pipelineDetail = "Pocas columnas visibles para el equipo operativo.";
+  } else if (columnasConNombre === columnas.length) {
+    pipelineStatus = "good";
+    pipelineDetail = "Varias columnas nombradas en el pipeline visual.";
+  } else {
+    pipelineStatus = "warning";
+    pipelineDetail = "Completá nombres y criterios de las columnas visibles.";
+  }
+
+  const salidaSirveParaCriterio = (salidaRaw: string) => {
+    const salida = salidaRaw.trim();
+    return salida === "—" || salida === "-" || salida === "..." || salida.length === 1;
+  };
+  const columnasConCriteriosCompletos = columnas.filter((c) => {
+    const entrada = textLength(c.criterioEntrada) >= 10;
+    if (!entrada) return false;
+    if (salidaSirveParaCriterio(c.criterioSalida)) return true;
+    return textLength(c.criterioSalida) >= 10;
+  }).length;
+  const columnasConCriterioBreve = columnas.filter(
+    (c) =>
+      (textLength(c.criterioEntrada) >= 5 && textLength(c.criterioEntrada) < 10) ||
+      (hasText(c.criterioSalida) &&
+        !salidaSirveParaCriterio(c.criterioSalida) &&
+        textLength(c.criterioSalida) >= 5 &&
+        textLength(c.criterioSalida) < 10)
+  ).length;
+  const slaPresente = columnas.filter((c) => /\d/.test(String(c.slaDias))).length;
+  const reglasGlobalesFuertes = hasRelevantText(reglas.condicionesAvance, 28);
+
+  let criteriosStatus: QualityStatus;
+  let criteriosDetail: string;
+  if (
+    columnas.length > 0 &&
+    columnasConCriteriosCompletos === 0 &&
+    !reglasGlobalesFuertes &&
+    slaPresente === 0
+  ) {
+    criteriosStatus = "danger";
+    criteriosDetail = "No hay criterios de avance documentados en columnas ni en reglas.";
+  } else if (
+    columnasConCriteriosCompletos >= 3 ||
+    (columnasConCriteriosCompletos >= 2 && reglasGlobalesFuertes) ||
+    (columnasConCriteriosCompletos >= 1 && reglasGlobalesFuertes && columnas.length <= 2)
+  ) {
+    criteriosStatus = "good";
+    criteriosDetail = "Criterios de entrada/salida, SLA o reglas globales bien cubiertos.";
+  } else if (
+    columnasConCriteriosCompletos >= 1 ||
+    reglasGlobalesFuertes ||
+    slaPresente >= 2 ||
+    columnasConCriterioBreve >= 1
+  ) {
+    criteriosStatus = "warning";
+    criteriosDetail = "Los criterios existen pero conviene detallarlos en más etapas.";
+  } else {
+    criteriosStatus = "warning";
+    criteriosDetail = "Agregá criterios para que el avance sea verificable.";
+  }
+
+  const etapasConResponsableYTareas = etapas.filter(
+    (e) => hasText(e.responsable) && textLength(e.tareas) >= 12
+  ).length;
+  const etapasConValidacionHumana = etapas.filter((e) => e.requiereValidacionHumana).length;
+  const reglasDetalleCount = countSelectedValues([
+    hasRelevantText(reglas.decisionesHumanas, 15),
+    hasRelevantText(reglas.alertasSistema, 15),
+    hasRelevantText(reglas.documentosPorEtapa, 15),
+    hasRelevantText(reglas.tareasAutomaticas, 15),
+  ]);
+
+  const mitadEtapasConRt =
+    etapas.length > 0 &&
+    etapasConResponsableYTareas >= Math.ceil(etapas.length / 2);
+  const validacionHumanaDocumentada =
+    hasRelevantText(reglas.decisionesHumanas, 18) || etapasConValidacionHumana >= 2;
+
+  let responsablesValidacionesStatus: QualityStatus;
+  let responsablesValidacionesDetail: string;
+  if (etapas.length === 0) {
+    responsablesValidacionesStatus = "warning";
+    responsablesValidacionesDetail =
+      "Sin etapas internas todavía: no hay responsables ni validaciones que evaluar.";
+  } else if (
+    mitadEtapasConRt &&
+    (validacionHumanaDocumentada || reglasDetalleCount >= 2)
+  ) {
+    responsablesValidacionesStatus = "good";
+    responsablesValidacionesDetail =
+      "Responsables/tareas cubiertos y hay señales de validación o automatización.";
+  } else if (
+    etapasConResponsableYTareas >= 1 ||
+    etapasConValidacionHumana >= 1 ||
+    reglasDetalleCount >= 1
+  ) {
+    responsablesValidacionesStatus = "warning";
+    responsablesValidacionesDetail =
+      "Hay algo definido; ampliá responsables, tareas o validaciones humanas.";
+  } else {
+    responsablesValidacionesStatus = "warning";
+    responsablesValidacionesDetail =
+      "Faltan responsables, tareas y registro de validaciones o automatizaciones.";
+  }
+
+  const sections: SectionQuality[] = [
+    {
+      key: "proceso-comercial",
+      label: "Proceso comercial",
+      status: procesoStatus,
+      detail: procesoDetail,
+    },
+    {
+      key: "pipeline-kanban-visual",
+      label: "Pipeline/Kanban visual",
+      status: pipelineStatus,
+      detail: pipelineDetail,
+    },
+    {
+      key: "criterios-avance",
+      label: "Criterios de avance",
+      status: criteriosStatus,
+      detail: criteriosDetail,
+    },
+    {
+      key: "responsables-validaciones",
+      label: "Responsables y validaciones",
+      status: responsablesValidacionesStatus,
+      detail: responsablesValidacionesDetail,
+    },
+  ];
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      30 * STATUS_VALUE[procesoStatus] +
+        30 * STATUS_VALUE[pipelineStatus] +
+        20 * STATUS_VALUE[criteriosStatus] +
+        20 * STATUS_VALUE[responsablesValidacionesStatus]
+    )
+  );
+
+  const hasDanger = sections.some((s) => s.status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction = "Podés guardar y continuar a Motores IA.";
+  if (procesoStatus === "danger" || etapas.length === 0) {
+    nextAction =
+      "Definí el proceso comercial profundo antes de configurar el pipeline.";
+  } else if (pipelineStatus === "danger" || columnas.length === 0) {
+    nextAction = "Definí las columnas visibles del pipeline/Kanban.";
+  } else if (criteriosStatus === "danger") {
+    nextAction = "Agregá criterios de entrada y salida por etapa.";
+  } else if (etapasConResponsableYTareas === 0 && etapas.length > 0) {
+    nextAction = "Asigná responsables o tareas clave por etapa.";
+  } else if (
+    !hasRelevantText(reglas.decisionesHumanas, 12) &&
+    etapasConValidacionHumana === 0
+  ) {
+    nextAction = "Definí qué decisiones requieren validación humana.";
+  }
+
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
+
+  if (procesoStatus === "danger") {
+    fieldHints.procesoComercial = {
+      status: "danger",
+      text: "Definí cómo ocurre realmente el proceso comercial antes del Kanban.",
+    };
+  } else if (procesoStatus !== "good") {
+    fieldHints.procesoComercial = {
+      status: "warning",
+      text: "Agregá más detalle de etapas internas, responsables y lógica comercial.",
+    };
+  }
+
+  if (pipelineStatus === "danger") {
+    fieldHints.pipelineVisual = {
+      status: "danger",
+      text: "Definí las columnas visibles que usará el equipo en el CRM.",
+    };
+  } else if (pipelineStatus !== "good") {
+    fieldHints.pipelineVisual = {
+      status: "warning",
+      text: "Un pipeline útil necesita al menos 3 etapas visibles.",
+    };
+  }
+
+  if (criteriosStatus !== "good") {
+    fieldHints.criteriosAvance = {
+      status: criteriosStatus === "danger" ? "danger" : "warning",
+      text: "Los criterios evitan que las oportunidades avancen sin información suficiente.",
+    };
+  }
+
+  if (
+    etapas.length > 0 &&
+    (!mitadEtapasConRt || etapasConResponsableYTareas === 0)
+  ) {
+    fieldHints.responsablesTareas = {
+      status: "warning",
+      text: "Asignar tareas o responsables reduce dependencia de memoria humana.",
+    };
+  }
+
+  if (
+    !hasRelevantText(reglas.decisionesHumanas, 15) &&
+    etapasConValidacionHumana === 0
+  ) {
+    fieldHints.validacionesHumanas = {
+      status: "warning",
+      text: "Indicá qué pasos necesitan aprobación humana antes de avanzar.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections,
+    fieldHints,
+  };
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
@@ -1153,6 +1459,8 @@ export default function ProcesoPipelinePage() {
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "proceso-pipeline");
 
+  const readiness = evaluateProcesoPipelineReadiness({ etapas, columnas, reglas });
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -1193,6 +1501,15 @@ export default function ProcesoPipelinePage() {
               {" "}Esta configuración todavía no sincroniza con el Kanban operativo.
             </p>
           </div>
+
+          <StepReadinessPanel
+            title="Estado de proceso y pipeline"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "proceso-pipeline",
+              currentStepPercent: readiness.completionPercent,
+            })}
+          />
 
           {/* Aviso */}
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
@@ -1328,6 +1645,11 @@ export default function ProcesoPipelinePage() {
               Estas son las etapas internas del proceso. Editá cada una según la realidad de la empresa.
               Los cambios son locales — no se guardan todavía.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.procesoComercial} />
+            <FieldQualityHint
+              className="mb-2 text-[11px]"
+              hint={readiness.fieldHints.responsablesTareas}
+            />
             <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-violet-700">
@@ -1501,6 +1823,7 @@ export default function ProcesoPipelinePage() {
               Estas son las columnas que el equipo verá en el tablero operativo. Editá nombres,
               criterios y SLAs según el ritmo real del negocio.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.pipelineVisual} />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {columnas.map((col, index) => {
                 const tipoInfo = TIPOS_COLUMNA.find((t) => t.value === col.tipo);
@@ -1607,6 +1930,7 @@ export default function ProcesoPipelinePage() {
                   onChange={(e) => setRegla("condicionesAvance", e.target.value)}
                   placeholder="Ej: Nombre, empresa, email y teléfono completos. Reunión registrada con notas…"
                 />
+                <FieldQualityHint hint={readiness.fieldHints.criteriosAvance} />
                 {renderFieldSuggestions("condicionesAvance")}
               </div>
 
@@ -1621,6 +1945,7 @@ export default function ProcesoPipelinePage() {
                   onChange={(e) => setRegla("decisionesHumanas", e.target.value)}
                   placeholder="Ej: Envío de propuesta, descuento mayor al 10%, cierre de contrato…"
                 />
+                <FieldQualityHint hint={readiness.fieldHints.validacionesHumanas} />
                 {renderFieldSuggestions("decisionesHumanas")}
               </div>
 
