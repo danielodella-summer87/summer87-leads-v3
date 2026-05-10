@@ -272,6 +272,445 @@ function mergeUnique(current: string[], additions: string[]) {
   return Array.from(new Set([...(Array.isArray(current) ? current : []), ...additions]));
 }
 
+// ─── Calidad / readiness (helpers locales fase 4L) ────────────────────────────
+
+type QualityStatus = "good" | "warning" | "danger" | "neutral";
+
+type SectionQuality = {
+  key: string;
+  label: string;
+  status: QualityStatus;
+  detail: string;
+};
+
+type CuestionarioReadiness = {
+  completionPercent: number;
+  overallStatus: QualityStatus;
+  overallLabel: string;
+  nextAction: string;
+  sections: SectionQuality[];
+  fieldHints: Record<string, { status: QualityStatus; text: string }>;
+};
+
+const STATUS_CHIP_CLASS: Record<QualityStatus, string> = {
+  good: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  neutral: "border-slate-200 bg-slate-50 text-slate-700",
+};
+
+const STATUS_DOT_CLASS: Record<QualityStatus, string> = {
+  good: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-400",
+};
+
+const STATUS_BAR_CLASS: Record<QualityStatus, string> = {
+  good: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-300",
+};
+
+const STATUS_TEXT_CLASS: Record<QualityStatus, string> = {
+  good: "text-emerald-700",
+  warning: "text-amber-700",
+  danger: "text-rose-700",
+  neutral: "text-slate-600",
+};
+
+const STATUS_VALUE: Record<QualityStatus, number> = {
+  good: 1,
+  warning: 0.5,
+  danger: 0,
+  neutral: 0.25,
+};
+
+const STATUS_OVERALL_LABEL: Record<QualityStatus, string> = {
+  good: "Listo para avanzar",
+  warning: "Suficiente, pero conviene revisar",
+  danger: "Faltan datos importantes",
+  neutral: "Sin datos suficientes",
+};
+
+function hasText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function textLength(value: unknown): number {
+  return typeof value === "string" ? value.trim().length : 0;
+}
+
+function countSelectedValues(value: unknown): number {
+  return Array.isArray(value) ? value.filter(Boolean).length : 0;
+}
+
+function hasRelevantText(value: unknown, minLength = 20): boolean {
+  return textLength(value) >= minLength;
+}
+
+function evaluateCuestionarioReadiness(
+  form: CuestionarioForm,
+  segmentosVerticales: string[]
+): CuestionarioReadiness {
+  // A. Modelo comercial
+  const queLen = textLength(form.queVendeDetalle);
+  const tiposVentaCount = countSelectedValues(form.tiposVenta);
+  const hasCicloOTicket =
+    hasText(form.cicloVenta) || hasText(form.ticketPromedio);
+
+  let modeloStatus: QualityStatus;
+  let modeloDetail: string;
+  if (!hasText(form.queVendeDetalle)) {
+    modeloStatus = "danger";
+    modeloDetail = "Falta describir qué vende la empresa.";
+  } else if (queLen <= 30 || tiposVentaCount === 0) {
+    modeloStatus = "warning";
+    modeloDetail =
+      queLen <= 30
+        ? "Ampliá qué vende (más de 30 caracteres ayuda al CRM)."
+        : "Marcá al menos un tipo de venta principal.";
+  } else if (hasCicloOTicket) {
+    modeloStatus = "good";
+    modeloDetail = "Modelo comercial bien encaminado.";
+  } else {
+    modeloStatus = "warning";
+    modeloDetail = "Sumá ciclo de venta o ticket promedio.";
+  }
+
+  // B. Clientes y decisores
+  const hasSegmentosContext =
+    segmentosVerticales.some((s) => textLength(s) >= 20) ||
+    hasRelevantText(form.criteriosCalificacion, 20);
+  const hasTipoCliente = form.tiposClienteObj.length >= 1;
+  const hasDecisores = form.decisores.length >= 1;
+
+  let clientesStatus: QualityStatus;
+  let clientesDetail: string;
+  if (!hasTipoCliente && !hasSegmentosContext) {
+    clientesStatus = "danger";
+    clientesDetail = "Definí tipo de cliente o segmentos / criterios.";
+  } else if (hasTipoCliente && hasSegmentosContext && hasDecisores) {
+    clientesStatus = "good";
+    clientesDetail = "Clientes, segmentos y decisores claros.";
+  } else {
+    clientesStatus = "warning";
+    clientesDetail = "Completá tipo de cliente, segmentos o decisores.";
+  }
+
+  // C. Proceso actual
+  const procLen = textLength(form.procesoActual);
+  const infoPreCount = countSelectedValues(form.infoPrePropuesta);
+
+  let procesoStatus: QualityStatus;
+  let procesoDetail: string;
+  if (!hasText(form.procesoActual)) {
+    procesoStatus = "danger";
+    procesoDetail = "Falta el proceso desde prospecto hasta cierre.";
+  } else if (procLen <= 40) {
+    procesoStatus = "warning";
+    procesoDetail = "Extendé la descripción del proceso (ideal +40 caracteres).";
+  } else if (infoPreCount >= 1 && hasText(form.queBloquea)) {
+    procesoStatus = "good";
+    procesoDetail = "Proceso, información previa y bloqueos cubiertos.";
+  } else {
+    procesoStatus = "warning";
+    procesoDetail =
+      infoPreCount === 0
+        ? "Marcá qué información se pide antes de la propuesta."
+        : "Agregá qué suele bloquear el avance.";
+  }
+
+  // D. Propuesta y cierre
+  const hasTipoProp = form.tiposPropuesta.length >= 1;
+  const hasAprobOCond =
+    hasText(form.aprobadorInterno) || hasRelevantText(form.condicionesGanado, 15);
+  const hasMotivos = form.motivosPerdida.length >= 1;
+  const propuestaTodoVacio =
+    !hasTipoProp &&
+    !hasText(form.aprobadorInterno) &&
+    !hasText(form.condicionesGanado) &&
+    !hasMotivos;
+
+  let propuestaStatus: QualityStatus;
+  let propuestaDetail: string;
+  if (propuestaTodoVacio) {
+    propuestaStatus = "warning";
+    propuestaDetail = "Completá propuesta, aprobaciones o motivos de pérdida.";
+  } else if (hasTipoProp && hasAprobOCond && hasMotivos) {
+    propuestaStatus = "good";
+    propuestaDetail = "Propuesta, aprobación y pérdidas definidos.";
+  } else {
+    propuestaStatus = "warning";
+    propuestaDetail = "Falta tipo de propuesta, aprobador/condiciones o motivos.";
+  }
+
+  // E. Reportes y control (no danger por spec)
+  const dirLen = textLength(form.queVerDireccion);
+  const metCount = countSelectedValues(form.metricasImportantes);
+  const hasFrecuencia = hasText(form.frecuenciaReportes);
+
+  let reportesStatus: QualityStatus;
+  let reportesDetail: string;
+  if (dirLen > 30 && metCount >= 3) {
+    reportesStatus = "good";
+    reportesDetail = hasFrecuencia
+      ? "Reportes y métricas alineados con dirección."
+      : "Reportes y métricas definidos; podés indicar frecuencia ideal.";
+  } else if (dirLen === 0 && metCount < 2) {
+    reportesStatus = "warning";
+    reportesDetail = "Falta visibilidad para dirección y pocas métricas.";
+  } else {
+    reportesStatus = "warning";
+    if (dirLen <= 30 && metCount < 3) {
+      reportesDetail =
+        "Completá qué debe ver dirección y al menos tres métricas.";
+    } else if (dirLen <= 30) {
+      reportesDetail = "Ampliá qué debe ver dirección o gerencia.";
+    } else {
+      reportesDetail = "Seleccioná al menos tres métricas clave.";
+    }
+  }
+
+  // F. Validación humana e IA
+  const decLen = textLength(form.decisionesNoIA);
+  const ayudasCount = countSelectedValues(form.dondeAyudarIA);
+
+  let iaStatus: QualityStatus;
+  let iaDetail: string;
+  if (!hasText(form.decisionesNoIA)) {
+    iaStatus = "danger";
+    iaDetail = "Falta definir límites de la IA.";
+  } else if (decLen <= 30 || ayudasCount < 2) {
+    iaStatus = "warning";
+    iaDetail =
+      decLen <= 30
+        ? "Extendé las decisiones que la IA no debe tomar sola."
+        : "Marcá al menos dos áreas donde la IA puede ayudar primero.";
+  } else {
+    iaStatus = "good";
+    iaDetail = "Límites y usos de IA definidos.";
+  }
+
+  const completionPercent = Math.round(
+    20 * STATUS_VALUE[modeloStatus] +
+      20 * STATUS_VALUE[clientesStatus] +
+      25 * STATUS_VALUE[procesoStatus] +
+      10 * STATUS_VALUE[propuestaStatus] +
+      15 * STATUS_VALUE[reportesStatus] +
+      10 * STATUS_VALUE[iaStatus]
+  );
+
+  const hasDanger = [
+    modeloStatus,
+    clientesStatus,
+    procesoStatus,
+    propuestaStatus,
+    reportesStatus,
+    iaStatus,
+  ].some((s) => s === "danger");
+
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction = "Podés guardar y continuar a Documentos Fuente.";
+  if (!hasText(form.queVendeDetalle)) {
+    nextAction = "Completá qué vende principalmente la empresa.";
+  } else if (form.tiposClienteObj.length === 0) {
+    nextAction = "Marcá el tipo de cliente objetivo.";
+  } else if (!hasText(form.procesoActual)) {
+    nextAction = "Describí el proceso comercial actual.";
+  } else if (form.infoPrePropuesta.length === 0) {
+    nextAction =
+      "Marcá qué información se necesita antes de armar una propuesta.";
+  } else if (!hasText(form.queBloquea)) {
+    nextAction =
+      "Agregá qué bloquea normalmente el avance de una oportunidad.";
+  } else if (!hasRelevantText(form.queVerDireccion, 30)) {
+    nextAction = "Completá qué necesita ver dirección o gerencia.";
+  } else if (!hasRelevantText(form.decisionesNoIA, 30)) {
+    nextAction = "Definí qué decisiones nunca debería tomar la IA sola.";
+  }
+
+  const fieldHints: Record<string, { status: QualityStatus; text: string }> =
+    {};
+
+  if (!hasText(form.queVendeDetalle)) {
+    fieldHints.queVende = {
+      status: "danger",
+      text: "Campo clave: describí productos o servicios principales.",
+    };
+  } else if (queLen <= 30) {
+    fieldHints.queVende = {
+      status: "warning",
+      text: "Sumá más detalle: qué vendés, a quién y qué problema resolvés.",
+    };
+  }
+
+  if (tiposVentaCount === 0 && hasText(form.queVendeDetalle)) {
+    fieldHints.tiposVenta = {
+      status: "warning",
+      text: "Marcá cómo se vende para que el CRM modele mejor el pipeline.",
+    };
+  }
+
+  if (!hasTipoCliente) {
+    fieldHints.tipoCliente = {
+      status: "danger",
+      text: "Definí si el proceso apunta a personas, empresas o ambos.",
+    };
+  }
+
+  if (
+    hasTipoCliente &&
+    !segmentosVerticales.some((s) => textLength(s) >= 20) &&
+    !hasRelevantText(form.criteriosCalificacion, 20)
+  ) {
+    fieldHints.segmentos = {
+      status: "warning",
+      text: "Agregá segmentos concretos o criterios para calificar prospectos.",
+    };
+  }
+
+  if (hasTipoCliente && !hasDecisores) {
+    fieldHints.decisores = {
+      status: "warning",
+      text: "Indicá quién participa en la decisión de compra.",
+    };
+  }
+
+  if (!hasText(form.procesoActual)) {
+    fieldHints.procesoActual = {
+      status: "danger",
+      text: "Este campo alimenta Diagnóstico, Pipeline y Motores IA.",
+    };
+  } else if (procLen <= 40) {
+    fieldHints.procesoActual = {
+      status: "warning",
+      text: "Detallá más etapas: origen, calificación, propuesta y cierre.",
+    };
+  }
+
+  if (hasText(form.procesoActual) && infoPreCount === 0) {
+    fieldHints.informacionPropuesta = {
+      status: "warning",
+      text: "Marcá qué datos se suelen pedir antes de cotizar o proponer.",
+    };
+  }
+
+  if (hasText(form.procesoActual) && !hasText(form.queBloquea)) {
+    fieldHints.bloqueosOportunidad = {
+      status: "warning",
+      text: "Ayuda a detectar riesgos y automatizaciones útiles.",
+    };
+  }
+
+  if (!hasTipoProp) {
+    fieldHints.tipoPropuesta = {
+      status: "warning",
+      text: "Marcá cómo suele ser la propuesta o el cierre.",
+    };
+  }
+
+  if (hasTipoProp && !hasMotivos) {
+    fieldHints.motivosPerdida = {
+      status: "warning",
+      text: "Registrar pérdidas frecuentes mejora reportes y prioridades.",
+    };
+  }
+
+  if (!hasRelevantText(form.queVerDireccion, 30)) {
+    fieldHints.necesidadesDireccion = {
+      status: "warning",
+      text: "Sirve para definir reportes y tableros.",
+    };
+  }
+
+  if (metCount < 3 && hasRelevantText(form.queVerDireccion, 30)) {
+    fieldHints.metricas = {
+      status: "warning",
+      text: "Seleccioná al menos tres métricas para medir el negocio.",
+    };
+  } else if (metCount < 3) {
+    fieldHints.metricas = {
+      status: "warning",
+      text: "Elegí métricas alineadas con lo que necesita dirección.",
+    };
+  }
+
+  if (!hasText(form.decisionesNoIA)) {
+    fieldHints.decisionesIA = {
+      status: "warning",
+      text: "Necesario para establecer límites de validación humana.",
+    };
+  } else if (decLen <= 30) {
+    fieldHints.decisionesIA = {
+      status: "warning",
+      text: "Sé específico: descuentos, cierres, envío de propuestas, etc.",
+    };
+  }
+
+  if (hasText(form.decisionesNoIA) && ayudasCount < 2) {
+    fieldHints.ayudasIA = {
+      status: "warning",
+      text: "Marcá al menos dos usos concretos donde la IA puede ayudar primero.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: STATUS_OVERALL_LABEL[overallStatus],
+    nextAction,
+    sections: [
+      {
+        key: "modelo",
+        label: "Modelo comercial",
+        status: modeloStatus,
+        detail: modeloDetail,
+      },
+      {
+        key: "clientes",
+        label: "Clientes y decisores",
+        status: clientesStatus,
+        detail: clientesDetail,
+      },
+      {
+        key: "proceso",
+        label: "Proceso actual",
+        status: procesoStatus,
+        detail: procesoDetail,
+      },
+      {
+        key: "propuesta",
+        label: "Propuesta y cierre",
+        status: propuestaStatus,
+        detail: propuestaDetail,
+      },
+      {
+        key: "reportes",
+        label: "Reportes",
+        status: reportesStatus,
+        detail: reportesDetail,
+      },
+      {
+        key: "validacionIA",
+        label: "Validación IA",
+        status: iaStatus,
+        detail: iaDetail,
+      },
+    ],
+    fieldHints,
+  };
+}
+
 // ─── Helpers de estilo ────────────────────────────────────────────────────────
 
 const INPUT_CLASS =
@@ -710,6 +1149,10 @@ export default function CuestionarioPage() {
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "cuestionario");
 
+  const readiness = evaluateCuestionarioReadiness(form, segmentosCustom);
+  const progressBarColor = STATUS_BAR_CLASS[readiness.overallStatus];
+  const progressBarWidth = `${Math.min(100, Math.max(0, readiness.completionPercent))}%`;
+
   return (
     <PageContainer>
       <div className="space-y-5">
@@ -766,6 +1209,65 @@ export default function CuestionarioPage() {
             </p>
           </div>
 
+          {/* ── Panel: Estado del cuestionario ───────────────────────────── */}
+          <div className="mb-8 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800">
+                  Estado del cuestionario
+                </p>
+                <p
+                  className={`mt-0.5 text-xs font-medium ${STATUS_TEXT_CLASS[readiness.overallStatus]}`}
+                >
+                  {readiness.overallLabel}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-semibold leading-none text-slate-900">
+                  {readiness.completionPercent}%
+                </p>
+                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
+                  completado
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200"
+              role="progressbar"
+              aria-valuenow={readiness.completionPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className={`h-full rounded-full transition-all ${progressBarColor}`}
+                style={{ width: progressBarWidth }}
+              />
+            </div>
+
+            <p className="mt-3 text-xs leading-relaxed text-slate-600">
+              <span className="font-semibold text-slate-700">
+                Siguiente recomendado:
+              </span>{" "}
+              {readiness.nextAction}
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {readiness.sections.map((section) => (
+                <span
+                  key={section.key}
+                  title={section.detail}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${STATUS_CHIP_CLASS[section.status]}`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_CLASS[section.status]}`}
+                  />
+                  {section.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
           {/* ── Formulario ─────────────────────────────────────────────────── */}
           <div className="space-y-8">
 
@@ -785,6 +1287,13 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.queVende ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.queVende.status]}`}
+                    >
+                      {readiness.fieldHints.queVende.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("queVendeDetalle")}
                 </div>
 
@@ -798,6 +1307,13 @@ export default function CuestionarioPage() {
                     value={form.tiposVenta}
                     onChange={(v) => setField("tiposVenta", v)}
                   />
+                  {readiness.fieldHints.tiposVenta ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.tiposVenta.status]}`}
+                    >
+                      {readiness.fieldHints.tiposVenta.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("tiposVenta")}
                 </div>
 
@@ -836,6 +1352,13 @@ export default function CuestionarioPage() {
                     value={form.tiposClienteObj}
                     onChange={(v) => setField("tiposClienteObj", v)}
                   />
+                  {readiness.fieldHints.tipoCliente ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.tipoCliente.status]}`}
+                    >
+                      {readiness.fieldHints.tipoCliente.text}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -884,6 +1407,13 @@ export default function CuestionarioPage() {
                       ))}
                     </div>
                   )}
+                  {readiness.fieldHints.segmentos ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.segmentos.status]}`}
+                    >
+                      {readiness.fieldHints.segmentos.text}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -895,6 +1425,13 @@ export default function CuestionarioPage() {
                     value={form.decisores}
                     onChange={(v) => setField("decisores", v)}
                   />
+                  {readiness.fieldHints.decisores ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.decisores.status]}`}
+                    >
+                      {readiness.fieldHints.decisores.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("decisores")}
                 </div>
 
@@ -936,6 +1473,13 @@ export default function CuestionarioPage() {
                     rows={4}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.procesoActual ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.procesoActual.status]}`}
+                    >
+                      {readiness.fieldHints.procesoActual.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("procesoActual")}
                   <div className="mt-2 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -997,6 +1541,13 @@ export default function CuestionarioPage() {
                     value={form.infoPrePropuesta}
                     onChange={(v) => setField("infoPrePropuesta", v)}
                   />
+                  {readiness.fieldHints.informacionPropuesta ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.informacionPropuesta.status]}`}
+                    >
+                      {readiness.fieldHints.informacionPropuesta.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("infoPrePropuesta")}
                 </div>
 
@@ -1011,6 +1562,13 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.bloqueosOportunidad ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.bloqueosOportunidad.status]}`}
+                    >
+                      {readiness.fieldHints.bloqueosOportunidad.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("queBloquea")}
                 </div>
 
@@ -1032,6 +1590,13 @@ export default function CuestionarioPage() {
                     value={form.tiposPropuesta}
                     onChange={(v) => setField("tiposPropuesta", v)}
                   />
+                  {readiness.fieldHints.tipoPropuesta ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.tipoPropuesta.status]}`}
+                    >
+                      {readiness.fieldHints.tipoPropuesta.text}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -1074,6 +1639,13 @@ export default function CuestionarioPage() {
                     value={form.motivosPerdida}
                     onChange={(v) => setField("motivosPerdida", v)}
                   />
+                  {readiness.fieldHints.motivosPerdida ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.motivosPerdida.status]}`}
+                    >
+                      {readiness.fieldHints.motivosPerdida.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("motivosPerdida")}
                 </div>
 
@@ -1098,6 +1670,13 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.necesidadesDireccion ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.necesidadesDireccion.status]}`}
+                    >
+                      {readiness.fieldHints.necesidadesDireccion.text}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div>
@@ -1120,6 +1699,13 @@ export default function CuestionarioPage() {
                     value={form.metricasImportantes}
                     onChange={(v) => setField("metricasImportantes", v)}
                   />
+                  {readiness.fieldHints.metricas ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.metricas.status]}`}
+                    >
+                      {readiness.fieldHints.metricas.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("metricasImportantes")}
                 </div>
 
@@ -1144,6 +1730,13 @@ export default function CuestionarioPage() {
                     rows={3}
                     className={TEXTAREA_CLASS}
                   />
+                  {readiness.fieldHints.decisionesIA ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.decisionesIA.status]}`}
+                    >
+                      {readiness.fieldHints.decisionesIA.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("decisionesNoIA")}
                 </div>
 
@@ -1156,6 +1749,13 @@ export default function CuestionarioPage() {
                     value={form.dondeAyudarIA}
                     onChange={(v) => setField("dondeAyudarIA", v)}
                   />
+                  {readiness.fieldHints.ayudasIA ? (
+                    <p
+                      className={`mt-1 text-[11px] ${STATUS_TEXT_CLASS[readiness.fieldHints.ayudasIA.status]}`}
+                    >
+                      {readiness.fieldHints.ayudasIA.text}
+                    </p>
+                  ) : null}
                   {renderFieldSuggestions("dondeAyudarIA")}
                 </div>
 
