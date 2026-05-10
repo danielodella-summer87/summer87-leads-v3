@@ -67,6 +67,15 @@ type ValidationRow = {
 };
 type AuditoriaReadiness = BaseReadiness;
 
+const READINESS_FALLBACK_AUDITORIA: AuditoriaReadiness = {
+  completionPercent: 0,
+  overallStatus: "neutral",
+  overallLabel: READINESS_SUMMARY_LABEL.neutral,
+  nextAction: "",
+  sections: [],
+  fieldHints: {},
+};
+
 type ConstructorFinalContractMetadata = {
   version: string;
   source: string;
@@ -104,6 +113,56 @@ type ConstructorFinalContract = {
     };
   };
   pendientes: string[];
+};
+
+type ConstructorBlueprintModuleStatus = "propuesto" | "pendiente" | "critico";
+
+type ConstructorBlueprint = {
+  empresa: {
+    nombre: string;
+    rubro: string;
+    vertical: string;
+    paisCiudad: string;
+    modeloComercial: string;
+  };
+  modulos: Array<{
+    label: string;
+    description: string;
+    status: ConstructorBlueprintModuleStatus;
+  }>;
+  pipeline: {
+    resumen: string;
+    etapas: string[];
+    criterios: string[];
+  };
+  motoresIA: Array<{
+    nombre: string;
+    etapa: string;
+    prioridad: string;
+    riesgo: string;
+    validacionHumana: boolean;
+  }>;
+  reportes: Array<{
+    nombre: string;
+    metricas: string;
+    frecuencia: string;
+    audiencia: string;
+  }>;
+  riesgos: string[];
+  oportunidades: string[];
+  pendientes: string[];
+};
+
+const BLUEPRINT_MODULE_CHIP: Record<ConstructorBlueprintModuleStatus, string> = {
+  propuesto: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  pendiente: "border-amber-200 bg-amber-50 text-amber-900",
+  critico: "border-rose-200 bg-rose-50 text-rose-900",
+};
+
+const BLUEPRINT_MODULE_LABEL: Record<ConstructorBlueprintModuleStatus, string> = {
+  propuesto: "Propuesto",
+  pendiente: "Pendiente",
+  critico: "Crítico",
 };
 
 // ─── Datos estáticos ──────────────────────────────────────────────────────────
@@ -479,10 +538,10 @@ function evaluateAuditoriaReadiness(setup: ConstructorSetup): AuditoriaReadiness
     motoresOk,
     reportesOk,
   ]);
-  const pasosMarcadosApi = arrayLength(setup?.completed_steps);
+  const pasosMarcadosApi = arrayLength(setup == null ? undefined : setup.completed_steps);
   const efectivoCompletados = Math.max(pasosMarcadosApi, pasosPreviosCubiertos);
   const readinessApi =
-    typeof setup?.readiness_score === "number" && setup.readiness_score >= 0
+    setup != null && typeof setup.readiness_score === "number" && setup.readiness_score >= 0
       ? setup.readiness_score
       : null;
   const readinessDerivado = Math.round((pasosPreviosCubiertos / 7) * 100);
@@ -490,7 +549,7 @@ function evaluateAuditoriaReadiness(setup: ConstructorSetup): AuditoriaReadiness
 
   let cierreActivacionStatus: QualityStatus;
   let cierreActivacionDetail: string;
-  if (setup === null) {
+  if (setup == null) {
     cierreActivacionStatus = "danger";
     cierreActivacionDetail = "No hay fila de configuración disponible.";
   } else if (efectivoCompletados >= 6 || readinessUsar >= 70) {
@@ -557,7 +616,7 @@ function evaluateAuditoriaReadiness(setup: ConstructorSetup): AuditoriaReadiness
 
   let nextAction =
     "El Constructor está listo para revisión final. La activación real sigue bloqueada en prototipo.";
-  if (setup === null) {
+  if (setup == null) {
     nextAction = "No hay configuración cargada para auditar.";
   } else if (!empresaOk) {
     nextAction = "Volvé a Empresa y completá los datos base.";
@@ -778,11 +837,12 @@ function asRecord(value: unknown): SetupRecord {
 }
 
 function buildPendingFromReadiness(readiness: AuditoriaReadiness): string[] {
+  const sections = Array.isArray(readiness.sections) ? readiness.sections : [];
   return Array.from(
     new Set(
       [
         readiness.overallStatus !== "good" ? readiness.nextAction : "",
-        ...readiness.sections
+        ...sections
           .filter((section) => section.status !== "good")
           .map((section) => `${section.label}: ${section.detail}`),
       ].filter((item): item is string => Boolean(item))
@@ -792,9 +852,11 @@ function buildPendingFromReadiness(readiness: AuditoriaReadiness): string[] {
 
 function buildConstructorFinalContract(
   setup: ConstructorSetup,
-  readiness: AuditoriaReadiness
+  readiness: AuditoriaReadiness | null | undefined
 ): ConstructorFinalContract {
-  const setupRecord = setup ? asRecord(setup) : {};
+  const r =
+    readiness != null && typeof readiness === "object" ? readiness : READINESS_FALLBACK_AUDITORIA;
+  const setupRecord = setup != null ? asRecord(setup) : {};
   const empresa = asRecord(setupRecord.empresa);
   const cuestionario = asRecord(setupRecord.cuestionario);
   const documentos = asRecord(setupRecord.documentos);
@@ -811,6 +873,8 @@ function buildConstructorFinalContract(
   );
   const reportes = asRecord(setupRecord.reportes);
   const persistedAuditoria = asRecord(setupRecord.auditoria);
+
+  const readinessSections = Array.isArray(r.sections) ? r.sections : [];
 
   return {
     metadata: {
@@ -829,11 +893,16 @@ function buildConstructorFinalContract(
     auditoria: {
       persistedFromSetup: persistedAuditoria,
       readiness: {
-        completionPercent: readiness.completionPercent,
-        overallStatus: readiness.overallStatus,
-        overallLabel: readiness.overallLabel,
-        nextAction: readiness.nextAction,
-        sections: readiness.sections.map((section) => ({
+        completionPercent:
+          typeof r.completionPercent === "number" ? r.completionPercent : 0,
+        overallStatus:
+          typeof r.overallStatus === "string"
+            ? (r.overallStatus as QualityStatus)
+            : "neutral",
+        overallLabel:
+          typeof r.overallLabel === "string" ? r.overallLabel : READINESS_SUMMARY_LABEL.neutral,
+        nextAction: typeof r.nextAction === "string" ? r.nextAction : "",
+        sections: readinessSections.map((section) => ({
           key: section.key,
           label: section.label,
           status: section.status,
@@ -846,7 +915,406 @@ function buildConstructorFinalContract(
         message: "La activación real permanece bloqueada en esta fase.",
       },
     },
-    pendientes: buildPendingFromReadiness(readiness),
+    pendientes: buildPendingFromReadiness(r),
+  };
+}
+
+function getStringFromRecord(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function getArrayFromRecord(record: Record<string, unknown>, keys: string[]): unknown[] {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+
+function pickAcrossEmpresaCuestionario(
+  empresaRecord: Record<string, unknown>,
+  cuestionarioRecord: Record<string, unknown>,
+  keys: string[]
+): string {
+  const fromEmpresa = getStringFromRecord(empresaRecord, keys);
+  if (fromEmpresa) return fromEmpresa;
+  return getStringFromRecord(cuestionarioRecord, keys);
+}
+
+function blueprintBlockHasPayload(record: Record<string, unknown>): boolean {
+  return Object.keys(record).length > 0;
+}
+
+function blueprintSectionStatus(
+  contract: ConstructorFinalContract | null | undefined,
+  sectionKey: string
+): QualityStatus | undefined {
+  const sections = contract?.auditoria?.readiness?.sections;
+  if (!Array.isArray(sections)) return undefined;
+  return sections.find((s) => s.key === sectionKey)?.status;
+}
+
+function blueprintModuloStatus(
+  contract: ConstructorFinalContract | null | undefined,
+  sectionKey: string,
+  hasPayload: boolean
+): ConstructorBlueprintModuleStatus {
+  const st = blueprintSectionStatus(contract, sectionKey);
+  if (st === "danger") return "critico";
+  if (hasPayload) return "propuesto";
+  return "pendiente";
+}
+
+function namedStringsFromUnknownArray(items: unknown[], nameKeys: string[]): string[] {
+  const names: string[] = [];
+  for (const item of items) {
+    if (typeof item === "string" && item.trim()) {
+      names.push(item.trim());
+      continue;
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const nm = getStringFromRecord(item as SetupRecord, nameKeys);
+    if (nm) names.push(nm);
+  }
+  return names;
+}
+
+function splitMultilineBullets(raw: string, max: number): string[] {
+  const byNl = raw
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[\s•\-*]+/, "").trim())
+    .filter(Boolean);
+  if (byNl.length > 0) return byNl.slice(0, max);
+  const bySep = raw
+    .split(/[.;]|•/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return bySep.slice(0, max);
+}
+
+function collectPipelineCriteria(reglasRaw: unknown): string[] {
+  const reglas = asRecord(reglasRaw);
+  const keys = ["condicionesAvance", "decisionesHumanas", "alertasSistema", "documentosPorEtapa", "tareasAutomaticas"];
+  const collected: string[] = [];
+  for (const rk of keys) {
+    const text = getStringFromRecord(reglas, [rk]);
+    if (!text) continue;
+    collected.push(...splitMultilineBullets(text, 3));
+    if (collected.length >= 8) break;
+  }
+  return collected.slice(0, 8);
+}
+
+function extractMotoresFromContract(motRecord: Record<string, unknown>): ConstructorBlueprint["motoresIA"] {
+  const list = getArrayFromRecord(motRecord, ["motores", "motoresIA", "engines", "items", "lista"]);
+  const rows: ConstructorBlueprint["motoresIA"] = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as SetupRecord;
+    const nombre =
+      getStringFromRecord(row, ["nombre", "name", "titulo"]) || "Motor sin nombre";
+    const etapa = getStringFromRecord(row, ["etapa", "stage", "fase"]);
+    const prioridad = getStringFromRecord(row, ["prioridad", "priority"]);
+    const riesgo = getStringFromRecord(row, ["riesgo", "risk", "riskLevel"]);
+    const vhRaw = row.requiereValidacionHumana;
+    const validacionHumana =
+      vhRaw === true || vhRaw === "true" || vhRaw === "sí" || vhRaw === "si";
+    rows.push({
+      nombre,
+      etapa: etapa || "—",
+      prioridad: prioridad || "—",
+      riesgo: riesgo || "—",
+      validacionHumana,
+    });
+  }
+  return rows;
+}
+
+function extractReportesFromContract(repRecord: Record<string, unknown>): ConstructorBlueprint["reportes"] {
+  const list = getArrayFromRecord(repRecord, ["reportes", "dashboards", "items", "lista"]);
+  const rows: ConstructorBlueprint["reportes"] = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as SetupRecord;
+    const nombre = getStringFromRecord(row, ["nombre", "name", "titulo"]) || "Reporte sin nombre";
+    const metricas = getStringFromRecord(row, ["metricas", "metrics", "kpi"]);
+    const frecuencia = formatReportValue(row.frecuencia);
+    const audiencia = getStringFromRecord(row, ["audiencia", "audience", "destinatarios"]);
+    rows.push({
+      nombre,
+      metricas: metricas && metricas !== "Sin respuesta registrada" ? metricas : "—",
+      frecuencia: frecuencia !== "Sin respuesta registrada" ? frecuencia : "—",
+      audiencia: audiencia || "—",
+    });
+  }
+  return rows;
+}
+
+function mergeFinalContract(
+  contract: ConstructorFinalContract | null | undefined
+): ConstructorFinalContract {
+  const base: ConstructorFinalContract = {
+    metadata: {
+      version: "prototype-v1",
+      source: "constructor_auditoria_frontend",
+      generatedFrom: "crm_setup_config",
+      prototypeMode: true,
+    },
+    empresa: {},
+    cuestionario: {},
+    documentos: {},
+    diagnostico: {},
+    procesoPipeline: {},
+    motoresIA: {},
+    reportes: {},
+    auditoria: {
+      persistedFromSetup: {},
+      readiness: {
+        completionPercent: 0,
+        overallStatus: "neutral",
+        overallLabel: READINESS_SUMMARY_LABEL.neutral,
+        nextAction: "",
+        sections: [],
+      },
+      activation: {
+        prototypeMode: true,
+        realActivationEnabled: false,
+        message: "La activación real permanece bloqueada en esta fase.",
+      },
+    },
+    pendientes: [],
+  };
+
+  if (!contract || typeof contract !== "object") {
+    return base;
+  }
+
+  const readinessIn = contract.auditoria?.readiness;
+
+  return {
+    ...base,
+    ...contract,
+    empresa: asRecord(contract.empresa ?? base.empresa),
+    cuestionario: asRecord(contract.cuestionario ?? base.cuestionario),
+    documentos: asRecord(contract.documentos ?? base.documentos),
+    diagnostico: asRecord(contract.diagnostico ?? base.diagnostico),
+    procesoPipeline: asRecord(contract.procesoPipeline ?? base.procesoPipeline),
+    motoresIA: asRecord(contract.motoresIA ?? base.motoresIA),
+    reportes: asRecord(contract.reportes ?? base.reportes),
+    metadata:
+      contract.metadata != null && typeof contract.metadata === "object"
+        ? { ...base.metadata, ...contract.metadata }
+        : base.metadata,
+    auditoria: {
+      persistedFromSetup: asRecord(
+        contract.auditoria?.persistedFromSetup ?? base.auditoria.persistedFromSetup
+      ),
+      readiness: {
+        completionPercent:
+          typeof readinessIn?.completionPercent === "number"
+            ? readinessIn.completionPercent
+            : base.auditoria.readiness.completionPercent,
+        overallStatus:
+          (readinessIn?.overallStatus as QualityStatus) ?? base.auditoria.readiness.overallStatus,
+        overallLabel:
+          typeof readinessIn?.overallLabel === "string"
+            ? readinessIn.overallLabel
+            : base.auditoria.readiness.overallLabel,
+        nextAction:
+          typeof readinessIn?.nextAction === "string"
+            ? readinessIn.nextAction
+            : base.auditoria.readiness.nextAction,
+        sections: Array.isArray(readinessIn?.sections)
+          ? readinessIn.sections
+          : base.auditoria.readiness.sections,
+      },
+      activation: {
+        prototypeMode: contract.auditoria?.activation?.prototypeMode !== false,
+        realActivationEnabled: Boolean(contract.auditoria?.activation?.realActivationEnabled),
+        message:
+          typeof contract.auditoria?.activation?.message === "string"
+            ? contract.auditoria.activation.message
+            : base.auditoria.activation.message,
+      },
+    },
+    pendientes: Array.isArray(contract.pendientes) ? contract.pendientes : base.pendientes,
+  };
+}
+
+function buildConstructorBlueprint(
+  contract: ConstructorFinalContract | null | undefined
+): ConstructorBlueprint {
+  const c = mergeFinalContract(contract);
+  const auditoriaBlk = c.auditoria;
+  const readinessBlk = auditoriaBlk.readiness;
+  const readinessPct =
+    readinessBlk != null && typeof readinessBlk.completionPercent === "number"
+      ? readinessBlk.completionPercent
+      : 0;
+  const empresaRecord = c.empresa;
+  const cuestionarioRecord = c.cuestionario;
+
+  const nombre =
+    pickAcrossEmpresaCuestionario(empresaRecord, cuestionarioRecord, [
+      "nombreComercial",
+      "nombre",
+      "empresa",
+    ]) || "Empresa sin nombre";
+  const rubro =
+    pickAcrossEmpresaCuestionario(empresaRecord, cuestionarioRecord, [
+      "rubroPersonalizado",
+      "rubro",
+      "rubroPrincipal",
+    ]) || "Rubro no definido";
+  const vertical =
+    pickAcrossEmpresaCuestionario(empresaRecord, cuestionarioRecord, ["vertical", "giro", "actividad"]) ||
+    "Vertical no definida";
+  const pais = pickAcrossEmpresaCuestionario(empresaRecord, cuestionarioRecord, ["país", "pais", "country"]);
+  const ciudad = pickAcrossEmpresaCuestionario(empresaRecord, cuestionarioRecord, ["ciudad", "localidad"]);
+  let paisCiudad = "Ubicación no definida";
+  if (pais && ciudad) paisCiudad = `${pais} · ${ciudad}`;
+  else if (pais) paisCiudad = pais;
+  else if (ciudad) paisCiudad = ciudad;
+
+  const modeloComercial =
+    pickAcrossEmpresaCuestionario(empresaRecord, cuestionarioRecord, [
+      "queVendeDetalle",
+      "queVende",
+      "modeloComercial",
+      "tipoVenta",
+    ]) || "Modelo comercial pendiente de completar";
+
+  const empresa: ConstructorBlueprint["empresa"] = {
+    nombre,
+    rubro,
+    vertical,
+    paisCiudad,
+    modeloComercial,
+  };
+
+  const hasLeadsPayload =
+    blueprintBlockHasPayload(empresaRecord) || blueprintBlockHasPayload(cuestionarioRecord);
+
+  const documentosPayload = blueprintBlockHasPayload(c.documentos);
+  const diagPayload = blueprintBlockHasPayload(c.diagnostico);
+  const procesoPayload = blueprintBlockHasPayload(c.procesoPipeline);
+  const motPayload = blueprintBlockHasPayload(c.motoresIA);
+  const reportesPayload = blueprintBlockHasPayload(c.reportes);
+  const persistedAud = asRecord(auditoriaBlk?.persistedFromSetup);
+
+  const modulos: ConstructorBlueprint["modulos"] = [
+    {
+      label: "Gestión de leads",
+      description: "Centraliza oportunidades, seguimiento y datos comerciales.",
+      status: blueprintModuloStatus(c, "datos-base", hasLeadsPayload),
+    },
+    {
+      label: "Pipeline / Kanban comercial",
+      description: "Ordena etapas, criterios de avance y responsables.",
+      status: blueprintModuloStatus(c, "diagnostico-proceso", procesoPayload),
+    },
+    {
+      label: "Diagnóstico comercial",
+      description: "Consolida riesgos, oportunidades y puntos ciegos.",
+      status: blueprintModuloStatus(c, "diagnostico-proceso", diagPayload),
+    },
+    {
+      label: "Documentos fuente",
+      description: "Almacena referencias y material base para el contexto del CRM.",
+      status: blueprintModuloStatus(c, "datos-base", documentosPayload),
+    },
+    {
+      label: "Motores IA",
+      description: "Propone asistencias por etapa con reglas y validación humana.",
+      status: blueprintModuloStatus(c, "ia-reportes", motPayload),
+    },
+    {
+      label: "Reportes y KPIs",
+      description: "Define tableros, métricas y frecuencia de lectura.",
+      status: blueprintModuloStatus(c, "ia-reportes", reportesPayload),
+    },
+    {
+      label: "Auditoría y validación",
+      description: "Cierra el Constructor con readiness, checklist y contrato de prototipo.",
+      status: blueprintModuloStatus(
+        c,
+        "cierre-activacion",
+        blueprintBlockHasPayload(persistedAud) || readinessPct >= 55
+      ),
+    },
+  ];
+
+  const pp = c.procesoPipeline;
+  const etapasArr = getArrayFromRecord(pp, ["etapas", "stages"]);
+  const columnasArr = getArrayFromRecord(pp, ["columnas", "kanban_columns", "columns"]);
+  const etapasNombres = namedStringsFromUnknownArray(etapasArr, ["nombre", "name", "titulo"]);
+  const columnaNombres = namedStringsFromUnknownArray(columnasArr, ["nombre", "name", "titulo"]);
+  const etapasUnique: string[] = [];
+  for (const n of [...etapasNombres, ...columnaNombres]) {
+    if (!etapasUnique.includes(n)) etapasUnique.push(n);
+  }
+  const criterios = collectPipelineCriteria(pp.reglas);
+  let resumenPipe = "";
+  if (etapasUnique.length > 0) {
+    resumenPipe = `Se definen ${etapasUnique.length} etapa(s) o columnas Kanban coherentes con el proceso comercial cargado.`;
+  } else {
+    const fallbackTxt = getStringFromRecord(pp, ["resumenPipeline", "resumen", "descripcion"]);
+    resumenPipe = fallbackTxt || "Pipeline pendiente de definición.";
+  }
+
+  const motoresBlueprint = extractMotoresFromContract(c.motoresIA);
+  const reportesBlueprint = extractReportesFromContract(c.reportes);
+
+  const diag = c.diagnostico;
+  let riesgosLista = splitMultilineBullets(getStringFromRecord(diag, ["riesgos"]), 5).filter(Boolean);
+  if (riesgosLista.length === 0) {
+    riesgosLista = splitMultilineBullets(getStringFromRecord(diag, ["puntosCiegos"]), 5);
+  }
+
+  let oportunidadesLista = splitMultilineBullets(getStringFromRecord(diag, ["oportunidades"]), 5);
+  if (oportunidadesLista.length === 0) {
+    oportunidadesLista = ["Oportunidades pendientes de completar"];
+  }
+
+  const pendientesLista = Array.isArray(c.pendientes) ? c.pendientes : [];
+
+  if (riesgosLista.length === 0 && pendientesLista.length > 0) {
+    riesgosLista = pendientesLista.slice(0, 5);
+  }
+  if (riesgosLista.length === 0) {
+    riesgosLista = ["Riesgos pendientes de registrar en diagnóstico."];
+  }
+
+  const pendientesVista =
+    pendientesLista.length > 0 ? pendientesLista.slice(0, 6) : [];
+
+  let pendientesFraseados = pendientesVista;
+  if (pendientesFraseados.length === 0) {
+    pendientesFraseados = ["Sin pendientes críticos detectados en el contrato actual."];
+  }
+
+  return {
+    empresa,
+    modulos,
+    pipeline: {
+      resumen: resumenPipe,
+      etapas: etapasUnique.slice(0, 16),
+      criterios:
+        criterios.length > 0
+          ? criterios
+          : resumenPipe === "Pipeline pendiente de definición."
+            ? []
+            : ["Criterios de avance disponibles parcialmente en reglas cargadas."],
+    },
+    motoresIA: motoresBlueprint,
+    reportes: reportesBlueprint,
+    riesgos: riesgosLista.slice(0, 5),
+    oportunidades: oportunidadesLista.slice(0, 5),
+    pendientes: pendientesFraseados.slice(0, 6),
   };
 }
 
@@ -1215,6 +1683,7 @@ export default function AuditoriaPage() {
     auditoriaReadiness ?? evaluateAuditoriaReadiness(setupData);
   const finalContract = buildConstructorFinalContract(setupData, readinessForContract);
   const finalContractJson = JSON.stringify(finalContract, null, 2);
+  const blueprint = buildConstructorBlueprint(finalContract);
 
   const clientReportBlocks = [
     {
@@ -1846,6 +2315,226 @@ export default function AuditoriaPage() {
             <pre className="max-h-[min(70vh,520px)] overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-[11px] leading-relaxed text-slate-100">
               {finalContractJson}
             </pre>
+          </div>
+
+          {/* ── I: Blueprint visual del CRM ─────────────────────────────────────── */}
+          <div className="mb-8">
+            <SectionHeader letter="I" title="Blueprint visual del CRM" />
+            <p className="mb-4 max-w-2xl text-xs text-slate-500">
+              Vista ejecutiva y consultiva derivada del mismo contrato consolidado que el JSON
+              anterior. Pensada para alinear expectativas con cliente o equipo sin activar el CRM.
+            </p>
+
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Organización
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tracking-tight text-slate-900">
+                    {blueprint.empresa.nombre}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {blueprint.empresa.rubro}
+                    {" · "}
+                    {blueprint.empresa.vertical}
+                  </p>
+                </div>
+                <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold text-slate-600">
+                  Prototipo · sin activación
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Ubicación
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-800">
+                    {blueprint.empresa.paisCiudad}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Modelo comercial
+                  </p>
+                  <p className="mt-0.5 text-xs leading-snug text-slate-800">
+                    {blueprint.empresa.modeloComercial}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p className="mb-3 text-xs font-semibold text-slate-800">Módulos propuestos</p>
+            <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {blueprint.modulos.map((mod) => (
+                <div
+                  key={mod.label}
+                  className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">{mod.label}</p>
+                    <span
+                      className={[
+                        "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        BLUEPRINT_MODULE_CHIP[mod.status],
+                      ].join(" ")}
+                    >
+                      {BLUEPRINT_MODULE_LABEL[mod.status]}
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-slate-600">{mod.description}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+              <p className="text-xs font-semibold text-slate-900">
+                Pipeline recomendado
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">{blueprint.pipeline.resumen}</p>
+              {blueprint.pipeline.etapas.length > 0 ? (
+                <>
+                  <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Etapas / columnas
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {blueprint.pipeline.etapas.map((et, ei) => (
+                      <span
+                        key={`etapa-${ei}`}
+                        className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-700"
+                      >
+                        {et}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              {blueprint.pipeline.criterios.length > 0 ? (
+                <>
+                  <p className="mt-4 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Criterios principales
+                  </p>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] text-slate-700">
+                    {blueprint.pipeline.criterios.map((c, ci) => (
+                      <li key={`crit-${ci}`}>{c}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+
+            <div className="mb-8">
+              <p className="mb-3 text-xs font-semibold text-slate-900">Motores IA sugeridos</p>
+              {blueprint.motoresIA.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-center text-xs text-slate-500">
+                  Todavía no hay motores IA definidos para el blueprint.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                  <table className="min-w-full border-collapse text-left text-[11px] text-slate-700">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        <th className="px-3 py-2">Nombre</th>
+                        <th className="px-3 py-2">Etapa</th>
+                        <th className="px-3 py-2">Prioridad</th>
+                        <th className="px-3 py-2">Riesgo</th>
+                        <th className="px-3 py-2">Validación humana</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blueprint.motoresIA.map((m, mi) => (
+                        <tr key={`motor-${mi}`} className="border-b border-slate-100 last:border-0">
+                          <td className="px-3 py-2 font-medium text-slate-900">{m.nombre}</td>
+                          <td className="px-3 py-2">{m.etapa}</td>
+                          <td className="px-3 py-2">{m.prioridad}</td>
+                          <td className="px-3 py-2">{m.riesgo}</td>
+                          <td className="px-3 py-2">
+                            {m.validacionHumana ? (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                Sí
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                                No
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="mb-8">
+              <p className="mb-3 text-xs font-semibold text-slate-900">Reportes necesarios</p>
+              {blueprint.reportes.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-center text-xs text-slate-500">
+                  Todavía no hay reportes definidos para el blueprint.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                  <table className="min-w-full border-collapse text-left text-[11px] text-slate-700">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        <th className="px-3 py-2">Nombre</th>
+                        <th className="px-3 py-2">Métricas</th>
+                        <th className="px-3 py-2">Frecuencia</th>
+                        <th className="px-3 py-2">Audiencia</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blueprint.reportes.map((r, ri) => (
+                        <tr key={`rep-${ri}`} className="border-b border-slate-100 last:border-0">
+                          <td className="px-3 py-2 font-medium text-slate-900">{r.nombre}</td>
+                          <td className="px-3 py-2">{r.metricas}</td>
+                          <td className="px-3 py-2">{r.frecuencia}</td>
+                          <td className="px-3 py-2">{r.audiencia}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="mb-8 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+                <p className="text-xs font-semibold text-rose-900">Riesgos principales</p>
+                <ul className="mt-2 space-y-1.5 text-[11px] leading-snug text-rose-900/90">
+                  {blueprint.riesgos.map((r, ri) => (
+                    <li key={`riesgo-${ri}`} className="flex gap-2">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-rose-400" />
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+                <p className="text-xs font-semibold text-emerald-900">Oportunidades principales</p>
+                <ul className="mt-2 space-y-1.5 text-[11px] leading-snug text-emerald-900/90">
+                  {blueprint.oportunidades.map((o, oi) => (
+                    <li key={`op-${oi}`} className="flex gap-2">
+                      <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />
+                      <span>{o}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-4">
+              <p className="text-xs font-semibold text-amber-950">Pendientes antes de activación</p>
+              <ul className="mt-2 space-y-1.5 text-[11px] leading-snug text-amber-950/90">
+                {blueprint.pendientes.map((p, pi) => (
+                  <li key={`pend-${pi}`} className="flex gap-2">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           {/* Aviso */}
@@ -3133,7 +3822,7 @@ export default function AuditoriaPage() {
             </div>
           </div>
 
-          {/* ── I: Preactivación ──────────────────────────────────────────── */}
+          {/* ── J: Preactivación ──────────────────────────────────────────── */}
           <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
             <div className="mb-3 flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-green-600" />
@@ -3183,7 +3872,7 @@ export default function AuditoriaPage() {
             </div>
           ) : null}
 
-          {/* ── J: Navegación ────────────────────────────────────────────── */}
+          {/* ── K: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
             <div className="flex flex-wrap gap-2">
               <Link
