@@ -21,6 +21,25 @@ import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorAIAudit } from "@/lib/constructor-ai/useConstructorAIAudit";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
+import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
+import type {
+  BaseReadiness,
+  FieldQualityHintValue,
+  QualityStatus,
+  SectionQuality,
+} from "@/lib/constructor/readiness/types";
+import {
+  STATUS_VALUE,
+  READINESS_SUMMARY_LABEL,
+} from "@/lib/constructor/readiness/statusStyles";
+import {
+  clampCompletionPercent,
+  countSelectedValues,
+  hasRelevantText,
+  hasText,
+} from "@/lib/constructor/readiness/helpers";
+import { getConstructorOverallProgress } from "@/lib/constructor/readiness/overallProgress";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +88,9 @@ type MotoresIAPayload = {
   motores: MotorIA[];
   reglas: ReglasUsoIA;
 };
+
+type MotoresIAForm = MotoresIAPayload;
+type MotoresIAReadiness = BaseReadiness;
 
 // ─── Datos iniciales ──────────────────────────────────────────────────────────
 
@@ -396,6 +418,217 @@ function PillSelect<T extends string>({
       ))}
     </div>
   );
+}
+
+function evaluateMotoresIAReadiness(form: MotoresIAForm): MotoresIAReadiness {
+  const { motores, reglas } = form;
+
+  const motorConNombreObjetivo = (m: MotorIA) =>
+    hasText(m.nombre) && hasRelevantText(m.objetivo, 22);
+  const motoresCompletos = motores.filter(motorConNombreObjetivo).length;
+
+  let definidosStatus: QualityStatus;
+  let definidosDetail: string;
+  if (motores.length === 0) {
+    definidosStatus = "danger";
+    definidosDetail = "No hay motores IA listados.";
+  } else if (motores.length <= 2 || motoresCompletos < motores.length) {
+    definidosStatus = "warning";
+    definidosDetail =
+      motores.length <= 2
+        ? "Pocos motores: sumá lista y completá objetivos antes de cerrar esta etapa."
+        : "Hay motores sin nombre claro u objetivo describible.";
+  } else {
+    definidosStatus = "good";
+    definidosDetail = "Tres o más motores con nombre y objetivo definidos.";
+  }
+
+  const motoresSinEtapa = motores.filter((m) => !hasText(m.etapa));
+  const distinctEtapas = new Set(motores.map((m) => m.etapa.trim()).filter(Boolean));
+
+  function motorEnEtapaValorEstrategica(m: MotorIA): boolean {
+    const raw = `${m.etapa} ${m.tipo}`;
+    const n = raw
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    return (
+      n.includes("diagnostico") ||
+      n.includes("propuesta") ||
+      n.includes("seguimiento") ||
+      n.includes("negociacion") ||
+      n.includes("reporte") ||
+      n.includes("transversal")
+    );
+  }
+  const motoresCubrenHitosClave = motores.filter(motorEnEtapaValorEstrategica).length;
+
+  let coberturaStatus: QualityStatus;
+  let coberturaDetail: string;
+  if (motores.length === 0) {
+    coberturaStatus = "danger";
+    coberturaDetail = "Sin motores para asociar a etapas comerciales.";
+  } else if (motoresSinEtapa.length > 0) {
+    coberturaStatus = "danger";
+    coberturaDetail = "Hay motores sin etapa del proceso asignada.";
+  } else if (distinctEtapas.size >= 2 || motoresCubrenHitosClave >= 3) {
+    coberturaStatus = "good";
+    coberturaDetail = "Cubrís más de una etapa o hay foco en hitos clave.";
+  } else {
+    coberturaStatus = "warning";
+    coberturaDetail = "Todos los motores caen principalmente en una sola etapa.";
+  }
+
+  const altoSinValidacion = motores.some(
+    (m) => m.riesgo === "alto" && !m.requiereValidacionHumana
+  );
+  const riesgosDistintos = countSelectedValues([
+    motores.some((m) => m.riesgo === "bajo"),
+    motores.some((m) => m.riesgo === "medio"),
+    motores.some((m) => m.riesgo === "alto"),
+  ]);
+
+  let riesgoValStatus: QualityStatus;
+  let riesgoValDetail: string;
+  if (altoSinValidacion) {
+    riesgoValStatus = "danger";
+    riesgoValDetail = "Hay motores de riesgo alto sin validación humana obligatoria.";
+  } else if (motores.length > 0 && riesgosDistintos < 2 && !motores.some((m) => m.requiereValidacionHumana)) {
+    riesgoValStatus = "warning";
+    riesgoValDetail = "Diferenciá niveles de riesgo y activá validación donde haga falta.";
+  } else if (
+    motores.some((m) => m.requiereValidacionHumana) ||
+    hasRelevantText(reglas.motivosAprobacion, 22)
+  ) {
+    riesgoValStatus = "good";
+    riesgoValDetail = "Riesgo marcado con validaciones y reglas alineadas.";
+  } else {
+    riesgoValStatus = "warning";
+    riesgoValDetail = "Marcá mejor la validación humana en las reglas o en motores delicados.";
+  }
+
+  const activos = motores.filter((m) => m.activo);
+  const altaEntreActivos = activos.filter((m) => m.prioridad === "alta").length;
+  let prioridadActStatus: QualityStatus;
+  let prioridadActDetail: string;
+  if (activos.length === 0) {
+    prioridadActStatus = "warning";
+    prioridadActDetail = "Ningún motor activo para la primera versión del CRM.";
+  } else if (altaEntreActivos === 0) {
+    prioridadActStatus = "warning";
+    prioridadActDetail = "Definí al menos una prioridad alta focal entre los activos.";
+  } else {
+    prioridadActStatus = "good";
+    prioridadActDetail = "Hay motores activos con prioridades claras para implementar.";
+  }
+
+  const sections: SectionQuality[] = [
+    {
+      key: "motores-definidos",
+      label: "Motores definidos",
+      status: definidosStatus,
+      detail: definidosDetail,
+    },
+    {
+      key: "cobertura-proceso",
+      label: "Cobertura del proceso",
+      status: coberturaStatus,
+      detail: coberturaDetail,
+    },
+    {
+      key: "riesgo-validacion",
+      label: "Riesgo y validación humana",
+      status: riesgoValStatus,
+      detail: riesgoValDetail,
+    },
+    {
+      key: "prioridad-activacion",
+      label: "Prioridad y activación",
+      status: prioridadActStatus,
+      detail: prioridadActDetail,
+    },
+  ];
+
+  const completionPercent = clampCompletionPercent(
+    Math.round(
+      30 * STATUS_VALUE[definidosStatus] +
+        25 * STATUS_VALUE[coberturaStatus] +
+        25 * STATUS_VALUE[riesgoValStatus] +
+        20 * STATUS_VALUE[prioridadActStatus]
+    )
+  );
+
+  const hasDanger = sections.some((s) => s.status === "danger");
+  let overallStatus: QualityStatus;
+  if (completionPercent >= 80 && !hasDanger) {
+    overallStatus = "good";
+  } else if (completionPercent >= 55) {
+    overallStatus = "warning";
+  } else {
+    overallStatus = "danger";
+  }
+
+  let nextAction = "Podés guardar y continuar a Reportes.";
+  if (motores.length === 0) {
+    nextAction = "Definí al menos un motor IA para el CRM.";
+  } else if (motores.some((m) => !hasRelevantText(m.objetivo, 12))) {
+    nextAction = "Completá el objetivo de cada motor IA.";
+  } else if (motoresSinEtapa.length > 0) {
+    nextAction = "Asociá cada motor IA a una etapa del proceso comercial.";
+  } else if (altoSinValidacion) {
+    nextAction = "Marcá validación humana para motores IA de riesgo alto.";
+  } else if (!motores.some((m) => m.activo)) {
+    nextAction = "Activá al menos un motor IA para la primera versión del CRM.";
+  } else if (!motores.some((m) => m.activo && m.prioridad === "alta")) {
+    nextAction = "Definí prioridad para ordenar la implementación de motores IA.";
+  }
+
+  const fieldHints: Record<string, FieldQualityHintValue> = {};
+
+  if (definidosStatus === "danger") {
+    fieldHints.motoresDefinidos = {
+      status: "danger",
+      text: "Definí los motores IA que tendrá el CRM.",
+    };
+  } else if (definidosStatus !== "good") {
+    fieldHints.motoresDefinidos = {
+      status: "warning",
+      text: "Completá nombre y objetivo para que cada motor tenga una función clara.",
+    };
+  }
+
+  if (coberturaStatus !== "good") {
+    fieldHints.coberturaProceso = {
+      status: coberturaStatus === "danger" ? "danger" : "warning",
+      text: "Asociar motores a etapas evita IA desconectada del flujo comercial.",
+    };
+  }
+
+  if (riesgoValStatus !== "good") {
+    fieldHints.riesgoValidacion = {
+      status: riesgoValStatus === "danger" ? "danger" : "warning",
+      text:
+        riesgoValStatus === "danger"
+          ? "Los motores de riesgo alto requieren validación humana."
+          : "Clasificá riesgo y validación antes de activar IA.",
+    };
+  }
+
+  if (prioridadActStatus !== "good") {
+    fieldHints.prioridadActivacion = {
+      status: "warning",
+      text: "Definí prioridad y qué motores estarán activos en la primera versión.",
+    };
+  }
+
+  return {
+    completionPercent,
+    overallStatus,
+    overallLabel: READINESS_SUMMARY_LABEL[overallStatus],
+    nextAction,
+    sections,
+    fieldHints,
+  };
 }
 
 // ─── Página ───────────────────────────────────────────────────────────────────
@@ -1131,6 +1364,8 @@ export default function MotoresIAPage() {
   const totalAltoRiesgo = motores.filter((m) => m.riesgo === "alto").length;
   const step = CRM_SETUP_STEPS.find((s) => s.id === "motores-ia");
 
+  const readiness = evaluateMotoresIAReadiness({ motores, reglas });
+
   return (
     <PageContainer>
       <div className="space-y-6">
@@ -1173,6 +1408,15 @@ export default function MotoresIAPage() {
               {" "}Esta configuración no ejecuta IA real todavía.
             </p>
           </div>
+
+          <StepReadinessPanel
+            title="Estado de motores IA"
+            readiness={readiness}
+            overallProgress={getConstructorOverallProgress({
+              currentStep: "motores-ia",
+              currentStepPercent: readiness.completionPercent,
+            })}
+          />
 
           {/* Aviso */}
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
@@ -1260,6 +1504,7 @@ export default function MotoresIAPage() {
               Editá cada motor según las necesidades reales del proceso. Los cambios son locales —
               no se guardan todavía.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.motoresDefinidos} />
 
             {/* Resumen rápido */}
             <div className="mb-5 flex flex-wrap gap-3">
@@ -1278,6 +1523,7 @@ export default function MotoresIAPage() {
                 </div>
               ))}
             </div>
+            <FieldQualityHint hint={readiness.fieldHints.prioridadActivacion} />
 
             <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1504,6 +1750,8 @@ export default function MotoresIAPage() {
               Vista derivada del estado local. Muestra en qué momento del proceso comercial actúa
               cada motor, si requiere validación y su nivel de riesgo.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.coberturaProceso} />
+
             <div className="space-y-3">
               {etapasConMotores.map((etapa) => {
                 const motorsDe = motores.filter((m) => m.etapa === etapa);
@@ -1568,6 +1816,8 @@ export default function MotoresIAPage() {
               Definí las reglas generales que gobiernan cuándo la IA puede actuar sola y cuándo
               necesita intervención humana antes de ejecutar o entregar output.
             </p>
+            <FieldQualityHint hint={readiness.fieldHints.riesgoValidacion} />
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
