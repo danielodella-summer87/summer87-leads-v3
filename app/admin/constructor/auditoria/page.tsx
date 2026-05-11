@@ -649,6 +649,95 @@ function buildConstructorTechnicalJson(
   };
 }
 
+/** Vista de solo lectura derivada sólo del JSON técnico (Fase 5B). Sin contratos externos. */
+function strFieldTechnical(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : "No definido";
+}
+
+function structuralBlockStatus(recordUnknown: unknown): "Configurado" | "Pendiente" {
+  return Object.keys(asRecord(recordUnknown)).length > 0
+    ? "Configurado"
+    : "Pendiente";
+}
+
+function buildTechnicalSummaryViewModel(
+  technicalJson: Record<string, unknown> | null | undefined
+) {
+  const root = technicalJson ?? {};
+  const empresa = asRecord(root.empresa);
+  const procesoPipelineUnknown = root.procesoPipeline;
+  const motoresUnknown = root.motoresIA;
+  const reportesUnknown = root.reportes;
+
+  const rubroNombre = strFieldTechnical(empresa.rubro);
+  const rubroPersonalizado = strFieldTechnical(empresa.rubroPersonalizado);
+  const rubroDisplay =
+    rubroNombre !== "No definido"
+      ? rubroNombre
+      : rubroPersonalizado !== "No definido"
+        ? rubroPersonalizado
+        : "No definido";
+
+  const giroTxt = strFieldTechnical(empresa.giro);
+  const queVendeTxt = strFieldTechnical(empresa.queVende);
+  const giroOQueVendeParts: string[] = [];
+  if (giroTxt !== "No definido") giroOQueVendeParts.push(giroTxt);
+  if (queVendeTxt !== "No definido") giroOQueVendeParts.push(queVendeTxt);
+  const giroOQueVende =
+    giroOQueVendeParts.length > 0
+      ? giroOQueVendeParts.join(" · ")
+      : "No definido";
+
+  const auditoriaBlock = asRecord(root?.auditoria);
+  const readinessRecord = asRecord(auditoriaBlock?.readiness);
+  const completionPercent =
+    typeof readinessRecord.completionPercent === "number" &&
+    Number.isFinite(readinessRecord.completionPercent)
+      ? readinessRecord.completionPercent
+      : 0;
+  const overallStatusOs = readinessRecord.overallStatus;
+  const overallStatusStr =
+    overallStatusOs !== undefined && overallStatusOs !== null
+      ? String(overallStatusOs)
+      : "No definido";
+  const overallLabelStr = strFieldTechnical(readinessRecord.overallLabel);
+  const nextActionStr = strFieldTechnical(readinessRecord.nextAction);
+
+  const pendientesRaw = Array.isArray(root.pendientes) ? root.pendientes : [];
+  const pendientesTop = pendientesRaw
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .slice(0, 5);
+
+  return {
+    empresa: {
+      nombreComercial: strFieldTechnical(empresa.nombreComercial),
+      nombreLegal: strFieldTechnical(empresa.nombreLegal),
+      sitioWeb: strFieldTechnical(empresa.sitioWeb),
+    },
+    ubicacion: {
+      pais: strFieldTechnical(empresa.pais),
+      ciudad: strFieldTechnical(empresa.ciudad),
+    },
+    rubroVertical: {
+      rubro: rubroDisplay,
+      vertical: strFieldTechnical(empresa.vertical),
+      giroOQueVende,
+    },
+    pipeline: structuralBlockStatus(procesoPipelineUnknown),
+    motoresIA: structuralBlockStatus(motoresUnknown),
+    reportes: structuralBlockStatus(reportesUnknown),
+    auditoria: {
+      completionPercent,
+      overallStatus: overallStatusStr,
+      overallLabel: overallLabelStr,
+      nextAction: nextActionStr,
+    },
+    pendientesTop,
+  };
+}
+
 function getText(record: SetupRecord, key: string): string {
   return formatReportValue(record[key]);
 }
@@ -902,6 +991,7 @@ export default function AuditoriaPage() {
     auditoriaReadinessPanel
   );
   const technicalJsonString = JSON.stringify(technicalJson, null, 2);
+  const technicalSummaryVm = buildTechnicalSummaryViewModel(technicalJson);
 
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
@@ -2776,6 +2866,209 @@ export default function AuditoriaPage() {
                   {technicalJsonString}
                 </code>
               </pre>
+            </div>
+          </div>
+
+          {/* ── Resumen visual CRM (Fase 5B, solo lectura desde JSON técnico) ── */}
+          <div className="mb-8">
+            <SectionHeader
+              letter="6"
+              title="Resumen visual del CRM configurado"
+            />
+            <p className="mb-4 max-w-3xl text-xs leading-relaxed text-slate-500">
+              Vista simplificada generada desde el JSON técnico actual. Sirve para
+              revisar rápidamente qué información ya tiene el Constructor antes de
+              futuras fases de entrega o activación.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {/* 1 Empresa */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Empresa
+                </p>
+                <dl className="space-y-2">
+                  <div>
+                    <dt className="text-[11px] text-slate-500">Nombre comercial</dt>
+                    <dd className="text-sm font-semibold text-slate-800">
+                      {technicalSummaryVm.empresa.nombreComercial}
+                    </dd>
+                  </div>
+                  {technicalSummaryVm.empresa.nombreLegal !== "No definido" ? (
+                    <div>
+                      <dt className="text-[11px] text-slate-500">Nombre legal</dt>
+                      <dd className="text-sm font-medium text-slate-800">
+                        {technicalSummaryVm.empresa.nombreLegal}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {technicalSummaryVm.empresa.sitioWeb !== "No definido" ? (
+                    <div>
+                      <dt className="text-[11px] text-slate-500">Sitio web</dt>
+                      <dd className="text-sm font-medium text-slate-800 break-all">
+                        {technicalSummaryVm.empresa.sitioWeb}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </div>
+              {/* 2 Ubicación */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Ubicación
+                </p>
+                <dl className="space-y-2">
+                  <div>
+                    <dt className="text-[11px] text-slate-500">País</dt>
+                    <dd className="text-sm font-semibold text-slate-800">
+                      {technicalSummaryVm.ubicacion.pais}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] text-slate-500">Ciudad / región</dt>
+                    <dd className="text-sm font-medium text-slate-800">
+                      {technicalSummaryVm.ubicacion.ciudad}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              {/* 3 Rubro y vertical */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4 sm:col-span-2">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Rubro y vertical
+                </p>
+                <dl className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <dt className="text-[11px] text-slate-500">Rubro</dt>
+                    <dd className="text-sm font-semibold text-slate-800">
+                      {technicalSummaryVm.rubroVertical.rubro}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] text-slate-500">Vertical</dt>
+                    <dd className="text-sm font-medium text-slate-800">
+                      {technicalSummaryVm.rubroVertical.vertical}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] text-slate-500">
+                      Giro / qué vende
+                    </dt>
+                    <dd className="text-sm font-medium text-slate-800">
+                      {technicalSummaryVm.rubroVertical.giroOQueVende}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              <div className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
+              {/* Pipeline, Motores, Reportes */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Pipeline
+                  </p>
+                  <span
+                    className={
+                      technicalSummaryVm.pipeline === "Configurado"
+                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                        : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                    }
+                  >
+                    {technicalSummaryVm.pipeline}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  Origen técnico: bloque procesoPipeline del JSON consolidado.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Motores IA
+                  </p>
+                  <span
+                    className={
+                      technicalSummaryVm.motoresIA === "Configurado"
+                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                        : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                    }
+                  >
+                    {technicalSummaryVm.motoresIA}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  Origen técnico: bloque motoresIA del JSON consolidado.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Reportes
+                  </p>
+                  <span
+                    className={
+                      technicalSummaryVm.reportes === "Configurado"
+                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                        : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                    }
+                  >
+                    {technicalSummaryVm.reportes}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  Origen técnico: bloque reportes del JSON consolidado.
+                </p>
+              </div>
+              </div>
+              {/* Auditoría */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4 sm:col-span-2">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Auditoría
+                </p>
+                <dl className="grid gap-3 sm:grid-cols-3">
+                  <div className="sm:col-span-1">
+                    <dt className="text-[11px] text-slate-500">
+                      Readiness (completitud)
+                    </dt>
+                    <dd className="text-lg font-bold tabular-nums text-slate-900">
+                      {technicalSummaryVm.auditoria.completionPercent}%
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] text-slate-500">Estado global</dt>
+                    <dd className="text-sm font-semibold text-slate-800">
+                      {technicalSummaryVm.auditoria.overallLabel}
+                      <span className="ml-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                        {technicalSummaryVm.auditoria.overallStatus}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <dt className="text-[11px] text-slate-500">
+                      Siguiente acción
+                    </dt>
+                    <dd className="text-sm leading-relaxed text-slate-700">
+                      {technicalSummaryVm.auditoria.nextAction}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              {/* Pendientes */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Pendientes principales
+                </p>
+                {technicalSummaryVm.pendientesTop.length === 0 ? (
+                  <p className="text-xs leading-relaxed text-slate-600">
+                    Sin pendientes críticos detectados en esta vista.
+                  </p>
+                ) : (
+                  <ul className="list-disc space-y-1.5 pl-4 text-xs text-slate-700">
+                    {technicalSummaryVm.pendientesTop.map((item, idx) => (
+                      <li key={`pend-${idx}-${item.slice(0, 32)}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
 
