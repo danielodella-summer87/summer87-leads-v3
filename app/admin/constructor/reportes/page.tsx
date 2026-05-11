@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronLeft,
   Info,
   BarChart3,
@@ -356,13 +357,74 @@ function asMockTipoReporte(value: unknown): TipoReporte {
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5R: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleReportesSectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleReportesSection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleReportesSectionProps) {
   return (
-    <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-        {letter}
-      </div>
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+          {letter}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -637,6 +699,8 @@ export default function ReportesPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [openReportesSection, setOpenReportesSection] =
+    useState<string>("disenador");
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
   const [mockAIReportesRequested, setMockAIReportesRequested] = useState(false);
   const [mockAIApplyMessage, setMockAIApplyMessage] = useState<string | null>(null);
@@ -775,6 +839,10 @@ export default function ReportesPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleReportesSectionToggle(id: string) {
+    setOpenReportesSection((prev) => (prev === id ? "" : id));
   }
 
   function setReporte<K extends keyof ReporteSugerido>(
@@ -1570,9 +1638,15 @@ export default function ReportesPage() {
             </p>
           </div>
 
+          <div className="space-y-4">
           {/* ── A: Tipos de reportes ─────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="A" title="Tipos de reportes en el CRM" />
+          <CollapsibleReportesSection
+            id="tipos"
+            letter="A"
+            title="Tipos de reportes en el CRM"
+            isOpen={openReportesSection === "tipos"}
+            onToggle={handleReportesSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               El sistema distingue tres categorías según el perfil de consumo y
               el origen de los datos.
@@ -1646,11 +1720,16 @@ export default function ReportesPage() {
               </div>
 
             </div>
-          </div>
+          </CollapsibleReportesSection>
 
           {/* ── B: Diseñador de reportes ──────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="B" title="Diseñador de reportes sugeridos" />
+          <CollapsibleReportesSection
+            id="disenador"
+            letter="B"
+            title="Diseñador de reportes sugeridos"
+            isOpen={openReportesSection === "disenador"}
+            onToggle={handleReportesSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Editá cada reporte según las necesidades del equipo. Los cambios
               son locales — no se guardan todavía.
@@ -1880,14 +1959,16 @@ export default function ReportesPage() {
             {renderFieldSuggestions("reportes")}
             {renderFieldSuggestions("metricas")}
             {renderFieldSuggestions("frecuencia")}
-          </div>
+          </CollapsibleReportesSection>
 
           {/* ── C: Matriz por audiencia ───────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="C"
-              title="Matriz de reportes por audiencia"
-            />
+          <CollapsibleReportesSection
+            id="matriz"
+            letter="C"
+            title="Matriz de reportes por audiencia"
+            isOpen={openReportesSection === "matriz"}
+            onToggle={handleReportesSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Vista derivada del estado local. Muestra qué reportes consume cada
               rol y con qué frecuencia.
@@ -1957,14 +2038,16 @@ export default function ReportesPage() {
                 );
               })}
             </div>
-          </div>
+          </CollapsibleReportesSection>
 
           {/* ── D: Reglas de generación y distribución ────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="D"
-              title="Reglas de generación y distribución"
-            />
+          <CollapsibleReportesSection
+            id="reglas"
+            letter="D"
+            title="Reglas de generación y distribución"
+            isOpen={openReportesSection === "reglas"}
+            onToggle={handleReportesSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Definí las reglas generales que gobiernan cuándo se generan los
               reportes, cómo se distribuyen y qué umbrales disparan alertas.
@@ -2029,14 +2112,16 @@ export default function ReportesPage() {
                 {renderFieldSuggestions("alertas")}
               </div>
             </div>
-          </div>
+          </CollapsibleReportesSection>
 
           {/* ── E: Preview JSON ───────────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="E"
-              title="Preview del futuro JSON de configuración"
-            />
+          <CollapsibleReportesSection
+            id="preview"
+            letter="E"
+            title="Preview del futuro JSON de configuración"
+            isOpen={openReportesSection === "preview"}
+            onToggle={handleReportesSectionToggle}
+          >
             <div className="mb-4 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
               <Code2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
               <p className="text-xs leading-relaxed text-blue-700">
@@ -2094,6 +2179,7 @@ export default function ReportesPage() {
                 </code>
               </pre>
             </div>
+          </CollapsibleReportesSection>
           </div>
 
           {(loading || saveMessage || saveError) && (
