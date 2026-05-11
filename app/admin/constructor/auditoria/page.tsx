@@ -1998,6 +1998,86 @@ const PILOT_RISK_LINES = [
 const PILOT_OPERATIONAL_RECOMMENDATION =
   "Recomendación: iniciar con un piloto manual y controlado. El CRM puede usarse para ordenar leads, probar etapas, registrar oportunidades y revisar sugerencias IA, pero la activación operativa completa debe quedar bloqueada hasta validar datos reales, reportes y reglas de negocio.";
 
+const PILOT_OPERATION_SCOPE_LINES = [
+  "Cliente piloto: 1 empresa real.",
+  "Volumen inicial: 5 a 20 leads.",
+  "Duración sugerida: 7 a 14 días.",
+  "Operación: manual, sin automatizaciones críticas.",
+  "IA: solo sugerencias, no decisiones automáticas.",
+  "Reportes: revisión semanal o al cierre del piloto.",
+] as const;
+
+const PILOT_OPERATION_FIELDS = [
+  "Nombre del contacto.",
+  "Empresa o persona.",
+  "Teléfono / WhatsApp.",
+  "Email si existe.",
+  "Canal de origen.",
+  "Producto o servicio consultado.",
+  "Etapa inicial.",
+  "Responsable.",
+  "Próxima acción.",
+  "Fecha de próximo seguimiento.",
+  "Observaciones.",
+  "Motivo de pérdida, si aplica.",
+] as const;
+
+const PILOT_OPERATION_STEPS = [
+  "Cargar lead.",
+  "Asignar responsable.",
+  "Ubicarlo en etapa del pipeline.",
+  "Registrar producto/interés.",
+  "Definir próxima acción.",
+  "Hacer seguimiento.",
+  "Actualizar etapa.",
+  "Registrar resultado.",
+  "Revisar oportunidades sin seguimiento.",
+  "Ajustar proceso antes de activar.",
+] as const;
+
+type PilotPlanSuccessEstado = "manual" | "pendiente de prueba";
+
+const PILOT_SUCCESS_CRITERIA: ReadonlyArray<{
+  title: string;
+  estado: PilotPlanSuccessEstado;
+}> = [
+  {
+    title: "Se cargaron al menos 5 leads reales.",
+    estado: "pendiente de prueba",
+  },
+  {
+    title: "Todos los leads tienen responsable.",
+    estado: "pendiente de prueba",
+  },
+  {
+    title: "Todos los leads tienen próxima acción.",
+    estado: "pendiente de prueba",
+  },
+  {
+    title: "Se usaron etapas del pipeline.",
+    estado: "manual",
+  },
+  {
+    title: "Se registraron motivos de pérdida o avance.",
+    estado: "pendiente de prueba",
+  },
+  {
+    title: "Se revisaron oportunidades sin seguimiento.",
+    estado: "manual",
+  },
+  {
+    title: "El cliente entiende el flujo.",
+    estado: "pendiente de prueba",
+  },
+  {
+    title: "Se detectaron mejoras antes de automatizar.",
+    estado: "pendiente de prueba",
+  },
+];
+
+const PILOT_PLAN_FINAL_RECOMMENDATION =
+  "Este piloto debe validar comportamiento humano, claridad del pipeline y calidad de datos. Si el equipo puede operar 5 a 20 leads sin perder seguimiento, el CRM está en condiciones de avanzar hacia sincronización real, reportes conectados y automatizaciones controladas.";
+
 function etapasTienenResponsable(etapasUnknown: unknown): boolean {
   if (!Array.isArray(etapasUnknown)) return false;
   for (const raw of etapasUnknown) {
@@ -5727,6 +5807,125 @@ export default function AuditoriaPage() {
                 “Exportar paquete ejecutivo” lleva al bloque Vista ejecutiva para copiar o
                 descargar el resumen en Markdown (sin cambiar exportaciones existentes).
               </p>
+            </div>
+          </CollapsibleAuditSection>
+
+          <CollapsibleAuditSection
+            id="plan-operativo-piloto"
+            letter="10"
+            title="Plan operativo del piloto"
+            description="Guía práctica para probar el CRM con un primer cliente real, cargando pocos leads, operando manualmente y validando el proceso antes de cualquier automatización."
+            statusLabel="Guía operativa · revisión manual"
+            isOpen={openAuditSection === "plan-operativo-piloto"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                1. Alcance del piloto
+              </p>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                {PILOT_OPERATION_SCOPE_LINES.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                2. Datos mínimos por lead
+              </p>
+              <p className="mb-2 text-[11px] leading-relaxed text-slate-500">
+                Campos sugeridos para registrar cada lead durante la prueba (referencia
+                operativa; no crea campos en base de datos).
+              </p>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                {PILOT_OPERATION_FIELDS.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                3. Flujo manual recomendado
+              </p>
+              <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-slate-700">
+                {PILOT_OPERATION_STEPS.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                4. Criterios para considerar exitoso el piloto
+              </p>
+              <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+                Estados orientativos: cada ítem se marca como validación manual o pendiente
+                de prueba real con datos en operación (esta vista no calcula métricas
+                vivas).
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PILOT_SUCCESS_CRITERIA.map((row) => (
+                  <div
+                    key={row.title}
+                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5"
+                  >
+                    <p className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-slate-800">
+                      {row.title}
+                    </p>
+                    <span
+                      className={[
+                        "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                        row.estado === "manual"
+                          ? "border-slate-300 bg-white text-slate-700"
+                          : "border-amber-200 bg-amber-50 text-amber-800",
+                      ].join(" ")}
+                    >
+                      {row.estado === "manual" ? "Manual" : "Pendiente de prueba"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-100">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                5. Recomendación final
+              </p>
+              <p className="text-xs leading-relaxed">{PILOT_PLAN_FINAL_RECOMMENDATION}</p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Acciones visuales
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/admin/leads"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Ir a Leads
+                </Link>
+                <Link
+                  href="/admin/leads/kanban"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Ir a Pipeline / Kanban
+                </Link>
+                <Link
+                  href="/admin/constructor/proceso-pipeline"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Proceso y pipeline
+                </Link>
+                <Link
+                  href="/admin/constructor/reportes"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Reportes
+                </Link>
+              </div>
             </div>
           </CollapsibleAuditSection>
 
