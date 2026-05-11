@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
@@ -112,32 +113,142 @@ const OPCIONES_VISITA = ["Sí", "No", "Depende"];
 
 const OPCIONES_COTIZACION = ["Estándar", "Personalizada", "Mixta"];
 
-const PAIS_LIKELY_CITY_TERMS = [
+/** Normaliza para coincidencias defensivas (trim, lower, sin tildes). */
+function normalizeLocationText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Términos que suelen ser ciudad/provincia si aparecen en el campo País */
+const LIKELY_CITY_OR_PROVINCE_FOR_COUNTRY_SLOT: readonly string[] = [
   "buenos aires",
+  "córdoba",
+  "cordoba",
+  "rosario",
+  "la plata",
+  "mar del plata",
+  "mendoza",
+  "salta",
+  "tucumán",
+  "tucuman",
+  "santa fe",
+  "neuquén",
+  "neuquen",
+  "bariloche",
   "montevideo",
+  "maldonado",
+  "punta del este",
   "quito",
   "guayaquil",
+  "santiago",
+  "valparaíso",
+  "valparaiso",
+  "lima",
+  "bogotá",
+  "bogota",
+  "medellín",
+  "medellin",
+  "méxico df",
+  "mexico df",
+  "ciudad de mexico",
+  "ciudad de méxico",
+  "guadalajara",
+  "monterrey",
+  "são paulo",
+  "sao paulo",
+  "rio de janeiro",
+  "brasilia",
+  "brasília",
+  "curitiba",
+  "belo horizonte",
 ];
 
-const CIUDAD_LIKELY_COUNTRY_TERMS = [
-  "uruguay",
+/** Países (y variantes) que suelen estar mal si aparecen solo en ciudad/región */
+const LIKELY_COUNTRY_WRONG_IN_CITY_SLOT: readonly string[] = [
   "argentina",
+  "uruguay",
   "chile",
+  "brasil",
+  "brazil",
+  "paraguay",
+  "perú",
+  "peru",
+  "colombia",
+  "méxico",
+  "mexico",
   "ecuador",
+  "bolivia",
+  "venezuela",
 ];
 
-function includesAny(value: string, terms: string[]): boolean {
-  const normalized = value.toLowerCase();
-  return terms.some((term) => normalized.includes(term));
+function looksLikeCityOrProvinceInCountryField(paisRaw: string): boolean {
+  if (!hasText(paisRaw)) return false;
+  const n = normalizeLocationText(paisRaw);
+  return LIKELY_CITY_OR_PROVINCE_FOR_COUNTRY_SLOT.some((phrase) =>
+    n.includes(normalizeLocationText(phrase))
+  );
+}
+
+function looksLikeCountryInCityField(ciudadRaw: string): boolean {
+  if (!hasText(ciudadRaw)) return false;
+  const n = normalizeLocationText(ciudadRaw);
+  const tokens = n.split(/\s+/).filter(Boolean);
+  /** Coincidencia por token evita límites dentro de strings largos cuando el usuario sólo puso “Argentina”. */
+  if (
+    tokens.some((tok) =>
+      LIKELY_COUNTRY_WRONG_IN_CITY_SLOT.some(
+        (c) => tok === normalizeLocationText(c)
+      )
+    )
+  ) {
+    return true;
+  }
+  return LIKELY_COUNTRY_WRONG_IN_CITY_SLOT.some((country) =>
+    n.includes(normalizeLocationText(country))
+  );
+}
+
+type LocationFieldMismatchSuggestion = {
+  suggestedPais: string;
+  suggestedCiudad: string;
+  currentPaisLabel: string;
+  currentCiudadLabel: string;
+};
+
+/**
+ * Detecta casos típicos País/ciudad invertidos (p. ej. País=Córdoba, Ciudad=Argentina).
+ */
+function detectLocationFieldMismatch(
+  countryRaw: unknown,
+  cityRaw: unknown
+): LocationFieldMismatchSuggestion | null {
+  const countryStr = typeof countryRaw === "string" ? countryRaw : "";
+  const cityStr = typeof cityRaw === "string" ? cityRaw : "";
+  const pt = countryStr.trim();
+  const ct = cityStr.trim();
+  if (!pt || !ct) return null;
+
+  const paisLooksCity = looksLikeCityOrProvinceInCountryField(pt);
+  const ciudadLooksCountry = looksLikeCountryInCityField(ct);
+  if (!paisLooksCity || !ciudadLooksCountry) return null;
+
+  return {
+    suggestedPais: ct,
+    suggestedCiudad: pt,
+    currentPaisLabel: pt,
+    currentCiudadLabel: ct,
+  };
 }
 
 function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
   // Detección de campos invertidos País/Ciudad
   const paisLooksLikeCity =
-    hasText(form.pais) && includesAny(form.pais, PAIS_LIKELY_CITY_TERMS);
+    hasText(form.pais) && looksLikeCityOrProvinceInCountryField(form.pais);
   const ciudadLooksLikeCountry =
-    hasText(form.ciudad) &&
-    includesAny(form.ciudad, CIUDAD_LIKELY_COUNTRY_TERMS);
+    hasText(form.ciudad) && looksLikeCountryInCityField(form.ciudad);
   const swappedGeo = paisLooksLikeCity || ciudadLooksLikeCountry;
 
   // A. Identidad
@@ -272,10 +383,19 @@ function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
     };
   }
 
-  if (paisLooksLikeCity) {
+  if (paisLooksLikeCity && ciudadLooksLikeCountry) {
+    fieldHints.pais = {
+      status: "danger",
+      text: "Posible ciudad o provincia en “País”. Corregí o usá la sugerencia abajo.",
+    };
+    fieldHints.ciudad = {
+      status: "danger",
+      text: "Parece un país en “Ciudad/región”. Revisá coherencia con el campo País.",
+    };
+  } else if (paisLooksLikeCity) {
     fieldHints.pais = {
       status: "warning",
-      text: "Revisar: parece una ciudad, no un país.",
+      text: "Revisar: puede ser una ciudad o provincia, no un país.",
     };
   } else if (!hasText(form.pais)) {
     fieldHints.pais = {
@@ -284,16 +404,20 @@ function evaluateEmpresaReadiness(form: EmpresaForm): EmpresaReadiness {
     };
   }
 
-  if (ciudadLooksLikeCountry) {
-    fieldHints.ciudad = {
-      status: "warning",
-      text: "Revisar: parece un país, no una ciudad.",
-    };
-  } else if (!hasText(form.ciudad)) {
-    fieldHints.ciudad = {
-      status: "warning",
-      text: "Sumá la ciudad o región para mayor contexto.",
-    };
+  const dualGeoMismatch = paisLooksLikeCity && ciudadLooksLikeCountry;
+
+  if (!dualGeoMismatch) {
+    if (ciudadLooksLikeCountry) {
+      fieldHints.ciudad = {
+        status: "warning",
+        text: "Revisar: puede ser un país, no una ciudad o región.",
+      };
+    } else if (!hasText(form.ciudad)) {
+      fieldHints.ciudad = {
+        status: "warning",
+        text: "Sumá la ciudad o región para mayor contexto.",
+      };
+    }
   }
 
   if (!hasText(form.rubro) && !hasText(form.rubroPersonalizado)) {
@@ -654,6 +778,7 @@ export default function EmpresaPage() {
 
   const step = CRM_SETUP_STEPS.find((s) => s.id === "empresa");
   const readiness = evaluateEmpresaReadiness(form);
+  const locationMismatch = detectLocationFieldMismatch(form.pais, form.ciudad);
 
   return (
     <PageContainer>
@@ -839,6 +964,44 @@ export default function EmpresaPage() {
                   />
                   <FieldQualityHint hint={readiness.fieldHints.ciudad} />
                 </div>
+                {locationMismatch ? (
+                  <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle
+                        className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                        aria-hidden
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold text-amber-900">
+                          Posible inconsistencia detectada
+                        </p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-amber-800">
+                          “{locationMismatch.currentPaisLabel}” parece ser una ciudad o
+                          provincia, no un país. “{locationMismatch.currentCiudadLabel}”
+                          parece ser un país, no una ciudad o región.
+                        </p>
+                        <p className="mt-2 text-[11px] leading-relaxed text-amber-800">
+                          <span className="font-semibold">Sugerencia:</span> País:{" "}
+                          {locationMismatch.suggestedPais} · Ciudad / región:{" "}
+                          {locationMismatch.suggestedCiudad}
+                        </p>
+                        <button
+                          type="button"
+                          className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              pais: locationMismatch.suggestedPais,
+                              ciudad: locationMismatch.suggestedCiudad,
+                            }))
+                          }
+                        >
+                          Aplicar corrección sugerida
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <label className={LABEL_CLASS}>Sitio web</label>
                   <input
