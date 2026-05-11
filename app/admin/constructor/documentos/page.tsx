@@ -500,43 +500,84 @@ function CollapsibleDocumentosSection({
   children,
 }: CollapsibleDocumentosSectionProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div
+      className={[
+        "overflow-hidden rounded-xl border bg-white",
+        isOpen ? "border-emerald-200" : "border-slate-200",
+      ].join(" ")}
+    >
       <button
         type="button"
         onClick={() => onToggle(id)}
         aria-expanded={isOpen}
-        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+        className={[
+          "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors",
+          isOpen
+            ? "border-b border-emerald-200 bg-emerald-50 hover:bg-emerald-50"
+            : "hover:bg-slate-50",
+        ].join(" ")}
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+        <span
+          className={[
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white",
+            isOpen ? "bg-emerald-600" : "bg-slate-900",
+          ].join(" ")}
+        >
           {letter}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          <p
+            className={[
+              "text-sm font-semibold leading-snug",
+              isOpen ? "text-emerald-800" : "text-slate-800",
+            ].join(" ")}
+          >
+            {title}
+          </p>
           {statusLabel ? (
-            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+            <p
+              className={[
+                "mt-0.5 text-[11px]",
+                isOpen ? "text-emerald-700/90" : "text-slate-500",
+              ].join(" ")}
+            >
+              {statusLabel}
+            </p>
           ) : null}
         </div>
         {badge ? (
           <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
         ) : null}
         <div className="flex shrink-0 flex-col items-end gap-0.5">
-          <span className="text-[10px] font-medium text-slate-500">
+          <span
+            className={[
+              "text-[10px] font-medium",
+              isOpen ? "text-emerald-700" : "text-slate-500",
+            ].join(" ")}
+          >
             {isOpen ? "Contraer" : "Expandir"}
           </span>
           <ChevronDown
             className={[
-              "h-4 w-4 text-slate-500 transition-transform",
-              isOpen ? "rotate-180" : "",
+              "h-4 w-4 transition-transform",
+              isOpen ? "rotate-180 text-emerald-600" : "text-slate-500",
             ].join(" ")}
             aria-hidden
           />
         </div>
       </button>
       {badge ? (
-        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+        <div
+          className={[
+            "border-t px-4 py-2 sm:hidden",
+            isOpen ? "border-emerald-100 bg-emerald-50/60" : "border-slate-100 bg-white",
+          ].join(" ")}
+        >
+          {badge}
+        </div>
       ) : null}
       {isOpen ? (
-        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+        <div className="border-t border-emerald-100 bg-slate-50/40 px-4 pb-4 pt-3">
           {description ? (
             <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
           ) : null}
