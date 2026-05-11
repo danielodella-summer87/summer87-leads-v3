@@ -19,6 +19,8 @@ import {
   CheckSquare,
   Square,
   ClipboardCheck,
+  Copy,
+  Download,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
@@ -1150,6 +1152,9 @@ export default function AuditoriaPage() {
   const [setupLoading, setSetupLoading] = useState(true);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupData, setSetupData] = useState<Record<string, unknown> | null>(null);
+  const [technicalJsonCopyStatus, setTechnicalJsonCopyStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -1239,6 +1244,48 @@ export default function AuditoriaPage() {
     auditoriaReadinessPanel
   );
   const technicalJsonString = JSON.stringify(technicalJson, null, 2);
+  const technicalJsonStringOk =
+    typeof technicalJsonString === "string" && technicalJsonString.trim().length > 0;
+
+  async function handleCopyTechnicalJson() {
+    setTechnicalJsonCopyStatus("idle");
+    if (!technicalJsonStringOk) {
+      setTechnicalJsonCopyStatus("error");
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      setTechnicalJsonCopyStatus("error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(technicalJsonString);
+      setTechnicalJsonCopyStatus("success");
+    } catch {
+      setTechnicalJsonCopyStatus("error");
+    }
+  }
+
+  function handleDownloadTechnicalJson() {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    if (!technicalJsonStringOk) return;
+
+    const blob = new Blob([technicalJsonString], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "constructor-technical-json.json";
+    anchor.style.display = "none";
+    try {
+      document.body.appendChild(anchor);
+      anchor.click();
+    } finally {
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }
+  }
+
   const technicalSummaryVm = buildTechnicalSummaryViewModel(technicalJson);
   const activationChecklistVm = buildActivationChecklistViewModel(technicalJson);
 
@@ -3109,6 +3156,51 @@ export default function AuditoriaPage() {
             <p className="mb-3 text-[11px] font-semibold tracking-wide text-slate-600">
               Solo lectura · Prototipo · No activa CRM real
             </p>
+            <p className="mb-2 text-[11px] leading-relaxed text-slate-500">
+              Exportación local · No guarda datos · No activa CRM real
+            </p>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleCopyTechnicalJson();
+                }}
+                disabled={!technicalJsonStringOk}
+                className={[
+                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                  technicalJsonStringOk
+                    ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300",
+                ].join(" ")}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copiar JSON
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadTechnicalJson}
+                disabled={!technicalJsonStringOk}
+                className={[
+                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                  technicalJsonStringOk
+                    ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300",
+                ].join(" ")}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar JSON
+              </button>
+              {technicalJsonCopyStatus === "success" ? (
+                <span className="text-[11px] font-medium text-green-700">
+                  JSON copiado correctamente.
+                </span>
+              ) : null}
+              {technicalJsonCopyStatus === "error" ? (
+                <span className="text-[11px] font-medium text-rose-700">
+                  No se pudo copiar el JSON.
+                </span>
+              ) : null}
+            </div>
             <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
               <pre className="max-h-[min(28rem,70vh)] overflow-x-auto overflow-y-auto p-4 text-left">
                 <code className="font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200">
