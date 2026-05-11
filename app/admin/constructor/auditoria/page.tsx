@@ -1959,6 +1959,310 @@ function buildActivationChecklistViewModel(
   return { items, allListo };
 }
 
+type ExecutiveModuloStatus = "configured" | "suggested" | "empty";
+
+type ExecutivePackageViewModel = {
+  empresaNombre: string;
+  focoComercial: string;
+  ubicacion: string;
+  crmTipo: string;
+  pipelineResumen: string;
+  canalesDetectados: string[];
+  valorEsperado: string[];
+  modulosIncluidos: Array<{ label: string; status: ExecutiveModuloStatus }>;
+  pendientes: string[];
+  dictamen: string;
+};
+
+function executiveModuloStatusFromStructural(
+  recordUnknown: unknown
+): ExecutiveModuloStatus {
+  return Object.keys(asRecord(recordUnknown)).length > 0 ? "configured" : "empty";
+}
+
+function executiveModuloStatusFromTechnical(
+  vm: TechnicalBlockVM
+): ExecutiveModuloStatus {
+  return vm.status;
+}
+
+function buildExecutiveChannelHaystack(
+  empresa: SetupRecord,
+  cuestionario: SetupRecord,
+  diagnostico: SetupRecord
+): string {
+  const chunks: string[] = [];
+  const pushStr = (v: unknown) => {
+    if (typeof v === "string" && v.trim().length > 0) chunks.push(v);
+  };
+  pushStr(empresa.redes);
+  pushStr(empresa.sitioWeb);
+  pushStr(empresa.queVende);
+  pushStr(empresa.comentarios);
+  pushStr(cuestionario.procesoActual);
+  pushStr(cuestionario.comentariosAdicionales);
+  pushStr(cuestionario.queVendeDetalle);
+  pushStr(cuestionario.motivosPerdida);
+  const sug = asRecord(diagnostico.diagnosticoSugerido);
+  pushStr(sug.resumenComercial);
+  pushStr(sug.contextoMercado);
+  return chunks.join(" \n ");
+}
+
+function buildExecutiveDetectedCanales(haystack: string): string[] {
+  const low = normalizeUbicacionToken(haystack);
+  const found: string[] = [];
+  const add = (label: string) => {
+    if (!found.includes(label)) found.push(label);
+  };
+  if (low.includes("instagram")) add("Instagram");
+  if (low.includes("whatsapp")) add("WhatsApp");
+  if (/\bweb\b/.test(low) || low.includes("sitio web") || low.includes("pagina web")) {
+    add("Web");
+  }
+  if (low.includes("referido")) add("Referidos");
+  if (low.includes("local") || low.includes("fisico") || low.includes("físico")) {
+    add("Local físico");
+  }
+  if (low.includes("visita")) add("Visitas");
+  if (low.includes("telefono") || low.includes("teléfono")) add("Teléfono");
+  return found;
+}
+
+/** Fase 5I: vista ejecutiva derivada sólo del JSON técnico (sin APIs ni contratos externos). */
+function buildExecutivePackageViewModel(
+  technicalJson: Record<string, unknown> | null | undefined
+): ExecutivePackageViewModel {
+  const root = technicalJson ?? {};
+  const empresa = asRecord(root.empresa);
+  const cuestionario = asRecord(root.cuestionario);
+  const procesoPipeline = asRecord(root.procesoPipeline);
+  const motoresIA = asRecord(root.motoresIA);
+  const diagnostico = asRecord(root.diagnostico);
+
+  const rubroNombre = strFieldTechnical(empresa.rubro);
+  const rubroPersonalizado = strFieldTechnical(empresa.rubroPersonalizado);
+  const rubroDisplay =
+    rubroNombre !== "No definido"
+      ? rubroNombre
+      : rubroPersonalizado !== "No definido"
+        ? rubroPersonalizado
+        : "No definido";
+  const verticalTxt = strFieldTechnical(empresa.vertical);
+  const queVendeTxt = strFieldTechnical(empresa.queVende);
+  const rubroVerticalLine =
+    rubroDisplay !== "No definido" || verticalTxt !== "No definido"
+      ? `Rubro/vertical: ${rubroDisplay !== "No definido" ? rubroDisplay : "—"} · ${verticalTxt !== "No definido" ? verticalTxt : "—"}`
+      : "Rubro/vertical: No definido";
+  const queVendeLine =
+    queVendeTxt !== "No definido"
+      ? `Qué vende: ${queVendeTxt}`
+      : "Qué vende: No definido";
+  const focoComercial = `${rubroVerticalLine}\n${queVendeLine}`;
+
+  const nombreComercial = strFieldTechnical(empresa.nombreComercial);
+  const nombreLegal = strFieldTechnical(empresa.nombreLegal);
+  const empresaNombre =
+    nombreComercial !== "No definido"
+      ? nombreComercial
+      : nombreLegal !== "No definido"
+        ? nombreLegal
+        : "No definido";
+
+  const pais = strFieldTechnical(empresa.pais);
+  const ciudad = strFieldTechnical(empresa.ciudad);
+  let ubicacion: string;
+  if (pais === "No definido" && ciudad === "No definido") {
+    ubicacion = "No definido";
+  } else {
+    const cPart = ciudad !== "No definido" ? ciudad : "Ciudad no definida";
+    const pPart = pais !== "No definido" ? pais : "País no definido";
+    ubicacion = `${cPart}, ${pPart}`;
+  }
+
+  const crmTipo =
+    "CRM comercial para gestión de oportunidades, seguimiento y asistencia IA";
+
+  const etapas = Array.isArray(procesoPipeline.etapas) ? procesoPipeline.etapas : [];
+  const columnas = Array.isArray(procesoPipeline.columnas)
+    ? procesoPipeline.columnas
+    : [];
+  let pipelineResumen: string;
+  if (etapas.length === 0 && columnas.length === 0) {
+    pipelineResumen =
+      "Sin etapas ni columnas de pipeline definidas en la configuración técnica actual.";
+  } else {
+    pipelineResumen = `Proceso con ${etapas.length} etapa(s) y ${columnas.length} columna(s) Kanban en el diseño cargado.`;
+  }
+
+  const haystack = buildExecutiveChannelHaystack(empresa, cuestionario, diagnostico);
+  const canalesDetectados = buildExecutiveDetectedCanales(haystack);
+
+  const queVendeDetalle = trimStrTechnical(cuestionario.queVendeDetalle);
+  const tieneOferta =
+    queVendeTxt !== "No definido" || queVendeDetalle.length > 0;
+  const tienePipelineDatos = etapas.length > 0 || columnas.length > 0;
+  const tieneGanadoPerdido = columnas.some((c) => {
+    const r = asRecord(c);
+    const t = typeof r.tipo === "string" ? r.tipo : "";
+    return t === "ganada" || t === "perdida";
+  });
+  const motoresOk = Object.keys(motoresIA).length > 0;
+
+  const valorPool: { ok: boolean; text: string }[] = [
+    {
+      ok: tienePipelineDatos,
+      text: "Ordenar consultas y oportunidades según etapas del embudo comercial.",
+    },
+    {
+      ok: tienePipelineDatos,
+      text: "Reducir oportunidades sin seguimiento con visibilidad por etapa y responsables.",
+    },
+    {
+      ok: tieneOferta,
+      text: "Medir productos o servicios más consultados a partir del modelo de oferta capturado.",
+    },
+    {
+      ok: motoresOk,
+      text: "Mejorar tiempos de respuesta con asistencia IA acotada al proceso definido.",
+    },
+    {
+      ok: tieneGanadoPerdido,
+      text: "Controlar ventas ganadas y perdidas con cierres explícitos en el pipeline.",
+    },
+    {
+      ok: motoresOk || trimStrTechnical(cuestionario.decisionesNoIA).length > 0,
+      text: "Usar IA con validación humana en los puntos sensibles del negocio.",
+    },
+  ];
+
+  const valorEsperado: string[] = [];
+  for (const v of valorPool) {
+    if (v.ok && !valorEsperado.includes(v.text)) valorEsperado.push(v.text);
+  }
+  const valorFallback: string[] = [
+    "Ordenar consultas y prioridades comerciales en un solo tablero.",
+    "Reducir oportunidades sin seguimiento con próximas acciones visibles.",
+    "Medir productos o servicios más consultados cuando el modelo de venta esté cargado.",
+    "Mejorar tiempos de respuesta con flujos y responsables claros.",
+    "Controlar ventas ganadas y perdidas con etapas de cierre definidas.",
+    "Usar IA con validación humana antes de decisiones críticas.",
+  ];
+  for (const f of valorFallback) {
+    if (valorEsperado.length >= 4) break;
+    if (!valorEsperado.includes(f)) valorEsperado.push(f);
+  }
+  const valorEsperadoOut = valorEsperado.slice(0, 6);
+
+  const documentosVm = getTechnicalBlockState(root.documentos, "documentos");
+  const diagnosticoVm = getTechnicalBlockState(root.diagnostico, "diagnostico");
+  const reportesVm = getTechnicalBlockState(root.reportes, "reportes");
+
+  const modulosIncluidos: ExecutivePackageViewModel["modulosIncluidos"] = [
+    { label: "Empresa", status: executiveModuloStatusFromStructural(empresa) },
+    {
+      label: "Cuestionario comercial",
+      status: executiveModuloStatusFromStructural(cuestionario),
+    },
+    {
+      label: "Pipeline",
+      status: executiveModuloStatusFromStructural(procesoPipeline),
+    },
+    { label: "Motores IA", status: executiveModuloStatusFromStructural(motoresIA) },
+    {
+      label: "Reportes sugeridos",
+      status: executiveModuloStatusFromTechnical(reportesVm),
+    },
+    {
+      label: "Diagnóstico sugerido",
+      status: executiveModuloStatusFromTechnical(diagnosticoVm),
+    },
+    {
+      label: "Documentos sugeridos",
+      status: executiveModuloStatusFromTechnical(documentosVm),
+    },
+    {
+      label: "Auditoría final",
+      status: executiveModuloStatusFromStructural(root.auditoria),
+    },
+  ];
+
+  const pendientesRaw = Array.isArray(root.pendientes) ? root.pendientes : [];
+  const pendientesTopRaw = pendientesRaw
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .slice(0, 5);
+  const pendientesMerged = mergePendientesPrincipalesDisplay(
+    pendientesTopRaw,
+    documentosVm,
+    diagnosticoVm,
+    reportesVm
+  );
+  const pendientes = pendientesMerged.slice(0, 5);
+
+  const anySuggested =
+    documentosVm.status === "suggested" ||
+    diagnosticoVm.status === "suggested" ||
+    reportesVm.status === "suggested";
+
+  const empresaIdentificada =
+    nombreComercial !== "No definido" || nombreLegal !== "No definido";
+  const cuestionarioOk = Object.keys(cuestionario).length > 0;
+  const pipelineOk = Object.keys(procesoPipeline).length > 0;
+
+  const allDocDiagRepConfigured =
+    documentosVm.status === "configured" &&
+    diagnosticoVm.status === "configured" &&
+    reportesVm.status === "configured";
+
+  const todoConfiguradoReal =
+    !anySuggested &&
+    empresaIdentificada &&
+    cuestionarioOk &&
+    pipelineOk &&
+    motoresOk &&
+    allDocDiagRepConfigured;
+
+  let dictamen: string;
+  if (anySuggested) {
+    dictamen =
+      "El paquete CRM cuenta con una base técnica avanzada y propuestas locales para completar documentos, diagnóstico y reportes. Antes de activarlo, estas propuestas deben validarse con datos reales.";
+  } else if (todoConfiguradoReal) {
+    dictamen = "El paquete CRM está listo para revisión final previa a activación.";
+  } else {
+    dictamen =
+      "El paquete CRM todavía requiere completar información base antes de avanzar.";
+  }
+
+  return {
+    empresaNombre,
+    focoComercial,
+    ubicacion,
+    crmTipo,
+    pipelineResumen,
+    canalesDetectados,
+    valorEsperado: valorEsperadoOut,
+    modulosIncluidos,
+    pendientes,
+    dictamen,
+  };
+}
+
+function executiveModuloBadgeClass(status: ExecutiveModuloStatus): string {
+  if (status === "configured") {
+    return "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700";
+  }
+  if (status === "suggested") {
+    return "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800";
+  }
+  return "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800";
+}
+
+function executiveModuloStatusLabel(status: ExecutiveModuloStatus): string {
+  if (status === "configured") return "Configurado";
+  if (status === "suggested") return "Sugerido local";
+  return "Pendiente";
+}
+
 function getText(record: SetupRecord, key: string): string {
   return formatReportValue(record[key]);
 }
@@ -2299,6 +2603,7 @@ export default function AuditoriaPage() {
 
   const technicalSummaryVm = buildTechnicalSummaryViewModel(technicalJson);
   const activationChecklistVm = buildActivationChecklistViewModel(technicalJson);
+  const executivePackageVm = buildExecutivePackageViewModel(technicalJson);
 
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
@@ -4546,6 +4851,142 @@ export default function AuditoriaPage() {
                   una activación real.
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* ── Vista ejecutiva del paquete CRM (Fase 5I) ───────────────────── */}
+          <div className="mb-8">
+            <SectionHeader letter="8" title="Vista ejecutiva del paquete CRM" />
+            <p className="mb-4 max-w-3xl text-xs leading-relaxed text-slate-500">
+              Resumen de negocio generado desde la configuración técnica actual. Sirve
+              para revisar qué CRM se está preparando, qué valor aporta y qué necesita
+              validación antes de una activación real.
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Empresa y foco comercial
+                </p>
+                <dl className="space-y-2 text-xs text-slate-700">
+                  <div>
+                    <dt className="text-[11px] font-medium text-slate-500">
+                      Nombre comercial o razón social
+                    </dt>
+                    <dd className="font-semibold text-slate-900">
+                      {executivePackageVm.empresaNombre}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-medium text-slate-500">
+                      Rubro, vertical y oferta
+                    </dt>
+                    <dd className="whitespace-pre-line leading-relaxed">
+                      {executivePackageVm.focoComercial}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-medium text-slate-500">Ubicación</dt>
+                    <dd className="leading-relaxed">{executivePackageVm.ubicacion}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  CRM propuesto
+                </p>
+                <p className="mb-3 text-sm font-semibold leading-snug text-slate-900">
+                  {executivePackageVm.crmTipo}
+                </p>
+                <p className="mb-3 text-xs leading-relaxed text-slate-600">
+                  {executivePackageVm.pipelineResumen}
+                </p>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium text-slate-500">
+                    Canales relevantes detectados
+                  </p>
+                  {executivePackageVm.canalesDetectados.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      Ninguno detectado en los textos actuales (redes, web, proceso u
+                      oferta).
+                    </p>
+                  ) : (
+                    <ul className="flex flex-wrap gap-1.5">
+                      {executivePackageVm.canalesDetectados.map((c) => (
+                        <li
+                          key={c}
+                          className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-800"
+                        >
+                          {c}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-2">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Valor esperado
+                </p>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {executivePackageVm.valorEsperado.map((line) => (
+                    <li
+                      key={line}
+                      className="flex gap-2 text-xs leading-relaxed text-slate-700"
+                    >
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white p-4 lg:col-span-2">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Módulos incluidos en el paquete
+                </p>
+                <ul className="flex flex-wrap gap-2">
+                  {executivePackageVm.modulosIncluidos.map((m) => (
+                    <li
+                      key={m.label}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5"
+                    >
+                      <span className="text-xs font-medium text-slate-800">{m.label}</span>
+                      <span className={executiveModuloBadgeClass(m.status)}>
+                        {executiveModuloStatusLabel(m.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 lg:col-span-2">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Pendientes antes de activación real
+                </p>
+                {executivePackageVm.pendientes.length === 0 ? (
+                  <p className="text-xs leading-relaxed text-slate-700">
+                    Sin pendientes críticos detectados. Aun así, se recomienda revisión
+                    humana antes de activar CRM real.
+                  </p>
+                ) : (
+                  <ul className="list-disc space-y-1.5 pl-4 text-xs text-slate-700">
+                    {executivePackageVm.pendientes.map((item, idx) => (
+                      <li key={`exec-pend-${idx}-${item.slice(0, 40)}`}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-100 lg:col-span-2">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Dictamen ejecutivo
+                </p>
+                <p className="text-sm leading-relaxed text-slate-100">
+                  {executivePackageVm.dictamen}
+                </p>
+              </div>
             </div>
           </div>
 
