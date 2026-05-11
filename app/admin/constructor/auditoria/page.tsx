@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
+  ChevronDown,
   Info,
   ShieldCheck,
   Building2,
@@ -2441,13 +2442,74 @@ function formatArrayObjectFields(
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5K: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleAuditSectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleAuditSection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleAuditSectionProps) {
   return (
-    <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-        {letter}
-      </div>
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+          {letter}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2501,6 +2563,7 @@ export default function AuditoriaPage() {
   const [executiveCopyStatus, setExecutiveCopyStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
+  const [openAuditSection, setOpenAuditSection] = useState<string>("preparacion");
 
   useEffect(() => {
     let cancelled = false;
@@ -2557,6 +2620,10 @@ export default function AuditoriaPage() {
         item.id === id ? { ...item, checked: !item.checked } : item
       )
     );
+  }
+
+  function handleAuditSectionToggle(id: string) {
+    setOpenAuditSection((prev) => (prev === id ? "" : id));
   }
 
   function setRiesgo<K extends keyof Riesgo>(
@@ -3320,76 +3387,90 @@ export default function AuditoriaPage() {
             </p>
           </div>
 
-          <StepReadinessPanel
-            title="Auditoría final"
-            readiness={auditoriaReadinessPanel}
-            overallProgress={getConstructorOverallProgress({
-              currentStep: "auditoria",
-              currentStepPercent: auditoriaReadinessPanel.completionPercent,
-            })}
-          />
+          <CollapsibleAuditSection
+            id="preparacion"
+            letter="0"
+            title="Preparación y readiness inicial"
+            description="Readiness del paso Auditoría, aviso de lectura del setup guardado y métricas rápidas de avance."
+            statusLabel={
+              setupLoading
+                ? "Cargando…"
+                : `${completedSetupSteps}/${totalSetupSteps} pasos guardados`
+            }
+            isOpen={openAuditSection === "preparacion"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <div className="space-y-4">
+              <StepReadinessPanel
+                title="Auditoría final"
+                readiness={auditoriaReadinessPanel}
+                overallProgress={getConstructorOverallProgress({
+                  currentStep: "auditoria",
+                  currentStepPercent: auditoriaReadinessPanel.completionPercent,
+                })}
+              />
 
-          {/* Aviso */}
-          <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <p className="text-xs leading-relaxed text-amber-700">
-              <span className="font-semibold">
-                {setupLoading
-                  ? "Cargando configuración guardada..."
-                  : "Auditoría conectada al setup guardado en modo solo lectura."}
-              </span>{" "}
-              El score manual sigue siendo editable, pero la auditoría reconoce
-              cuando los 7 pasos previos ya cargan desde Supabase.
-            </p>
-          </div>
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p className="text-xs leading-relaxed text-amber-700">
+                  <span className="font-semibold">
+                    {setupLoading
+                      ? "Cargando configuración guardada..."
+                      : "Auditoría conectada al setup guardado en modo solo lectura."}
+                  </span>{" "}
+                  El score manual sigue siendo editable, pero la auditoría reconoce
+                  cuando los 7 pasos previos ya cargan desde Supabase.
+                </p>
+              </div>
 
-          <div className="mb-8 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Configuración guardada
-              </p>
-              <p className="mt-1 text-sm font-bold text-slate-800">
-                {setupLoading
-                  ? "Cargando..."
-                  : `${completedSetupSteps}/${totalSetupSteps} pasos`}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                Lectura desde `/api/admin/constructor/setup`; Auditoría no guarda datos todavía.
-              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Configuración guardada
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">
+                    {setupLoading
+                      ? "Cargando..."
+                      : `${completedSetupSteps}/${totalSetupSteps} pasos`}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Lectura desde `/api/admin/constructor/setup`; Auditoría no guarda datos todavía.
+                  </p>
+                </div>
+                {setupError ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-red-500">
+                      Error al cargar setup
+                    </p>
+                    <p className="mt-1 text-xs font-semibold text-red-700">
+                      {setupError}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500">
+                      Readiness de datos reales
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-blue-700">
+                      Esta métrica muestra presencia de datos guardados en los 7 pasos
+                      previos. Si todos están completos, ajusta la lectura del
+                      checklist, riesgos y dictamen sin activar el CRM.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-            {setupError ? (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-red-500">
-                  Error al cargar setup
-                </p>
-                <p className="mt-1 text-xs font-semibold text-red-700">
-                  {setupError}
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500">
-                  Readiness de datos reales
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-blue-700">
-                  Esta métrica muestra presencia de datos guardados en los 7 pasos
-                  previos. Si todos están completos, ajusta la lectura del
-                  checklist, riesgos y dictamen sin activar el CRM.
-                </p>
-              </div>
-            )}
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── A: Resumen de los 7 pasos ────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="A"
-              title="Resumen de preparación — 7 pasos anteriores"
-            />
-            <p className="mb-4 text-xs text-slate-500">
-              Estado actual de cada bloque del Constructor. Todos los pasos
-              deben estar completos antes de activar el CRM.
-            </p>
+          <CollapsibleAuditSection
+            id="resumen-preparacion"
+            letter="A"
+            title="Resumen de preparación — 7 pasos anteriores"
+            description="Estado actual de cada bloque del Constructor. Todos los pasos deben estar completos antes de activar el CRM."
+            statusLabel={`${completedSetupSteps}/${totalSetupSteps} pasos · setup real ${realSetupProgressPct}%`}
+            isOpen={openAuditSection === "resumen-preparacion"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {PASOS_RESUMEN.map((paso) => {
                 const Icon = paso.icon;
@@ -3463,19 +3544,17 @@ export default function AuditoriaPage() {
             <p className="mt-3 text-[11px] text-slate-400">
               Estado derivado de datos guardados: {completedSetupSteps}/{totalSetupSteps} pasos con configuración.
             </p>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── B: Readiness score ───────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="B"
-              title="Readiness score — preparación del CRM"
-            />
-            <p className="mb-4 text-xs text-slate-500">
-              Ajustá el score manualmente según tu evaluación del estado real de
-              la configuración. Si el setup real está completo, la auditoría usa
-              un score efectivo mínimo para reflejar ese avance.
-            </p>
+          <CollapsibleAuditSection
+            id="readiness-score"
+            letter="B"
+            title="Readiness score — preparación del CRM"
+            description="Ajustá el score manualmente según tu evaluación del estado real de la configuración. Si el setup real está completo, la auditoría usa un score efectivo mínimo para reflejar ese avance."
+            statusLabel={`${effectiveScore}/100 · checklist ${checklistPct}%`}
+            isOpen={openAuditSection === "readiness-score"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
               <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
                 <div>
@@ -3542,15 +3621,17 @@ export default function AuditoriaPage() {
                 <span>100</span>
               </div>
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── C: Checklist de activación ───────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="C" title="Checklist de activación" />
-            <p className="mb-4 text-xs text-slate-500">
-              Ítems mínimos que deben cumplirse antes de activar el CRM. Marcá
-              los que ya están completos según tu criterio.
-            </p>
+          <CollapsibleAuditSection
+            id="checklist-activacion"
+            letter="C"
+            title="Checklist de activación"
+            description="Ítems mínimos que deben cumplirse antes de activar el CRM. Marcá los que ya están completos según tu criterio."
+            statusLabel={`${totalChecked}/${auditChecklist.length} ítems (${checklistPct}%)`}
+            isOpen={openAuditSection === "checklist-activacion"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="space-y-2">
               {auditChecklist.map((item) => (
                 <button
@@ -3589,16 +3670,17 @@ export default function AuditoriaPage() {
               {totalChecked} de {auditChecklist.length} ítems completados (
               {checklistPct}%)
             </p>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── D: Riesgos y observaciones ───────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="D" title="Riesgos y observaciones" />
-            <p className="mb-4 text-xs text-slate-500">
-              Registrá y gestioná los riesgos detectados durante la
-              configuración. Editá la severidad, el estado y agregá
-              observaciones.
-            </p>
+          <CollapsibleAuditSection
+            id="riesgos"
+            letter="D"
+            title="Riesgos y observaciones"
+            description="Registrá y gestioná los riesgos detectados durante la configuración. Editá la severidad, el estado y agregá observaciones."
+            statusLabel={`${riesgosAltos} alto(s) · ${riesgosMitigados} mitigado(s)`}
+            isOpen={openAuditSection === "riesgos"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="space-y-3">
               {auditRiesgos.map((riesgo, index) => (
                 <div
@@ -3678,15 +3760,17 @@ export default function AuditoriaPage() {
               severidad alta pendiente{riesgosAltos !== 1 ? "s" : ""} ·{" "}
               {riesgosMitigados} mitigado{riesgosMitigados !== 1 ? "s" : ""}
             </p>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── E: Dictamen preliminar ───────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="E" title="Dictamen preliminar" />
-            <p className="mb-4 text-xs text-slate-500">
-              Calculado desde el score efectivo, el checklist auditado y los
-              riesgos actuales. No activa el CRM ni ejecuta auditoría IA real.
-            </p>
+          <CollapsibleAuditSection
+            id="dictamen-preliminar"
+            letter="E"
+            title="Dictamen preliminar"
+            description="Calculado desde el score efectivo, el checklist auditado y los riesgos actuales. No activa el CRM ni ejecuta auditoría IA real."
+            statusLabel={cfg.label}
+            isOpen={openAuditSection === "dictamen-preliminar"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className={`rounded-2xl border p-6 ${cfg.wrapperClass}`}>
               <div className="mb-3 flex items-center gap-3">
                 <DictamenIcon
@@ -3723,11 +3807,18 @@ export default function AuditoriaPage() {
                 ))}
               </div>
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── F: Preview del Reporte Maestro ───────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="F" title="Preview del Reporte Maestro" />
+          <CollapsibleAuditSection
+            id="preview-reporte-maestro"
+            letter="F"
+            title="Preview del Reporte Maestro"
+            description="Vista previa local. El Reporte Maestro real será generado por el motor de auditoría IA en una fase posterior."
+            statusLabel={`Score ${effectiveScore}/100`}
+            isOpen={openAuditSection === "preview-reporte-maestro"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <>
             <div className="mb-4 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
               <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
               <p className="text-xs leading-relaxed text-blue-700">
@@ -3894,7 +3985,8 @@ export default function AuditoriaPage() {
                 </p>
               </div>
             </div>
-          </div>
+            </>
+          </CollapsibleAuditSection>
 
           {/* ── Informe para cliente ──────────────────────────────────────── */}
           {showClientReport && (
@@ -4571,17 +4663,17 @@ export default function AuditoriaPage() {
             </div>
           )}
 
-          {/* ── JSON técnico consolidado del Constructor (Fase 5A, solo lectura) ── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="5"
-              title="JSON técnico consolidado del Constructor"
-            />
-            <p className="mb-2 max-w-3xl text-xs leading-relaxed text-slate-500">
-              Resumen técnico de configuración generado desde los datos actuales del
-              Constructor. Este bloque es de solo lectura y sirve como base para
-              futuras fases de activación y entregables técnicos.
-            </p>
+          <CollapsibleAuditSection
+            id="json-tecnico"
+            letter="5"
+            title="JSON técnico consolidado del Constructor"
+            description="Resumen técnico de configuración generado desde los datos actuales del Constructor. Solo lectura; sirve como base para futuras fases de activación y entregables técnicos."
+            statusLabel={
+              technicalJsonStringOk ? "Listo para copiar / descargar" : "Sin datos"
+            }
+            isOpen={openAuditSection === "json-tecnico"}
+            onToggle={handleAuditSectionToggle}
+          >
             <p className="mb-3 text-[11px] font-semibold tracking-wide text-slate-600">
               Solo lectura · Prototipo · No activa CRM real
             </p>
@@ -4661,19 +4753,17 @@ export default function AuditoriaPage() {
                 </code>
               </pre>
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── Resumen visual CRM (Fase 5B, solo lectura desde JSON técnico) ── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="6"
-              title="Resumen visual del CRM configurado"
-            />
-            <p className="mb-4 max-w-3xl text-xs leading-relaxed text-slate-500">
-              Vista simplificada generada desde el JSON técnico actual. Sirve para
-              revisar rápidamente qué información ya tiene el Constructor antes de
-              futuras fases de entrega o activación.
-            </p>
+          <CollapsibleAuditSection
+            id="resumen-visual-crm"
+            letter="6"
+            title="Resumen visual del CRM configurado"
+            description="Vista simplificada generada desde el JSON técnico actual. Sirve para revisar rápidamente qué información ya tiene el Constructor antes de futuras fases de entrega o activación."
+            statusLabel={`Readiness ${technicalSummaryVm.auditoria.completionPercent}% · ${technicalSummaryVm.auditoria.overallLabel}`}
+            isOpen={openAuditSection === "resumen-visual-crm"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="grid gap-3 sm:grid-cols-2">
               {/* 1 Empresa */}
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -4905,19 +4995,21 @@ export default function AuditoriaPage() {
                 )}
               </div>
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── Checklist final de activación (Fase 5C, prototipo) ── */}
-          <div className="mb-8">
-            <SectionHeader
-              letter="7"
-              title="Checklist final de activación"
-            />
-            <p className="mb-4 max-w-3xl text-xs leading-relaxed text-slate-500">
-              Validación visual de los bloques mínimos necesarios antes de permitir una
-              activación real en futuras fases. En esta etapa el CRM permanece en modo
-              prototipo.
-            </p>
+          <CollapsibleAuditSection
+            id="checklist-final-activacion"
+            letter="7"
+            title="Checklist final de activación"
+            description="Validación visual de los bloques mínimos necesarios antes de permitir una activación real en futuras fases. En esta etapa el CRM permanece en modo prototipo."
+            statusLabel={
+              activationChecklistVm.allListo
+                ? "Completo para revisión"
+                : "Incompleto · revisar bloques"
+            }
+            isOpen={openAuditSection === "checklist-final-activacion"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="grid gap-3 sm:grid-cols-2">
               {activationChecklistVm.items.map((row) => (
                 <div
@@ -4965,16 +5057,21 @@ export default function AuditoriaPage() {
                 </p>
               )}
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── Vista ejecutiva del paquete CRM (Fase 5I) ───────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="8" title="Vista ejecutiva del paquete CRM" />
-            <p className="mb-4 max-w-3xl text-xs leading-relaxed text-slate-500">
-              Resumen de negocio generado desde la configuración técnica actual. Sirve
-              para revisar qué CRM se está preparando, qué valor aporta y qué necesita
-              validación antes de una activación real.
-            </p>
+          <CollapsibleAuditSection
+            id="vista-ejecutiva-paquete"
+            letter="8"
+            title="Vista ejecutiva del paquete CRM"
+            description="Resumen de negocio generado desde la configuración técnica actual. Sirve para revisar qué CRM se está preparando, qué valor aporta y qué necesita validación antes de una activación real."
+            statusLabel={
+              technicalSummaryVm.resumenHayBloquesSugeridos
+                ? "Incluye sugeridos locales · revisar"
+                : "Consolidado desde JSON técnico"
+            }
+            isOpen={openAuditSection === "vista-ejecutiva-paquete"}
+            onToggle={handleAuditSectionToggle}
+          >
             <p className="mb-2 text-[11px] leading-relaxed text-slate-500">
               Exportación local · No guarda datos · No activa CRM real
             </p>
@@ -5146,16 +5243,17 @@ export default function AuditoriaPage() {
                 </p>
               </div>
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── G: Condiciones para activar CRM ──────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="G" title="Condiciones para activar CRM" />
-            <p className="mb-4 text-xs text-slate-500">
-              La auditoría puede quedar lista para validación final, pero la
-              activación operativa sigue bloqueada hasta cerrar permisos, flujo
-              de producto y persistencia del estado activo.
-            </p>
+          <CollapsibleAuditSection
+            id="condiciones-activar-crm"
+            letter="G"
+            title="Condiciones para activar CRM"
+            description="La auditoría puede quedar lista para validación final, pero la activación operativa sigue bloqueada hasta cerrar permisos, flujo de producto y persistencia del estado activo."
+            statusLabel={`${activationConditions.filter((c) => c.complete).length}/${activationConditions.length} condiciones cumplidas`}
+            isOpen={openAuditSection === "condiciones-activar-crm"}
+            onToggle={handleAuditSectionToggle}
+          >
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {activationConditions.map((condition) => (
                 <div
@@ -5189,10 +5287,17 @@ export default function AuditoriaPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </CollapsibleAuditSection>
 
-          {/* ── H: Preactivación ──────────────────────────────────────────── */}
-          <div className="mb-8 rounded-2xl border border-green-200 bg-green-50 p-5">
+          <CollapsibleAuditSection
+            id="preactivacion"
+            letter="H"
+            title="CRM listo para preactivación controlada"
+            statusLabel="Activación bloqueada"
+            isOpen={openAuditSection === "preactivacion"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <div className="rounded-xl border border-green-200 bg-green-50 p-5">
             <div className="mb-3 flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-green-600" />
               <p className="text-sm font-bold text-green-900">
@@ -5212,7 +5317,8 @@ export default function AuditoriaPage() {
               Próximo paso: validar el Reporte Maestro con el cliente antes de
               habilitar Activar CRM.
             </p>
-          </div>
+            </div>
+          </CollapsibleAuditSection>
 
           {/* ── I: Navegación ────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-6">
