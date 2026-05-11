@@ -2,9 +2,43 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import RubroSelect from "@/app/admin/empresas/RubroSelect";
+
+type PipelineRow = {
+  id: string;
+  nombre: string;
+  posicion: number;
+  tipo: "normal" | "ganado" | "perdido";
+  color: string | null;
+  orden?: number | null;
+  created_at?: string;
+};
+
+type PipelinesApiResponse = {
+  data?: PipelineRow[] | null;
+  error?: string | null;
+};
+
+/** Orden coherente con Kanban (`app/admin/leads/kanban/page.tsx`). */
+function sortPipelineRows(rows: PipelineRow[]): PipelineRow[] {
+  return [...rows].sort((a, b) => {
+    const ordenA = a.orden ?? 999999;
+    const ordenB = b.orden ?? 999999;
+    if (ordenA !== ordenB) return ordenA - ordenB;
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
+}
+
+const FALLBACK_PIPELINE_NAMES = [
+  "Nuevo",
+  "Contactado",
+  "En seguimiento",
+  "Calificado",
+  "No interesado",
+  "Cerrado",
+] as const;
 
 type LeadCreatePayload = {
   nombre: string;
@@ -74,7 +108,7 @@ export default function NuevoLeadPage() {
   const [telefono, setTelefono] = useState("");
   const [email, setEmail] = useState("");
   const [origen, setOrigen] = useState("");
-  const [pipeline, setPipeline] = useState("Nuevo");
+  const [pipeline, setPipeline] = useState("");
   const [notas, setNotas] = useState("");
   const [comercialId, setComercialId] = useState<string>("");
   const [comerciales, setComerciales] = useState<Comercial[]>([]);
@@ -84,9 +118,46 @@ export default function NuevoLeadPage() {
   const [direccion, setDireccion] = useState("");
   const [visitaScheduledAt, setVisitaScheduledAt] = useState("");
 
+  const [pipelinesRemote, setPipelinesRemote] = useState<PipelineRow[]>([]);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
+  const [pipelinesUseFallback, setPipelinesUseFallback] = useState(false);
+  const appliedInitialPipeline = useRef(false);
+
   const canSave = useMemo(() => {
     return nombre.trim().length > 0 && !saving;
   }, [nombre, saving]);
+
+  const pipelineOptions = useMemo(() => {
+    if (pipelinesLoading) return [...FALLBACK_PIPELINE_NAMES];
+    if (pipelinesUseFallback || pipelinesRemote.length === 0) {
+      return [...FALLBACK_PIPELINE_NAMES];
+    }
+    return pipelinesRemote.map((p) => p.nombre);
+  }, [pipelinesLoading, pipelinesUseFallback, pipelinesRemote]);
+
+  useEffect(() => {
+    if (pipelinesLoading) return;
+
+    if (pipelinesUseFallback || pipelinesRemote.length === 0) {
+      if (!appliedInitialPipeline.current) {
+        appliedInitialPipeline.current = true;
+        setPipeline(FALLBACK_PIPELINE_NAMES[0]);
+      }
+      return;
+    }
+
+    if (!appliedInitialPipeline.current) {
+      appliedInitialPipeline.current = true;
+      setPipeline(pipelinesRemote[0].nombre);
+    }
+  }, [pipelinesLoading, pipelinesRemote, pipelinesUseFallback]);
+
+  useEffect(() => {
+    if (!pipelineOptions.length) return;
+    if (!pipelineOptions.includes(pipeline)) {
+      setPipeline(pipelineOptions[0]);
+    }
+  }, [pipeline, pipelineOptions]);
 
   useEffect(() => {
     (async () => {
@@ -100,6 +171,38 @@ export default function NuevoLeadPage() {
         setComerciales([]);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setPipelinesLoading(true);
+      setPipelinesUseFallback(false);
+      try {
+        const res = await fetch("/api/admin/leads/pipelines", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-store" },
+        });
+        const json = (await res.json()) as PipelinesApiResponse;
+        if (!res.ok) throw new Error(json?.error ?? "Error cargando pipelines");
+        const raw = Array.isArray(json?.data) ? json.data : [];
+        const sorted = sortPipelineRows(raw);
+        if (!cancelled) {
+          setPipelinesRemote(sorted);
+          setPipelinesUseFallback(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setPipelinesRemote([]);
+          setPipelinesUseFallback(true);
+        }
+      } finally {
+        if (!cancelled) setPipelinesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function createLead() {
@@ -203,23 +306,33 @@ export default function NuevoLeadPage() {
           <Input label="Origen" value={origen} onChange={setOrigen} disabled={saving} />
 
           <div className="rounded-xl border p-4">
-            <div className="text-xs font-semibold text-slate-600">Pipeline</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-xs font-semibold text-slate-600">Pipeline</div>
+              {pipelinesLoading ? (
+                <span className="text-[11px] text-slate-400">Cargando etapas…</span>
+              ) : null}
+            </div>
             <select
-              value={pipeline}
+              value={pipelineOptions.includes(pipeline) ? pipeline : pipelineOptions[0] ?? ""}
               onChange={(e) => setPipeline(e.target.value)}
-              disabled={saving}
+              disabled={saving || pipelinesLoading}
               className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 disabled:opacity-50"
             >
-              <option>Nuevo</option>
-              <option>Contactado</option>
-              <option>En seguimiento</option>
-              <option>Calificado</option>
-              <option>No interesado</option>
-              <option>Cerrado</option>
+              {pipelineOptions.map((nombre) => (
+                <option key={nombre} value={nombre}>
+                  {nombre}
+                </option>
+              ))}
             </select>
-            <div className="mt-2 text-xs text-slate-500">
-              (En A es texto. En B lo conectamos a opciones configurables.)
-            </div>
+            {pipelinesUseFallback ? (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-900">
+                No se pudieron cargar las etapas reales. Se muestran opciones base.
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-slate-500">
+                Etapas desde la configuración del pipeline (mismas columnas que el Kanban).
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border p-4">
