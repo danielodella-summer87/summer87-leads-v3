@@ -343,6 +343,42 @@ function formatDateTime(iso?: string | null) {
   }
 }
 
+type PilotCommercialStatusResult = { status: "good" | "warning"; label: string };
+
+function pilotActivityTypeLabel(raw?: string | null): string {
+  const t = (raw ?? "").trim().toLowerCase();
+  if (!t || t === "none") return "Sin próxima acción";
+  const map: Record<string, string> = {
+    whatsapp: "WhatsApp",
+    call: "Llamada",
+    proposal: "Enviar cotización",
+    meeting: "Reunión / visita",
+    email: "Email / consulta",
+    followup: "Seguimiento",
+  };
+  return map[t] ?? (raw ?? "").trim();
+}
+
+function pilotHasResponsable(lead: Lead | null): boolean {
+  if (!lead) return false;
+  if (lead.comercial?.nombre?.trim()) return true;
+  if (lead.comercial_id?.trim()) return true;
+  return false;
+}
+
+/** Lectura secundaria para piloto comercial manual; no reemplaza el flujo técnico del lead. */
+function getPilotCommercialStatus(lead: Lead | null): PilotCommercialStatusResult {
+  if (!lead) return { status: "warning", label: "Requiere responsable" };
+  if (!pilotHasResponsable(lead)) return { status: "warning", label: "Requiere responsable" };
+  if (!lead.oferta?.trim()) return { status: "warning", label: "Requiere producto/servicio consultado" };
+  const typeRaw = (lead.next_activity_type ?? "").trim().toLowerCase();
+  const hasType = typeRaw.length > 0 && typeRaw !== "none";
+  if (!hasType) return { status: "warning", label: "Requiere próxima acción" };
+  if (!lead.next_activity_at?.trim()) return { status: "warning", label: "Requiere fecha de seguimiento" };
+  if (!lead.origen?.trim()) return { status: "warning", label: "Requiere canal/origen" };
+  return { status: "good", label: "Listo para seguimiento" };
+}
+
 type VisitaRelevamiento = {
   nombre_contrato?: string;
   tipo_servicio?: "permanente" | "especial" | "";
@@ -3297,6 +3333,7 @@ export default function LeadDetailPage() {
   }, [lead?.created_at, lead?.updated_at]);
 
   const vendedorLabel = lead?.comercial?.nombre?.trim() ? lead.comercial.nombre : "Sin asignar";
+  const pilotCommercialStatus = getPilotCommercialStatus(lead);
 
   return (
     <PageContainer>
@@ -3857,6 +3894,67 @@ export default function LeadDetailPage() {
           {/* Contenido de Tabs */}
           {activeTab === "datos" && (
             <div id="lead-data-base" className="mt-5 grid grid-cols-1 gap-4">
+              {/* Seguimiento piloto (6H): solo lectura */}
+              <div
+                id="lead-pilot-followup"
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-slate-900">Seguimiento piloto</h2>
+                  <span
+                    className={[
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+                      pilotCommercialStatus.status === "good"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        : "border-amber-200 bg-amber-50 text-amber-900",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "h-2 w-2 shrink-0 rounded-full",
+                        pilotCommercialStatus.status === "good" ? "bg-emerald-500" : "bg-amber-500",
+                      ].join(" ")}
+                      aria-hidden
+                    />
+                    {pilotCommercialStatus.label}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                  Este estado mide si el lead tiene la información mínima para operar un piloto comercial
+                  manual. No reemplaza el flujo técnico completo del lead.
+                </p>
+                <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">Producto / servicio consultado</dt>
+                    <dd className="mt-1 text-slate-800">
+                      {(lead?.oferta ?? "").trim() || "No definido"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">Próxima acción</dt>
+                    <dd className="mt-1 text-slate-800">{pilotActivityTypeLabel(lead?.next_activity_type)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">Fecha de próximo seguimiento</dt>
+                    <dd className="mt-1 text-slate-800">
+                      {lead?.next_activity_at?.trim()
+                        ? formatDateTime(lead.next_activity_at)
+                        : "No definida"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-slate-500">Responsable</dt>
+                    <dd className="mt-1 text-slate-800">
+                      {lead?.comercial?.nombre?.trim() ? lead.comercial.nombre : "Sin responsable"}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs font-medium text-slate-500">Canal / origen</dt>
+                    <dd className="mt-1 text-slate-800">{(lead?.origen ?? "").trim() || "Sin origen"}</dd>
+                  </div>
+                </dl>
+              </div>
+
               {/* Datos del prospecto e instalación */}
               <div className="rounded-2xl border bg-white">
                 <div
@@ -4337,8 +4435,9 @@ export default function LeadDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-500">
-                      Notas de prensa e info adicional.
+                    <div className="text-xs font-medium text-slate-500">Producto / servicio consultado</div>
+                    <div className="mt-0.5 text-xs text-slate-500">
+                      Producto, servicio o necesidad principal informada por el prospecto.
                     </div>
                     {editing ? (
                       <textarea
@@ -4346,7 +4445,7 @@ export default function LeadDetailPage() {
                         onChange={(e) => setDraft((p) => ({ ...p, oferta: e.target.value }))}
                         className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                         rows={3}
-                        placeholder="Ej: descuentos, expertise, charlas, referrals, partnership…"
+                        placeholder="Ej: limpieza de oficinas, desinfección, frecuencia deseada…"
                       />
                     ) : (
                       <div className="mt-1 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap">
