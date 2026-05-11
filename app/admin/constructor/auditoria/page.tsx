@@ -1485,49 +1485,127 @@ function structuralBlockStatus(recordUnknown: unknown): "Configurado" | "Pendien
     : "Pendiente";
 }
 
-function reportesBlockLabel(
-  reportesUnknown: unknown
-): "Configurado" | "Sugerido local" | "Pendiente" {
-  const r = asRecord(reportesUnknown);
-  if (Object.keys(r).length === 0) return "Pendiente";
-  if (
-    r.origen === "sugerido_local" &&
-    Array.isArray(r.reportesSugeridos) &&
-    r.reportesSugeridos.length > 0
-  ) {
-    return "Sugerido local";
+type TechnicalBlockKind = "reportes" | "diagnostico" | "documentos";
+
+type TechnicalBlockVM = {
+  status: "configured" | "suggested" | "empty";
+  label: "Configurado" | "Sugerido local" | "Pendiente";
+  checklistStatus: "listo" | "revisar" | "pendiente";
+  explanation: string;
+};
+
+/** Fase 5H: distingue configurado real vs sugerido_local vs vacío para documentos/diagnóstico/reportes. */
+function getTechnicalBlockState(
+  blockUnknown: unknown,
+  kind: TechnicalBlockKind
+): TechnicalBlockVM {
+  const emptyVm: TechnicalBlockVM = {
+    status: "empty",
+    label: "Pendiente",
+    checklistStatus: "pendiente",
+    explanation: "Sin información suficiente.",
+  };
+
+  const r = asRecord(blockUnknown);
+  const keys = Object.keys(r);
+  if (keys.length === 0) return emptyVm;
+
+  let suggested = false;
+  if (kind === "reportes") {
+    suggested =
+      r.origen === "sugerido_local" &&
+      Array.isArray(r.reportesSugeridos) &&
+      r.reportesSugeridos.length > 0;
+  } else if (kind === "diagnostico") {
+    const sug = asRecord(r.diagnosticoSugerido);
+    suggested =
+      r.origen === "sugerido_local" &&
+      trimStrTechnical(sug.resumenComercial).length > 0;
+  } else {
+    suggested =
+      r.origen === "sugerido_local" &&
+      Array.isArray(r.documentosSugeridos) &&
+      r.documentosSugeridos.length > 0;
   }
-  return "Configurado";
+
+  if (r.origen === "sugerido_local" && !suggested) {
+    return emptyVm;
+  }
+
+  if (suggested) {
+    return {
+      status: "suggested",
+      label: "Sugerido local",
+      checklistStatus: "revisar",
+      explanation:
+        "Propuesta generada localmente. Requiere validación humana antes de activación real.",
+    };
+  }
+
+  return {
+    status: "configured",
+    label: "Configurado",
+    checklistStatus: "listo",
+    explanation: "Configurado desde el Constructor.",
+  };
 }
 
-function diagnosticoBlockLabel(
-  diagnosticoUnknown: unknown
-): "Configurado" | "Sugerido local" | "Pendiente" {
-  const d = asRecord(diagnosticoUnknown);
-  if (Object.keys(d).length === 0) return "Pendiente";
-  const sug = asRecord(d.diagnosticoSugerido);
-  if (
-    d.origen === "sugerido_local" &&
-    trimStrTechnical(sug.resumenComercial).length > 0
-  ) {
-    return "Sugerido local";
+function mergePendientesPrincipalesDisplay(
+  rawPendientes: string[],
+  documentosVm: TechnicalBlockVM,
+  diagnosticoVm: TechnicalBlockVM,
+  reportesVm: TechnicalBlockVM
+): string[] {
+  const curated: string[] = [];
+  if (documentosVm.status === "suggested") {
+    curated.push(
+      "Documentos fuente: propuesta sugerida localmente pendiente de carga o validación humana."
+    );
   }
-  return "Configurado";
+  if (diagnosticoVm.status === "suggested") {
+    curated.push(
+      "Diagnóstico: propuesta sugerida localmente pendiente de validación humana."
+    );
+  }
+  if (reportesVm.status === "suggested") {
+    curated.push(
+      "Reportes: propuesta sugerida localmente pendiente de validación humana."
+    );
+  }
+
+  const filtered = rawPendientes.filter((line) => {
+    if (documentosVm.status === "suggested" && line.startsWith("Datos base:")) {
+      return false;
+    }
+    if (diagnosticoVm.status === "suggested" && line.startsWith("Diagnóstico y proceso:")) {
+      return false;
+    }
+    if (reportesVm.status === "suggested" && line.startsWith("IA y reportes:")) {
+      return false;
+    }
+    return true;
+  });
+
+  const merged = [...curated, ...filtered];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of merged) {
+    const t = m.trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out.slice(0, 8);
 }
 
-function documentosBlockLabel(
-  documentosUnknown: unknown
-): "Configurado" | "Sugerido local" | "Pendiente" {
-  const d = asRecord(documentosUnknown);
-  if (Object.keys(d).length === 0) return "Pendiente";
-  if (
-    d.origen === "sugerido_local" &&
-    Array.isArray(d.documentosSugeridos) &&
-    d.documentosSugeridos.length > 0
-  ) {
-    return "Sugerido local";
+function technicalBlockBadgeClass(status: TechnicalBlockVM["status"]): string {
+  if (status === "configured") {
+    return "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700";
   }
-  return "Configurado";
+  if (status === "suggested") {
+    return "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800";
+  }
+  return "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800";
 }
 
 function buildTechnicalSummaryViewModel(
@@ -1576,9 +1654,25 @@ function buildTechnicalSummaryViewModel(
   const nextActionStr = strFieldTechnical(readinessRecord.nextAction);
 
   const pendientesRaw = Array.isArray(root.pendientes) ? root.pendientes : [];
-  const pendientesTop = pendientesRaw
+  const pendientesTopRaw = pendientesRaw
     .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
     .slice(0, 5);
+
+  const documentosVm = getTechnicalBlockState(documentosUnknown, "documentos");
+  const diagnosticoVm = getTechnicalBlockState(diagnosticoUnknown, "diagnostico");
+  const reportesVm = getTechnicalBlockState(reportesUnknown, "reportes");
+
+  const pendientesTop = mergePendientesPrincipalesDisplay(
+    pendientesTopRaw,
+    documentosVm,
+    diagnosticoVm,
+    reportesVm
+  );
+
+  const resumenHayBloquesSugeridos =
+    documentosVm.status === "suggested" ||
+    diagnosticoVm.status === "suggested" ||
+    reportesVm.status === "suggested";
 
   return {
     empresa: {
@@ -1597,9 +1691,13 @@ function buildTechnicalSummaryViewModel(
     },
     pipeline: structuralBlockStatus(procesoPipelineUnknown),
     motoresIA: structuralBlockStatus(motoresUnknown),
-    reportes: reportesBlockLabel(reportesUnknown),
-    diagnostico: diagnosticoBlockLabel(diagnosticoUnknown),
-    documentos: documentosBlockLabel(documentosUnknown),
+    reportes: reportesVm.label,
+    diagnostico: diagnosticoVm.label,
+    documentos: documentosVm.label,
+    bloqueDocumentos: documentosVm,
+    bloqueDiagnostico: diagnosticoVm,
+    bloqueReportes: reportesVm,
+    resumenHayBloquesSugeridos,
     auditoria: {
       completionPercent,
       overallStatus: overallStatusStr,
@@ -1704,11 +1802,8 @@ function buildActivationChecklistViewModel(
 ): { items: ActivationChecklistRow[]; allListo: boolean } {
   const root = technicalJson ?? {};
   const empresa = asRecord(root.empresa);
-  const documentos = asRecord(root.documentos);
-  const diagnostico = asRecord(root.diagnostico);
   const procesoPipeline = asRecord(root.procesoPipeline);
   const motoresIA = asRecord(root.motoresIA);
-  const reportes = asRecord(root.reportes);
 
   const auditoriaBlock = asRecord(root?.auditoria);
   const readinessRecord = asRecord(auditoriaBlock?.readiness);
@@ -1753,80 +1848,12 @@ function buildActivationChecklistViewModel(
       "País y ciudad/región están informados de forma coherente en esta vista.";
   }
 
-  const documentosSugArr = Array.isArray(documentos.documentosSugeridos)
-    ? documentos.documentosSugeridos
-    : [];
-  const documentosEsSugeridoLocal =
-    documentos.origen === "sugerido_local" && documentosSugArr.length > 0;
-  const documentosKeys = Object.keys(documentos);
-  const documentosConfiguradoReal =
-    documentosKeys.length > 0 && !documentosEsSugeridoLocal;
-
-  let documentosGateStatus: ActivationGateStatus;
-  let documentosGateExplanation: string;
-  if (documentosConfiguradoReal) {
-    documentosGateStatus = "listo";
-    documentosGateExplanation =
-      "Hay documentos fuente cargados en el Constructor (no es solo sugerido local).";
-  } else if (documentosEsSugeridoLocal) {
-    documentosGateStatus = "revisar";
-    documentosGateExplanation = `Lista local de ${documentosSugArr.length} documentos sugeridos en el JSON técnico; cargá o validá en Documentos fuente del Constructor.`;
-  } else {
-    documentosGateStatus = "pendiente";
-    documentosGateExplanation =
-      "Documentos fuente vacíos en el JSON técnico (sin sugeridos locales).";
-  }
-
-  const diagnosticoSugeridoRec = asRecord(diagnostico.diagnosticoSugerido);
-  const diagnosticoEsSugeridoLocal =
-    diagnostico.origen === "sugerido_local" &&
-    trimStrTechnical(diagnosticoSugeridoRec.resumenComercial).length > 0;
-  const diagnosticoKeys = Object.keys(diagnostico);
-  const diagnosticoConfiguradoReal =
-    diagnosticoKeys.length > 0 && !diagnosticoEsSugeridoLocal;
-
-  let diagnosticoGateStatus: ActivationGateStatus;
-  let diagnosticoGateExplanation: string;
-  if (diagnosticoConfiguradoReal) {
-    diagnosticoGateStatus = "listo";
-    diagnosticoGateExplanation =
-      "Hay datos de diagnóstico cargados en el Constructor (no es solo sugerido local).";
-  } else if (diagnosticoEsSugeridoLocal) {
-    diagnosticoGateStatus = "revisar";
-    diagnosticoGateExplanation =
-      "Diagnóstico comercial sugerido localmente en el JSON técnico; requiere validación humana en el paso Diagnóstico del Constructor.";
-  } else {
-    diagnosticoGateStatus = "pendiente";
-    diagnosticoGateExplanation =
-      "El bloque Diagnóstico está vacío en el JSON técnico (sin sugerido local).";
-  }
+  const documentosVm = getTechnicalBlockState(root.documentos, "documentos");
+  const diagnosticoVm = getTechnicalBlockState(root.diagnostico, "diagnostico");
+  const reportesVm = getTechnicalBlockState(root.reportes, "reportes");
 
   const pipelineOk = Object.keys(procesoPipeline).length > 0;
   const motoresOk = Object.keys(motoresIA).length > 0;
-
-  const reportesSugeridosArr = Array.isArray(reportes.reportesSugeridos)
-    ? reportes.reportesSugeridos
-    : [];
-  const reportesEsSugeridoLocal =
-    reportes.origen === "sugerido_local" && reportesSugeridosArr.length > 0;
-  const reportesKeys = Object.keys(reportes);
-  const reportesConfiguradoReal =
-    reportesKeys.length > 0 && !reportesEsSugeridoLocal;
-
-  let reportesGateStatus: ActivationGateStatus;
-  let reportesGateExplanation: string;
-  if (reportesConfiguradoReal) {
-    reportesGateStatus = "listo";
-    reportesGateExplanation =
-      "Hay datos de reportes cargados en el Constructor (no es solo sugerido local).";
-  } else if (reportesEsSugeridoLocal) {
-    reportesGateStatus = "revisar";
-    reportesGateExplanation = `Propuesta local de ${reportesSugeridosArr.length} reportes sugeridos en el JSON técnico; validá y cargá el paso Reportes del Constructor.`;
-  } else {
-    reportesGateStatus = "pendiente";
-    reportesGateExplanation =
-      "Reportes vacíos según consolidación técnica (sin sugeridos locales).";
-  }
 
   const pctRaw = readinessRecord.completionPercent;
   const auditoriaPct =
@@ -1875,16 +1902,16 @@ function buildActivationChecklistViewModel(
     {
       key: "documentos",
       title: "Documentos fuente",
-      status: documentosGateStatus,
-      badgeLabel: gateLabel(documentosGateStatus),
-      explanation: documentosGateExplanation,
+      status: documentosVm.checklistStatus,
+      badgeLabel: gateLabel(documentosVm.checklistStatus),
+      explanation: documentosVm.explanation,
     },
     {
       key: "diagnostico",
       title: "Diagnóstico disponible",
-      status: diagnosticoGateStatus,
-      badgeLabel: gateLabel(diagnosticoGateStatus),
-      explanation: diagnosticoGateExplanation,
+      status: diagnosticoVm.checklistStatus,
+      badgeLabel: gateLabel(diagnosticoVm.checklistStatus),
+      explanation: diagnosticoVm.explanation,
     },
     {
       key: "pipeline",
@@ -1907,9 +1934,9 @@ function buildActivationChecklistViewModel(
     {
       key: "reportes",
       title: "Reportes configurados",
-      status: reportesGateStatus,
-      badgeLabel: gateLabel(reportesGateStatus),
-      explanation: reportesGateExplanation,
+      status: reportesVm.checklistStatus,
+      badgeLabel: gateLabel(reportesVm.checklistStatus),
+      explanation: reportesVm.explanation,
     },
     {
       key: "auditoria",
@@ -4316,21 +4343,15 @@ export default function AuditoriaPage() {
                     Documentos
                   </p>
                   <span
-                    className={
-                      technicalSummaryVm.documentos === "Configurado"
-                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-                        : technicalSummaryVm.documentos === "Sugerido local"
-                          ? "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800"
-                          : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
-                    }
+                    className={technicalBlockBadgeClass(
+                      technicalSummaryVm.bloqueDocumentos.status
+                    )}
                   >
-                    {technicalSummaryVm.documentos}
+                    {technicalSummaryVm.bloqueDocumentos.label}
                   </span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  {technicalSummaryVm.documentos === "Sugerido local"
-                    ? "Origen técnico: bloque documentos con origen sugerido_local en el JSON consolidado (carga o validación humana pendiente)."
-                    : "Origen técnico: bloque documentos del JSON consolidado."}
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  {technicalSummaryVm.bloqueDocumentos.explanation}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -4339,21 +4360,15 @@ export default function AuditoriaPage() {
                     Diagnóstico
                   </p>
                   <span
-                    className={
-                      technicalSummaryVm.diagnostico === "Configurado"
-                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-                        : technicalSummaryVm.diagnostico === "Sugerido local"
-                          ? "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800"
-                          : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
-                    }
+                    className={technicalBlockBadgeClass(
+                      technicalSummaryVm.bloqueDiagnostico.status
+                    )}
                   >
-                    {technicalSummaryVm.diagnostico}
+                    {technicalSummaryVm.bloqueDiagnostico.label}
                   </span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  {technicalSummaryVm.diagnostico === "Sugerido local"
-                    ? "Origen técnico: bloque diagnostico con origen sugerido_local en el JSON consolidado (validación humana pendiente)."
-                    : "Origen técnico: bloque diagnostico del JSON consolidado."}
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  {technicalSummaryVm.bloqueDiagnostico.explanation}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -4400,24 +4415,27 @@ export default function AuditoriaPage() {
                     Reportes
                   </p>
                   <span
-                    className={
-                      technicalSummaryVm.reportes === "Configurado"
-                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-                        : technicalSummaryVm.reportes === "Sugerido local"
-                          ? "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800"
-                          : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
-                    }
+                    className={technicalBlockBadgeClass(
+                      technicalSummaryVm.bloqueReportes.status
+                    )}
                   >
-                    {technicalSummaryVm.reportes}
+                    {technicalSummaryVm.bloqueReportes.label}
                   </span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  {technicalSummaryVm.reportes === "Sugerido local"
-                    ? "Origen técnico: bloque reportes con origen sugerido_local en el JSON consolidado (validación humana pendiente)."
-                    : "Origen técnico: bloque reportes del JSON consolidado."}
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  {technicalSummaryVm.bloqueReportes.explanation}
                 </p>
               </div>
               </div>
+              {technicalSummaryVm.resumenHayBloquesSugeridos ? (
+                <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[11px] leading-relaxed text-slate-700">
+                    El diseño técnico cuenta con propuestas locales para documentos,
+                    diagnóstico y reportes. Antes de activar CRM real, estas propuestas
+                    deben ser validadas o reemplazadas por datos reales guardados.
+                  </p>
+                </div>
+              ) : null}
               {/* Auditoría */}
               <div className="rounded-xl border border-slate-200 bg-white p-4 sm:col-span-2">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
