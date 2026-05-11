@@ -40,6 +40,18 @@ const FALLBACK_PIPELINE_NAMES = [
   "Cerrado",
 ] as const;
 
+/** Etiquetas UI → valores `next_activity_type` permitidos por POST (cleanActivityType). */
+const NEXT_ACTIVITY_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "— Opcional —", value: "" },
+  { label: "Contactar por WhatsApp", value: "whatsapp" },
+  { label: "Llamar", value: "call" },
+  { label: "Enviar cotización", value: "proposal" },
+  { label: "Coordinar visita", value: "meeting" },
+  { label: "Consultar stock", value: "email" },
+  { label: "Hacer seguimiento", value: "followup" },
+  { label: "Otro", value: "followup" },
+];
+
 type LeadCreatePayload = {
   nombre: string;
   contacto: string | null;
@@ -49,6 +61,8 @@ type LeadCreatePayload = {
   pipeline: string | null;
   oferta: string | null;
   notas: string | null;
+  next_activity_type: string | null;
+  next_activity_at: string | null;
   comercial_id: string | null;
   rubro_id: string | null;
   cantidad_personal: number | null;
@@ -111,6 +125,8 @@ export default function NuevoLeadPage() {
   const [origen, setOrigen] = useState("");
   const [oferta, setOferta] = useState("");
   const [pipeline, setPipeline] = useState("");
+  const [nextActivityType, setNextActivityType] = useState("");
+  const [nextActivityAt, setNextActivityAt] = useState("");
   const [notas, setNotas] = useState("");
   const [comercialId, setComercialId] = useState<string>("");
   const [comerciales, setComerciales] = useState<Comercial[]>([]);
@@ -229,6 +245,8 @@ export default function NuevoLeadPage() {
       pipeline: norm(pipeline),
       oferta: norm(oferta),
       notas: norm(notas),
+      next_activity_type: norm(nextActivityType),
+      next_activity_at: normDateTimeLocal(nextActivityAt),
       comercial_id: comercialId.trim(),
       rubro_id: rubroId,
       cantidad_personal: normNumber(cantidadPersonal),
@@ -357,6 +375,46 @@ export default function NuevoLeadPage() {
           </div>
 
           <div className="rounded-xl border p-4">
+            <p className="text-xs font-semibold text-slate-800">Seguimiento inicial</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Evita que el lead quede sin próximo paso en el Kanban.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="text-xs font-semibold text-slate-600">
+                  Próxima acción{" "}
+                  <span className="font-normal text-slate-400">(opcional)</span>
+                </div>
+                <select
+                  value={nextActivityType}
+                  onChange={(e) => setNextActivityType(e.target.value)}
+                  disabled={saving}
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 disabled:opacity-50"
+                >
+                  {NEXT_ACTIVITY_OPTIONS.map((opt) => (
+                    <option key={`${opt.label}-${opt.value}`} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-slate-600">
+                  Fecha de próximo seguimiento{" "}
+                  <span className="font-normal text-slate-400">(opcional)</span>
+                </div>
+                <input
+                  type="datetime-local"
+                  value={nextActivityAt}
+                  onChange={(e) => setNextActivityAt(e.target.value)}
+                  disabled={saving}
+                  className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 disabled:opacity-50"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-4 md:col-span-2">
             <div className="text-xs font-semibold text-slate-600">Comercial *</div>
             <select
               value={comercialId}
