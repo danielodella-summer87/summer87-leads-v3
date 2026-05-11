@@ -579,6 +579,76 @@ function asRecord(value: unknown): SetupRecord {
     : {};
 }
 
+/** JSON técnico de solo lectura (Fase 5A): armado sólo desde setup + readiness local; sin merges de contratos riesgosos. */
+function buildConstructorTechnicalJson(
+  setupData: ConstructorSetup | undefined | null,
+  auditoriaReadiness: BaseReadiness | null | undefined
+): Record<string, unknown> {
+  const setupRecord = asRecord(setupData ?? null);
+
+  const readiness = auditoriaReadiness;
+  const rawSections =
+    readiness && Array.isArray(readiness.sections) ? readiness.sections : [];
+
+  const safeSections = rawSections.filter(
+    (s): s is SectionQuality =>
+      Boolean(s) && typeof s === "object" && "key" in s && "status" in s
+  );
+
+  const pendientes: string[] = [];
+  for (const s of safeSections) {
+    if (s.status !== "good") {
+      const label = typeof s.label === "string" ? s.label : "Bloque";
+      const detail = typeof s.detail === "string" ? s.detail : "";
+      pendientes.push(
+        detail ? `${label}: ${detail}` : `${label}: pendiente de revisión`
+      );
+    }
+  }
+
+  const serializableSections = safeSections.map((s) => ({
+    key: typeof s.key === "string" ? s.key : "",
+    label: typeof s.label === "string" ? s.label : "",
+    status: s.status,
+    detail: typeof s.detail === "string" ? s.detail : "",
+  }));
+
+  return {
+    metadata: {
+      version: "prototype-v1",
+      source: "constructor_auditoria_frontend",
+      generatedFrom: "crm_setup_config",
+      prototypeMode: true,
+    },
+    empresa: asRecord(setupRecord?.empresa),
+    cuestionario: asRecord(setupRecord?.cuestionario),
+    documentos: asRecord(setupRecord?.documentos),
+    diagnostico: asRecord(setupRecord?.diagnostico),
+    procesoPipeline: asRecord(
+      setupRecord?.procesoPipeline ?? setupRecord?.proceso_pipeline
+    ),
+    motoresIA: asRecord(setupRecord?.motoresIA ?? setupRecord?.motores_ia),
+    reportes: asRecord(setupRecord?.reportes),
+    auditoria: {
+      readiness: {
+        completionPercent: readiness?.completionPercent ?? 0,
+        overallStatus: readiness?.overallStatus ?? "neutral",
+        overallLabel:
+          readiness?.overallLabel ?? "Pendiente",
+        nextAction:
+          readiness?.nextAction ?? "Completar configuración previa.",
+        sections: serializableSections,
+      },
+      activation: {
+        prototypeMode: true,
+        realActivationEnabled: false,
+        message: "Activación real bloqueada en esta fase.",
+      },
+    },
+    pendientes,
+  };
+}
+
 function getText(record: SetupRecord, key: string): string {
   return formatReportValue(record[key]);
 }
@@ -826,6 +896,12 @@ export default function AuditoriaPage() {
   const auditoriaReadinessPanel = evaluateAuditoriaReadiness(
     setupLoading ? null : setupData
   );
+
+  const technicalJson = buildConstructorTechnicalJson(
+    setupLoading ? null : setupData,
+    auditoriaReadinessPanel
+  );
+  const technicalJsonString = JSON.stringify(technicalJson, null, 2);
 
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
@@ -2679,6 +2755,29 @@ export default function AuditoriaPage() {
 
             </div>
           )}
+
+          {/* ── JSON técnico consolidado del Constructor (Fase 5A, solo lectura) ── */}
+          <div className="mb-8">
+            <SectionHeader
+              letter="5"
+              title="JSON técnico consolidado del Constructor"
+            />
+            <p className="mb-2 max-w-3xl text-xs leading-relaxed text-slate-500">
+              Resumen técnico de configuración generado desde los datos actuales del
+              Constructor. Este bloque es de solo lectura y sirve como base para
+              futuras fases de activación y entregables técnicos.
+            </p>
+            <p className="mb-3 text-[11px] font-semibold tracking-wide text-slate-600">
+              Solo lectura · Prototipo · No activa CRM real
+            </p>
+            <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
+              <pre className="max-h-[min(28rem,70vh)] overflow-x-auto overflow-y-auto p-4 text-left">
+                <code className="font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200">
+                  {technicalJsonString}
+                </code>
+              </pre>
+            </div>
+          </div>
 
           {/* ── G: Condiciones para activar CRM ──────────────────────────── */}
           <div className="mb-8">
