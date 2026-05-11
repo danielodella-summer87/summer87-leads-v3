@@ -190,9 +190,9 @@ function isMissingColumnError(message: string | undefined, table: string, column
 const CASALIMPIA_LEAD_FIELDS =
   "rubro_id,cantidad_personal,superficie_m2,cantidad_pisos,cantidad_banos,tachos_residuos,tiene_parking,tiene_subsuelo,tiene_ascensores,tiene_escaleras,tiene_vidrios_altos,tipos_suelo,horario_operacion,restricciones_acceso,zonas_criticas,requerimientos_especiales,notas_instalacion,installation_details_json,visita_scheduled_at";
 const SELECT_WITH_SNAPSHOT =
-  `id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},objetivos,audiencia,tamano,website,instagram,direccion,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
+  `id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},objetivos,audiencia,tamano,oferta,website,instagram,direccion,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
 const SELECT_LEGACY =
-  "id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,objetivos,audiencia,tamano,website,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)";
+  "id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,objetivos,audiencia,tamano,oferta,website,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)";
 
 type LeadCreateInput = Partial<{
   nombre: string | null;
@@ -228,6 +228,7 @@ type LeadCreateInput = Partial<{
   objetivos: string | null;
   audiencia: string | null;
   tamano: string | null;
+  oferta: string | null;
   linkedin_empresa: string | null;
   linkedin_personal: string | null;
   /** Body legacy al crear lead (se mapea a linkedin_personal). */
@@ -635,6 +636,7 @@ export async function POST(req: Request) {
       objetivos: cleanStr(body.objetivos),
       audiencia: cleanStr(body.audiencia),
       tamano: cleanStr(body.tamano),
+      oferta: cleanStr(body.oferta),
       linkedin_empresa: cleanStr(body.linkedin_empresa),
       linkedin_personal: cleanStr(body.linkedin_personal) ?? cleanStr(body.linkedin_director),
       meet_url: meetUrlRaw,

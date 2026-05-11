@@ -47,6 +47,7 @@ type LeadCreatePayload = {
   email: string | null;
   origen: string | null;
   pipeline: string | null;
+  oferta: string | null;
   notas: string | null;
   comercial_id: string | null;
   rubro_id: string | null;
@@ -108,6 +109,7 @@ export default function NuevoLeadPage() {
   const [telefono, setTelefono] = useState("");
   const [email, setEmail] = useState("");
   const [origen, setOrigen] = useState("");
+  const [oferta, setOferta] = useState("");
   const [pipeline, setPipeline] = useState("");
   const [notas, setNotas] = useState("");
   const [comercialId, setComercialId] = useState<string>("");
@@ -225,6 +227,7 @@ export default function NuevoLeadPage() {
       email: norm(email),
       origen: norm(origen),
       pipeline: norm(pipeline),
+      oferta: norm(oferta),
       notas: norm(notas),
       comercial_id: comercialId.trim(),
       rubro_id: rubroId,
@@ -304,6 +307,24 @@ export default function NuevoLeadPage() {
           <Input label="Email" value={email} onChange={setEmail} disabled={saving} />
 
           <Input label="Origen" value={origen} onChange={setOrigen} disabled={saving} />
+
+          <div className="md:col-span-2 rounded-xl border p-4">
+            <div className="text-xs font-semibold text-slate-600">
+              Producto / servicio consultado{" "}
+              <span className="font-normal text-slate-400">(opcional)</span>
+            </div>
+            <textarea
+              value={oferta}
+              onChange={(e) => setOferta(e.target.value)}
+              disabled={saving}
+              rows={3}
+              placeholder="Ej: tapa rígida, lona, cubre caja, baca, rejilla, accesorio interior"
+              className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 disabled:opacity-50"
+            />
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+              Ayuda a identificar qué busca el prospecto y luego ordenar reportes por demanda.
+            </p>
+          </div>
 
           <div className="rounded-xl border p-4">
             <div className="flex flex-wrap items-center gap-2">
