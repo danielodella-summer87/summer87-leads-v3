@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ChevronRight,
+  ChevronDown,
   AlertTriangle,
 } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
@@ -548,13 +549,74 @@ const TEXTAREA_CLASS =
 
 const LABEL_CLASS = "block text-sm font-medium text-slate-700";
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5L: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleEmpresaSectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleEmpresaSection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleEmpresaSectionProps) {
   return (
-    <div className="flex items-center gap-2 pb-3">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
-        {letter}
-      </span>
-      <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+          {letter}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -568,6 +630,7 @@ export default function EmpresaPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [aiApplyMessage, setAIApplyMessage] = useState<string | null>(null);
+  const [openEmpresaSection, setOpenEmpresaSection] = useState<string>("identidad");
   const {
     suggestions: mockAISuggestions,
     loading: mockAILoading,
@@ -763,6 +826,10 @@ export default function EmpresaPage() {
     }));
   }
 
+  function handleEmpresaSectionToggle(id: string) {
+    setOpenEmpresaSection((prev) => (prev === id ? "" : id));
+  }
+
   const contextoRubro = `${form.rubro} ${form.giro} ${form.vertical}`.toLowerCase();
   const shouldSuggestQuito = form.pais.trim().toLowerCase().includes("quito");
   const shouldSuggestEducation =
@@ -840,8 +907,16 @@ export default function EmpresaPage() {
           <div className="space-y-8">
 
             {/* A. Identidad de empresa */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="A" title="Identidad de empresa" />
+            <CollapsibleEmpresaSection
+              id="identidad"
+              letter="A"
+              title="Identidad de empresa"
+              statusLabel={
+                locationMismatch ? "País/ciudad a revisar" : undefined
+              }
+              isOpen={openEmpresaSection === "identidad"}
+              onToggle={handleEmpresaSectionToggle}
+            >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className={LABEL_CLASS}>Nombre comercial</label>
@@ -1023,11 +1098,16 @@ export default function EmpresaPage() {
                   />
                 </div>
               </div>
-            </section>
+            </CollapsibleEmpresaSection>
 
             {/* B. Rubro y vertical */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="B" title="Rubro y vertical" />
+            <CollapsibleEmpresaSection
+              id="rubro-vertical"
+              letter="B"
+              title="Rubro y vertical"
+              isOpen={openEmpresaSection === "rubro-vertical"}
+              onToggle={handleEmpresaSectionToggle}
+            >
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
@@ -1142,11 +1222,16 @@ export default function EmpresaPage() {
                   <FieldQualityHint hint={readiness.fieldHints.vertical} />
                 </div>
               </div>
-            </section>
+            </CollapsibleEmpresaSection>
 
             {/* C. Modelo comercial inicial */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="C" title="Modelo comercial inicial" />
+            <CollapsibleEmpresaSection
+              id="modelo-comercial"
+              letter="C"
+              title="Modelo comercial inicial"
+              isOpen={openEmpresaSection === "modelo-comercial"}
+              onToggle={handleEmpresaSectionToggle}
+            >
               <div className="space-y-4">
                 <div>
                   <label className={LABEL_CLASS}>¿Qué vende la empresa?</label>
@@ -1226,15 +1311,17 @@ export default function EmpresaPage() {
                   </div>
                 </div>
               </div>
-            </section>
+            </CollapsibleEmpresaSection>
 
             {/* D. Contexto para IA futura */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="D" title="Contexto para IA futura" />
-              <p className="mb-4 text-xs text-slate-500">
-                Esta información alimentará los motores IA cuando se activen en
-                una fase posterior. Cuanto más detallada, mejor será el análisis.
-              </p>
+            <CollapsibleEmpresaSection
+              id="contexto-ia"
+              letter="D"
+              title="Contexto para IA futura"
+              description="Esta información alimentará los motores IA cuando se activen en una fase posterior. Cuanto más detallada, mejor será el análisis."
+              isOpen={openEmpresaSection === "contexto-ia"}
+              onToggle={handleEmpresaSectionToggle}
+            >
               <div className="space-y-4">
                 <div>
                   <label className={LABEL_CLASS}>
@@ -1314,7 +1401,7 @@ export default function EmpresaPage() {
                   <FieldQualityHint hint={readiness.fieldHints.queDeberiaAnalizarIA} />
                 </div>
               </div>
-            </section>
+            </CollapsibleEmpresaSection>
 
           </div>
 
