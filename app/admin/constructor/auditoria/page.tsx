@@ -2263,6 +2263,74 @@ function executiveModuloStatusLabel(status: ExecutiveModuloStatus): string {
   return "Pendiente";
 }
 
+function executiveModuloMarkdownHeading(label: string): string {
+  if (label === "Reportes sugeridos") return "Reportes";
+  if (label === "Diagnóstico sugerido") return "Diagnóstico";
+  if (label === "Documentos sugeridos") return "Documentos";
+  return label;
+}
+
+/** Fase 5J: Markdown ejecutivo derivado sólo del view model local. */
+function buildExecutivePackageMarkdown(vm: ExecutivePackageViewModel): string {
+  const focoIndented = vm.focoComercial
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n");
+  const canalesLine =
+    vm.canalesDetectados.length > 0
+      ? vm.canalesDetectados.join(", ")
+      : "Ninguno detectado en textos consolidados.";
+  const valorLines = vm.valorEsperado.map((v) => `- ${v}`).join("\n");
+  const modulosLines = vm.modulosIncluidos
+    .map(
+      (m) =>
+        `- ${executiveModuloMarkdownHeading(m.label)}: ${executiveModuloStatusLabel(m.status)}`
+    )
+    .join("\n");
+  const pendientesBlock =
+    vm.pendientes.length === 0
+      ? "Sin pendientes críticos detectados. Se recomienda revisión humana antes de activar CRM real."
+      : vm.pendientes.map((p) => `- ${p}`).join("\n");
+
+  return [
+    "# Vista ejecutiva del paquete CRM",
+    "",
+    "## 1. Empresa y foco comercial",
+    "",
+    `- Empresa: ${vm.empresaNombre}`,
+    `- Ubicación: ${vm.ubicacion}`,
+    "- Foco comercial:",
+    focoIndented,
+    "",
+    "## 2. CRM propuesto",
+    "",
+    `- Tipo de CRM: ${vm.crmTipo}`,
+    `- Pipeline: ${vm.pipelineResumen}`,
+    `- Canales detectados: ${canalesLine}`,
+    "",
+    "## 3. Valor esperado",
+    "",
+    valorLines,
+    "",
+    "## 4. Módulos incluidos",
+    "",
+    modulosLines,
+    "",
+    "## 5. Pendientes antes de activación real",
+    "",
+    pendientesBlock,
+    "",
+    "## 6. Dictamen ejecutivo",
+    "",
+    vm.dictamen,
+    "",
+    "## Nota de prototipo",
+    "",
+    "Este documento fue generado localmente desde el Constructor CRM. No activa CRM real, no guarda datos adicionales y requiere revisión humana antes de cualquier implementación operativa.",
+    "",
+  ].join("\n");
+}
+
 function getText(record: SetupRecord, key: string): string {
   return formatReportValue(record[key]);
 }
@@ -2428,6 +2496,9 @@ export default function AuditoriaPage() {
   const [setupError, setSetupError] = useState<string | null>(null);
   const [setupData, setSetupData] = useState<Record<string, unknown> | null>(null);
   const [technicalJsonCopyStatus, setTechnicalJsonCopyStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
+  const [executiveCopyStatus, setExecutiveCopyStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
 
@@ -2604,6 +2675,48 @@ export default function AuditoriaPage() {
   const technicalSummaryVm = buildTechnicalSummaryViewModel(technicalJson);
   const activationChecklistVm = buildActivationChecklistViewModel(technicalJson);
   const executivePackageVm = buildExecutivePackageViewModel(technicalJson);
+  const executiveMarkdown = buildExecutivePackageMarkdown(executivePackageVm);
+  const executiveMarkdownOk =
+    typeof executiveMarkdown === "string" && executiveMarkdown.trim().length > 0;
+
+  async function handleCopyExecutiveMarkdown() {
+    setExecutiveCopyStatus("idle");
+    if (!executiveMarkdownOk) {
+      setExecutiveCopyStatus("error");
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      setExecutiveCopyStatus("error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(executiveMarkdown);
+      setExecutiveCopyStatus("success");
+    } catch {
+      setExecutiveCopyStatus("error");
+    }
+  }
+
+  function handleDownloadExecutiveMarkdown() {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    if (!executiveMarkdownOk) return;
+
+    const blob = new Blob([executiveMarkdown], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "constructor-executive-package.md";
+    anchor.style.display = "none";
+    try {
+      document.body.appendChild(anchor);
+      anchor.click();
+    } finally {
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }
+  }
 
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
@@ -4862,6 +4975,51 @@ export default function AuditoriaPage() {
               para revisar qué CRM se está preparando, qué valor aporta y qué necesita
               validación antes de una activación real.
             </p>
+            <p className="mb-2 text-[11px] leading-relaxed text-slate-500">
+              Exportación local · No guarda datos · No activa CRM real
+            </p>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleCopyExecutiveMarkdown();
+                }}
+                disabled={!executiveMarkdownOk}
+                className={[
+                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                  executiveMarkdownOk
+                    ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300",
+                ].join(" ")}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copiar resumen ejecutivo
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadExecutiveMarkdown}
+                disabled={!executiveMarkdownOk}
+                className={[
+                  "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                  executiveMarkdownOk
+                    ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300",
+                ].join(" ")}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar Markdown
+              </button>
+              {executiveCopyStatus === "success" ? (
+                <span className="text-[11px] font-medium text-green-700">
+                  Resumen ejecutivo copiado correctamente.
+                </span>
+              ) : null}
+              {executiveCopyStatus === "error" ? (
+                <span className="text-[11px] font-medium text-rose-700">
+                  No se pudo copiar el resumen ejecutivo.
+                </span>
+              ) : null}
+            </div>
             <div className="grid gap-3 lg:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
