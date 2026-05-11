@@ -1960,6 +1960,322 @@ function buildActivationChecklistViewModel(
   return { items, allListo };
 }
 
+type PilotGateStatus = ActivationGateStatus;
+
+type PilotChecklistRow = {
+  key: string;
+  title: string;
+  status: PilotGateStatus;
+  badgeLabel: string;
+  explanation: string;
+};
+
+type PilotReadinessViewModel = {
+  pilotReady: boolean;
+  estadoTitulo: string;
+  estadoDetalle: string;
+  checklist: PilotChecklistRow[];
+};
+
+const PILOT_SCOPE_LINES = [
+  "Cargar entre 5 y 20 leads reales.",
+  "Operar manualmente el pipeline.",
+  "Usar IA solo como sugerencia.",
+  "Validar campos críticos del CRM.",
+  "Revisar reportes semanales.",
+  "Medir oportunidades sin seguimiento.",
+  "No automatizar mensajes ni decisiones comerciales todavía.",
+] as const;
+
+const PILOT_RISK_LINES = [
+  "Usar datos incompletos como si fueran definitivos.",
+  "Confiar en sugerencias IA sin revisión humana.",
+  "No cargar próximos pasos de cada lead.",
+  "No medir motivos de pérdida.",
+  "Activar automatizaciones antes de validar el proceso.",
+] as const;
+
+const PILOT_OPERATIONAL_RECOMMENDATION =
+  "Recomendación: iniciar con un piloto manual y controlado. El CRM puede usarse para ordenar leads, probar etapas, registrar oportunidades y revisar sugerencias IA, pero la activación operativa completa debe quedar bloqueada hasta validar datos reales, reportes y reglas de negocio.";
+
+function etapasTienenResponsable(etapasUnknown: unknown): boolean {
+  if (!Array.isArray(etapasUnknown)) return false;
+  for (const raw of etapasUnknown) {
+    const e = asRecord(raw);
+    if (trimStrTechnical(e.responsable).length > 0) return true;
+  }
+  return false;
+}
+
+function reglasPipelineTienenContenido(pp: SetupRecord): boolean {
+  const reglas = asRecord(pp.reglas);
+  if (Object.keys(reglas).length === 0) return false;
+  for (const k of Object.keys(reglas)) {
+    const v = reglas[k];
+    if (typeof v === "string" && trimStrTechnical(v).length > 0) return true;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      if (Object.keys(asRecord(v)).length > 0) return true;
+    }
+    if (Array.isArray(v) && v.length > 0) return true;
+  }
+  return false;
+}
+
+/** Fase 6A: estado de piloto derivado sólo del JSON técnico (sin activación real). */
+function buildPilotReadinessViewModel(
+  technicalJson: Record<string, unknown> | null | undefined
+): PilotReadinessViewModel {
+  const root = technicalJson ?? {};
+  const empresa = asRecord(root.empresa);
+  const cuestionario = asRecord(root.cuestionario);
+  const procesoPipeline = asRecord(root.procesoPipeline);
+  const motoresIA = asRecord(root.motoresIA);
+
+  const etapas = Array.isArray(procesoPipeline.etapas) ? procesoPipeline.etapas : [];
+  const columnas = Array.isArray(procesoPipeline.columnas)
+    ? procesoPipeline.columnas
+    : [];
+
+  const empresaOk = Object.keys(empresa).length > 0;
+  const cuestionarioOk = Object.keys(cuestionario).length > 0;
+  const pipelineStructuralOk = etapas.length > 0 || columnas.length > 0;
+  const motoresOk = Object.keys(motoresIA).length > 0;
+
+  const reportesVm = getTechnicalBlockState(root.reportes, "reportes");
+  const diagnosticoVm = getTechnicalBlockState(root.diagnostico, "diagnostico");
+  const documentosVm = getTechnicalBlockState(root.documentos, "documentos");
+
+  const reportesOk =
+    reportesVm.status === "configured" || reportesVm.status === "suggested";
+  const diagnosticoOk =
+    diagnosticoVm.status === "configured" || diagnosticoVm.status === "suggested";
+  const documentosOk =
+    documentosVm.status === "configured" || documentosVm.status === "suggested";
+
+  const nombreComercialOk =
+    strFieldTechnical(empresa.nombreComercial) !== "No definido";
+  const nombreLegalOk = strFieldTechnical(empresa.nombreLegal) !== "No definido";
+  const empresaIdentificada = nombreComercialOk || nombreLegalOk;
+
+  const pilotReady =
+    empresaOk &&
+    cuestionarioOk &&
+    pipelineStructuralOk &&
+    motoresOk &&
+    reportesOk &&
+    diagnosticoOk &&
+    documentosOk;
+
+  const estadoTitulo = pilotReady
+    ? "Listo para piloto controlado"
+    : "Aún requiere ajustes antes del piloto";
+
+  const estadoDetalle =
+    "Evaluación orientativa desde la consolidación técnica local. No habilita Activar CRM ni activación real.";
+
+  let clienteStatus: PilotGateStatus;
+  let clienteExplanation: string;
+  if (empresaOk && cuestionarioOk) {
+    clienteStatus = "listo";
+    clienteExplanation =
+      "Empresa y cuestionario tienen datos cargados en el JSON técnico.";
+  } else if (!empresaOk && !cuestionarioOk) {
+    clienteStatus = "pendiente";
+    clienteExplanation =
+      "Faltan datos en empresa y cuestionario para orientar un piloto con contexto comercial.";
+  } else {
+    clienteStatus = "revisar";
+    clienteExplanation =
+      empresaOk && !cuestionarioOk
+        ? "Empresa con datos; completá el cuestionario para cerrar el perfil del cliente piloto."
+        : "Cuestionario con datos; completá empresa para identificación consistente del cliente.";
+  }
+
+  let pipelinePruebaStatus: PilotGateStatus;
+  let pipelinePruebaExplanation: string;
+  if (pipelineStructuralOk) {
+    pipelinePruebaStatus = "listo";
+    pipelinePruebaExplanation = `Hay ${etapas.length} etapa(s) y ${columnas.length} columna(s) definidas para prueba operativa manual.`;
+  } else if (Object.keys(procesoPipeline).length > 0) {
+    pipelinePruebaStatus = "revisar";
+    pipelinePruebaExplanation =
+      "Hay configuración de proceso/pipeline pero sin etapas ni columnas reconocibles en la vista técnica.";
+  } else {
+    pipelinePruebaStatus = "pendiente";
+    pipelinePruebaExplanation =
+      "Sin proceso/pipeline cargado: definí etapas o columnas antes de un piloto.";
+  }
+
+  let leadsManualStatus: PilotGateStatus;
+  let leadsManualExplanation: string;
+  if (empresaIdentificada && pipelineStructuralOk) {
+    leadsManualStatus = "listo";
+    leadsManualExplanation =
+      "Identidad comercial y pipeline presentes: podés registrar leads manualmente en un piloto acotado.";
+  } else if (!empresaIdentificada && !pipelineStructuralOk) {
+    leadsManualStatus = "pendiente";
+    leadsManualExplanation =
+      "Sin empresa identificada ni pipeline con etapas/columnas para anclar cargas manuales.";
+  } else {
+    leadsManualStatus = "revisar";
+    leadsManualExplanation =
+      "Convén revisar identificación de empresa y/o etapas Kanban antes de cargar leads de prueba.";
+  }
+
+  let responsableStatus: PilotGateStatus;
+  let responsableExplanation: string;
+  if (!pipelineStructuralOk) {
+    responsableStatus = "pendiente";
+    responsableExplanation =
+      "Sin etapas visibles: no se puede evaluar responsable por etapa en esta vista.";
+  } else if (etapasTienenResponsable(etapas)) {
+    responsableStatus = "listo";
+    responsableExplanation =
+      "Al menos una etapa incluye texto de responsable en proceso/pipeline.";
+  } else {
+    responsableStatus = "revisar";
+    responsableExplanation =
+      "Las etapas existen pero conviene definir responsables explícitos por etapa para el piloto.";
+  }
+
+  let criteriosAvanceStatus: PilotGateStatus;
+  let criteriosAvanceExplanation: string;
+  if (!pipelineStructuralOk) {
+    criteriosAvanceStatus = "pendiente";
+    criteriosAvanceExplanation =
+      "Sin pipeline con etapas/columnas no hay criterios de avance evaluables aquí.";
+  } else if (reglasPipelineTienenContenido(procesoPipeline)) {
+    criteriosAvanceStatus = "listo";
+    criteriosAvanceExplanation =
+      "Hay bloque de reglas/criterios en proceso/pipeline para revisión del piloto.";
+  } else {
+    criteriosAvanceStatus = "revisar";
+    criteriosAvanceExplanation =
+      "Convén documentar validaciones y criterios de avance en reglas del pipeline antes de escalar volumen.";
+  }
+
+  let iaSugerenciaStatus: PilotGateStatus;
+  let iaSugerenciaExplanation: string;
+  if (motoresOk) {
+    iaSugerenciaStatus = "listo";
+    iaSugerenciaExplanation =
+      "Motores IA presentes en configuración: en piloto deben usarse sólo como sugerencia con validación humana.";
+  } else {
+    iaSugerenciaStatus = "pendiente";
+    iaSugerenciaExplanation =
+      "Sin motores IA en consolidación técnica: definí motores o operá sin IA durante el piloto inicial.";
+  }
+
+  let reportesMinimosStatus: PilotGateStatus;
+  let reportesMinimosExplanation: string;
+  if (reportesVm.status === "configured") {
+    reportesMinimosStatus = "listo";
+    reportesMinimosExplanation = reportesVm.explanation;
+  } else if (reportesVm.status === "suggested") {
+    reportesMinimosStatus = "revisar";
+    reportesMinimosExplanation = reportesVm.explanation;
+  } else {
+    reportesMinimosStatus = "pendiente";
+    reportesMinimosExplanation = reportesVm.explanation;
+  }
+
+  let docsDiagHumanoStatus: PilotGateStatus;
+  let docsDiagHumanoExplanation: string;
+  if (
+    documentosVm.status === "suggested" ||
+    diagnosticoVm.status === "suggested"
+  ) {
+    docsDiagHumanoStatus = "revisar";
+    docsDiagHumanoExplanation =
+      "Hay propuestas locales para documentos y/o diagnóstico: requiere validación humana antes de decisiones definitivas.";
+  } else if (
+    documentosVm.status === "configured" &&
+    diagnosticoVm.status === "configured"
+  ) {
+    docsDiagHumanoStatus = "listo";
+    docsDiagHumanoExplanation =
+      "Documentos y diagnóstico figuran como configurados en la vista técnica; mantené revisión humana en piloto.";
+  } else {
+    docsDiagHumanoStatus = "pendiente";
+    docsDiagHumanoExplanation =
+      "Falta consolidar documentos y/o diagnóstico en la configuración técnica.";
+  }
+
+  const checklist: PilotChecklistRow[] = [
+    {
+      key: "cliente",
+      title: "Cliente configurado",
+      status: clienteStatus,
+      badgeLabel: gateLabel(clienteStatus),
+      explanation: clienteExplanation,
+    },
+    {
+      key: "pipeline-prueba",
+      title: "Pipeline listo para prueba",
+      status: pipelinePruebaStatus,
+      badgeLabel: gateLabel(pipelinePruebaStatus),
+      explanation: pipelinePruebaExplanation,
+    },
+    {
+      key: "leads-manual",
+      title: "Leads pueden cargarse manualmente",
+      status: leadsManualStatus,
+      badgeLabel: gateLabel(leadsManualStatus),
+      explanation: leadsManualExplanation,
+    },
+    {
+      key: "responsable",
+      title: "Responsable comercial definido",
+      status: responsableStatus,
+      badgeLabel: gateLabel(responsableStatus),
+      explanation: responsableExplanation,
+    },
+    {
+      key: "criterios-avance",
+      title: "Criterios de avance revisados",
+      status: criteriosAvanceStatus,
+      badgeLabel: gateLabel(criteriosAvanceStatus),
+      explanation: criteriosAvanceExplanation,
+    },
+    {
+      key: "ia-sugerencia",
+      title: "IA en modo sugerencia",
+      status: iaSugerenciaStatus,
+      badgeLabel: gateLabel(iaSugerenciaStatus),
+      explanation: iaSugerenciaExplanation,
+    },
+    {
+      key: "reportes-minimos",
+      title: "Reportes mínimos definidos",
+      status: reportesMinimosStatus,
+      badgeLabel: gateLabel(reportesMinimosStatus),
+      explanation: reportesMinimosExplanation,
+    },
+    {
+      key: "docs-diag-humano",
+      title: "Documentos/diagnóstico pendientes de validación humana",
+      status: docsDiagHumanoStatus,
+      badgeLabel: gateLabel(docsDiagHumanoStatus),
+      explanation: docsDiagHumanoExplanation,
+    },
+    {
+      key: "activacion-bloqueada",
+      title: "Activación real bloqueada",
+      status: "listo",
+      badgeLabel: gateLabel("listo"),
+      explanation:
+        "El prototipo mantiene la activación CRM real deshabilitada; esta vista no la habilita.",
+    },
+  ];
+
+  return {
+    pilotReady,
+    estadoTitulo,
+    estadoDetalle,
+    checklist,
+  };
+}
+
 type ExecutiveModuloStatus = "configured" | "suggested" | "empty";
 
 type ExecutivePackageViewModel = {
@@ -2468,6 +2784,7 @@ function CollapsibleAuditSection({
 }: CollapsibleAuditSectionProps) {
   return (
     <div
+      id={id}
       className={[
         "mb-4 overflow-hidden rounded-xl border bg-white",
         isOpen ? "border-emerald-200" : "border-slate-200",
@@ -2782,6 +3099,7 @@ export default function AuditoriaPage() {
 
   const technicalSummaryVm = buildTechnicalSummaryViewModel(technicalJson);
   const activationChecklistVm = buildActivationChecklistViewModel(technicalJson);
+  const pilotReadinessVm = buildPilotReadinessViewModel(technicalJson);
   const executivePackageVm = buildExecutivePackageViewModel(technicalJson);
   const executiveMarkdown = buildExecutivePackageMarkdown(executivePackageVm);
   const executiveMarkdownOk =
@@ -5283,6 +5601,132 @@ export default function AuditoriaPage() {
                   {executivePackageVm.dictamen}
                 </p>
               </div>
+            </div>
+          </CollapsibleAuditSection>
+
+          <CollapsibleAuditSection
+            id="modo-piloto-primer-cliente"
+            letter="9"
+            title="Modo piloto para primer cliente"
+            description="Orientación para una prueba controlada con el primer cliente real. No activa CRM real ni habilita el botón Activar CRM."
+            statusLabel={pilotReadinessVm.estadoTitulo}
+            isOpen={openAuditSection === "modo-piloto-primer-cliente"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <div
+              className={[
+                "mb-4 rounded-xl border px-4 py-3 text-xs leading-relaxed",
+                pilotReadinessVm.pilotReady
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : "border-amber-200 bg-amber-50 text-amber-900",
+              ].join(" ")}
+            >
+              <p className="font-semibold">{pilotReadinessVm.estadoTitulo}</p>
+              <p className="mt-1 opacity-90">{pilotReadinessVm.estadoDetalle}</p>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Alcance recomendado del piloto
+              </p>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                {PILOT_SCOPE_LINES.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Checklist del piloto
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {pilotReadinessVm.checklist.map((row) => (
+                  <div
+                    key={row.key}
+                    className="rounded-xl border border-slate-200 bg-white p-4"
+                  >
+                    <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-800">{row.title}</p>
+                      <span
+                        className={[
+                          "inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold",
+                          row.status === "listo"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : row.status === "revisar"
+                              ? "border-amber-200 bg-amber-50 text-amber-800"
+                              : "border-rose-200 bg-rose-50 text-rose-800",
+                        ].join(" ")}
+                      >
+                        {row.badgeLabel}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-slate-600">
+                      {row.explanation}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Riesgos del piloto
+              </p>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                {PILOT_RISK_LINES.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-100">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Recomendación operativa
+              </p>
+              <p className="text-xs leading-relaxed">{PILOT_OPERATIONAL_RECOMMENDATION}</p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Acciones sugeridas
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="/admin/constructor/empresa"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Empresa
+                </Link>
+                <Link
+                  href="/admin/constructor/proceso-pipeline"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Pipeline
+                </Link>
+                <Link
+                  href="/admin/constructor/motores-ia"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Motores IA
+                </Link>
+                <Link
+                  href="/admin/constructor/reportes"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Reportes
+                </Link>
+                <Link
+                  href="#vista-ejecutiva-paquete"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Exportar paquete ejecutivo
+                </Link>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                “Exportar paquete ejecutivo” lleva al bloque Vista ejecutiva para copiar o
+                descargar el resumen en Markdown (sin cambiar exportaciones existentes).
+              </p>
             </div>
           </CollapsibleAuditSection>
 
