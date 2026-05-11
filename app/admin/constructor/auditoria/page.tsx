@@ -581,6 +581,225 @@ function asRecord(value: unknown): SetupRecord {
     : {};
 }
 
+function trimStrTechnical(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : "";
+}
+
+function pipelineSourceSummaryForSuggestions(pp: SetupRecord): string {
+  const etapas = Array.isArray(pp.etapas) ? pp.etapas : [];
+  const columnas = Array.isArray(pp.columnas) ? pp.columnas : [];
+  const etapaNombres = etapas
+    .map((e) => trimStrTechnical(asRecord(e).nombre))
+    .filter((s) => s.length > 0);
+  const columnaNombres = columnas
+    .map((c) => trimStrTechnical(asRecord(c).nombre))
+    .filter((s) => s.length > 0);
+  const parts: string[] = [];
+  if (etapaNombres.length > 0) {
+    parts.push(
+      `procesoPipeline.etapas (${etapaNombres.length}): ${etapaNombres.slice(0, 8).join(", ")}`
+    );
+  }
+  if (columnaNombres.length > 0) {
+    parts.push(
+      `procesoPipeline.columnas (${columnaNombres.length}): ${columnaNombres.slice(0, 8).join(", ")}`
+    );
+  }
+  if (parts.length === 0) {
+    return "procesoPipeline (sin etapas/columnas con nombre en esta vista)";
+  }
+  return parts.join(" · ");
+}
+
+function pipelineGanadoPerdidoSnippet(pp: SetupRecord): string {
+  const columnas = Array.isArray(pp.columnas) ? pp.columnas : [];
+  const ganPerd = columnas
+    .filter((c) => {
+      const r = asRecord(c);
+      const t = typeof r.tipo === "string" ? r.tipo : "";
+      return t === "ganada" || t === "perdida";
+    })
+    .map((c) => trimStrTechnical(asRecord(c).nombre))
+    .filter((s) => s.length > 0);
+  if (ganPerd.length > 0) {
+    return `procesoPipeline.columnas (${ganPerd.join(" · ")})`;
+  }
+  return "procesoPipeline.columnas (ganado/perdido cuando existan en el pipeline)";
+}
+
+function motoresSourceSummaryForSuggestions(mi: SetupRecord): string {
+  const motores = Array.isArray(mi.motores) ? mi.motores : [];
+  const nombres = motores
+    .map((m) => trimStrTechnical(asRecord(m).nombre))
+    .filter((s) => s.length > 0);
+  if (nombres.length === 0) {
+    return "motoresIA.motores (sin nombres en esta vista)";
+  }
+  return `motoresIA.motores (${motores.length}): ${nombres.slice(0, 10).join(", ")}`;
+}
+
+/** Fase 5E: propuesta local determinística cuando no hay reportes guardados en setup. */
+function buildSuggestedReportsFromTechnicalJson(input: {
+  empresa: SetupRecord;
+  cuestionario: SetupRecord;
+  procesoPipeline: SetupRecord;
+  motoresIA: SetupRecord;
+}): Record<string, unknown> {
+  const { empresa, cuestionario, procesoPipeline, motoresIA } = input;
+
+  const queVendeEmpresa = trimStrTechnical(empresa.queVende);
+  const queVendeDetalle = trimStrTechnical(cuestionario.queVendeDetalle);
+  const queVendeLine =
+    queVendeDetalle.length > 0
+      ? queVendeDetalle
+      : queVendeEmpresa.length > 0
+        ? queVendeEmpresa
+        : "oferta descrita en empresa/cuestionario";
+
+  const procesoActual = trimStrTechnical(cuestionario.procesoActual);
+  const queBloquea = trimStrTechnical(cuestionario.queBloquea);
+  const redes = trimStrTechnical(empresa.redes);
+  const sitioWeb = trimStrTechnical(empresa.sitioWeb);
+
+  const canalTokens = [procesoActual, redes, sitioWeb].filter((s) => s.length > 0);
+  const canalFuente =
+    canalTokens.length > 0
+      ? `cuestionario.procesoActual / empresa.redes / empresa.sitioWeb (${canalTokens.join(" · ")})`
+      : "cuestionario.procesoActual · empresa.redes · empresa.sitioWeb (sin texto en esta vista)";
+
+  const pipelineRes = pipelineSourceSummaryForSuggestions(procesoPipeline);
+  const motoresRes = motoresSourceSummaryForSuggestions(motoresIA);
+  const ganadoPerdidoFuente = pipelineGanadoPerdidoSnippet(procesoPipeline);
+
+  const nombreEmpresa =
+    trimStrTechnical(empresa.nombreComercial) ||
+    trimStrTechnical(empresa.nombreLegal) ||
+    "empresa del Constructor";
+
+  const resumenModulos = [nombreEmpresa, procesoActual, pipelineRes.split(" · ")[0] ?? ""]
+    .filter((s) => s.length > 0)
+    .join(" · ");
+
+  const reportesSugeridos: Record<string, unknown>[] = [
+    {
+      id: "r1",
+      nombre: "Reporte de oportunidades por etapa",
+      objetivo: "Ver cuántos leads hay en cada etapa del pipeline.",
+      fuente: pipelineRes,
+      metricas: [
+        "Cantidad de oportunidades",
+        "Etapa actual",
+        "Días en etapa",
+      ],
+      frecuenciaSugerida: "Semanal",
+      audiencia: "Comercial",
+      estado: "sugerido",
+    },
+    {
+      id: "r2",
+      nombre: "Reporte de oportunidades sin seguimiento",
+      objetivo: "Detectar consultas o leads que quedaron sin acción reciente.",
+      fuente: `${pipelineRes} · tareas y reglas de seguimiento del proceso`,
+      metricas: [
+        "Días sin contacto",
+        "Responsable",
+        "Canal de origen",
+      ],
+      frecuenciaSugerida: "Diaria",
+      audiencia: "Comercial",
+      estado: "sugerido",
+    },
+    {
+      id: "r3",
+      nombre: "Reporte de productos o servicios más consultados",
+      objetivo:
+        "Entender qué líneas o accesorios concentran la demanda comercial.",
+      fuente: `empresa.queVende / cuestionario.queVendeDetalle (${queVendeLine})`,
+      metricas: [
+        "Producto o servicio consultado",
+        "Cantidad de consultas",
+        "Tasa de cierre futura",
+      ],
+      frecuenciaSugerida: "Semanal",
+      audiencia: "Comercial",
+      estado: "sugerido",
+    },
+    {
+      id: "r4",
+      nombre: "Reporte de canales de origen",
+      objetivo: "Medir de dónde llegan las oportunidades y su calidad relativa.",
+      fuente: canalFuente,
+      metricas: ["Canal", "Cantidad de leads", "Conversión futura"],
+      frecuenciaSugerida: "Semanal",
+      audiencia: "Operaciones",
+      estado: "sugerido",
+    },
+    {
+      id: "r5",
+      nombre: "Reporte de ventas ganadas y perdidas",
+      objetivo:
+        "Entender cierres, motivos de pérdida y aprendizajes comerciales.",
+      fuente:
+        queBloquea.length > 0
+          ? `${ganadoPerdidoFuente} · cuestionario.queBloquea (${queBloquea.slice(0, 160)})`
+          : `${ganadoPerdidoFuente} · cuestionario.queBloquea`,
+      metricas: [
+        "Oportunidades ganadas",
+        "Oportunidades perdidas",
+        "Motivo de pérdida",
+        "Etapa de pérdida",
+      ],
+      frecuenciaSugerida: "Mensual",
+      audiencia: "Dirección",
+      estado: "sugerido",
+    },
+    {
+      id: "r6",
+      nombre: "Reporte de performance de IA",
+      objetivo:
+        "Revisar qué motores IA están activos, en qué etapa intervienen y su riesgo.",
+      fuente: motoresRes,
+      metricas: [
+        "Motor",
+        "Etapa",
+        "Activo",
+        "Requiere validación humana",
+        "Riesgo",
+      ],
+      frecuenciaSugerida: "Semanal",
+      audiencia: "Operaciones",
+      estado: "sugerido",
+    },
+    {
+      id: "r7",
+      nombre: "Reporte ejecutivo semanal",
+      objetivo:
+        "Resumir la salud comercial para dirección a partir de los módulos ya cargados.",
+      fuente:
+        resumenModulos.length > 0
+          ? `Consolidado desde módulos del Constructor (${resumenModulos})`
+          : "Consolidado desde empresa, cuestionario, procesoPipeline y motoresIA",
+      metricas: [
+        "Leads nuevos",
+        "Oportunidades abiertas",
+        "Seguimiento pendiente",
+        "Ventas cerradas",
+        "Riesgos",
+      ],
+      frecuenciaSugerida: "Semanal",
+      audiencia: "Dirección",
+      estado: "sugerido",
+    },
+  ];
+
+  return {
+    origen: "sugerido_local",
+    notaValidacion:
+      "Reportes sugeridos localmente · Pendientes de validación humana",
+    reportesSugeridos,
+  };
+}
+
 /** JSON técnico de solo lectura (Fase 5A): armado sólo desde setup + readiness local; sin merges de contratos riesgosos. */
 function buildConstructorTechnicalJson(
   setupData: ConstructorSetup | undefined | null,
@@ -615,6 +834,38 @@ function buildConstructorTechnicalJson(
     detail: typeof s.detail === "string" ? s.detail : "",
   }));
 
+  const empresaOut = asRecord(setupRecord?.empresa);
+  const cuestionarioOut = asRecord(setupRecord?.cuestionario);
+  const documentosOut = asRecord(setupRecord?.documentos);
+  const diagnosticoOut = asRecord(setupRecord?.diagnostico);
+  const procesoPipelineOut = asRecord(
+    setupRecord?.procesoPipeline ?? setupRecord?.proceso_pipeline
+  );
+  const motoresIAOut = asRecord(setupRecord?.motoresIA ?? setupRecord?.motores_ia);
+  const reportesBase = asRecord(setupRecord?.reportes);
+
+  const reportesOut =
+    Object.keys(reportesBase).length > 0
+      ? reportesBase
+      : buildSuggestedReportsFromTechnicalJson({
+          empresa: empresaOut,
+          cuestionario: cuestionarioOut,
+          procesoPipeline: procesoPipelineOut,
+          motoresIA: motoresIAOut,
+        });
+
+  const motoresSetupOk = Object.keys(motoresIAOut).length > 0;
+  const reportesRecOut = asRecord(reportesOut);
+  const reportesEsSugerido =
+    reportesRecOut.origen === "sugerido_local" &&
+    Array.isArray(reportesRecOut.reportesSugeridos) &&
+    reportesRecOut.reportesSugeridos.length > 0;
+
+  let pendientesOut = pendientes;
+  if (reportesEsSugerido && motoresSetupOk) {
+    pendientesOut = pendientes.filter((line) => !line.startsWith("IA y reportes:"));
+  }
+
   return {
     metadata: {
       version: "prototype-v1",
@@ -622,15 +873,13 @@ function buildConstructorTechnicalJson(
       generatedFrom: "crm_setup_config",
       prototypeMode: true,
     },
-    empresa: asRecord(setupRecord?.empresa),
-    cuestionario: asRecord(setupRecord?.cuestionario),
-    documentos: asRecord(setupRecord?.documentos),
-    diagnostico: asRecord(setupRecord?.diagnostico),
-    procesoPipeline: asRecord(
-      setupRecord?.procesoPipeline ?? setupRecord?.proceso_pipeline
-    ),
-    motoresIA: asRecord(setupRecord?.motoresIA ?? setupRecord?.motores_ia),
-    reportes: asRecord(setupRecord?.reportes),
+    empresa: empresaOut,
+    cuestionario: cuestionarioOut,
+    documentos: documentosOut,
+    diagnostico: diagnosticoOut,
+    procesoPipeline: procesoPipelineOut,
+    motoresIA: motoresIAOut,
+    reportes: reportesOut,
     auditoria: {
       readiness: {
         completionPercent: readiness?.completionPercent ?? 0,
@@ -647,7 +896,7 @@ function buildConstructorTechnicalJson(
         message: "Activación real bloqueada en esta fase.",
       },
     },
-    pendientes,
+    pendientes: pendientesOut,
   };
 }
 
@@ -662,6 +911,21 @@ function structuralBlockStatus(recordUnknown: unknown): "Configurado" | "Pendien
   return Object.keys(asRecord(recordUnknown)).length > 0
     ? "Configurado"
     : "Pendiente";
+}
+
+function reportesBlockLabel(
+  reportesUnknown: unknown
+): "Configurado" | "Sugerido local" | "Pendiente" {
+  const r = asRecord(reportesUnknown);
+  if (Object.keys(r).length === 0) return "Pendiente";
+  if (
+    r.origen === "sugerido_local" &&
+    Array.isArray(r.reportesSugeridos) &&
+    r.reportesSugeridos.length > 0
+  ) {
+    return "Sugerido local";
+  }
+  return "Configurado";
 }
 
 function buildTechnicalSummaryViewModel(
@@ -729,7 +993,7 @@ function buildTechnicalSummaryViewModel(
     },
     pipeline: structuralBlockStatus(procesoPipelineUnknown),
     motoresIA: structuralBlockStatus(motoresUnknown),
-    reportes: structuralBlockStatus(reportesUnknown),
+    reportes: reportesBlockLabel(reportesUnknown),
     auditoria: {
       completionPercent,
       overallStatus: overallStatusStr,
@@ -885,7 +1149,30 @@ function buildActivationChecklistViewModel(
   const diagnosticoOk = Object.keys(diagnostico).length > 0;
   const pipelineOk = Object.keys(procesoPipeline).length > 0;
   const motoresOk = Object.keys(motoresIA).length > 0;
-  const reportesOk = Object.keys(reportes).length > 0;
+
+  const reportesSugeridosArr = Array.isArray(reportes.reportesSugeridos)
+    ? reportes.reportesSugeridos
+    : [];
+  const reportesEsSugeridoLocal =
+    reportes.origen === "sugerido_local" && reportesSugeridosArr.length > 0;
+  const reportesKeys = Object.keys(reportes);
+  const reportesConfiguradoReal =
+    reportesKeys.length > 0 && !reportesEsSugeridoLocal;
+
+  let reportesGateStatus: ActivationGateStatus;
+  let reportesGateExplanation: string;
+  if (reportesConfiguradoReal) {
+    reportesGateStatus = "listo";
+    reportesGateExplanation =
+      "Hay datos de reportes cargados en el Constructor (no es solo sugerido local).";
+  } else if (reportesEsSugeridoLocal) {
+    reportesGateStatus = "revisar";
+    reportesGateExplanation = `Propuesta local de ${reportesSugeridosArr.length} reportes sugeridos en el JSON técnico; validá y cargá el paso Reportes del Constructor.`;
+  } else {
+    reportesGateStatus = "pendiente";
+    reportesGateExplanation =
+      "Reportes vacíos según consolidación técnica (sin sugeridos locales).";
+  }
 
   const pctRaw = readinessRecord.completionPercent;
   const auditoriaPct =
@@ -961,11 +1248,9 @@ function buildActivationChecklistViewModel(
     {
       key: "reportes",
       title: "Reportes configurados",
-      status: reportesOk ? "listo" : "pendiente",
-      badgeLabel: gateLabel(reportesOk ? "listo" : "pendiente"),
-      explanation: reportesOk
-        ? "Hay datos en reportes en el Constructor."
-        : "Reportes vacíos según consolidación técnica.",
+      status: reportesGateStatus,
+      badgeLabel: gateLabel(reportesGateStatus),
+      explanation: reportesGateExplanation,
     },
     {
       key: "auditoria",
@@ -1243,6 +1528,19 @@ export default function AuditoriaPage() {
     setupLoading ? null : setupData,
     auditoriaReadinessPanel
   );
+  const technicalReportesForBanner = asRecord(technicalJson.reportes);
+  const technicalJsonReportesSugeridosBanner =
+    technicalReportesForBanner.origen === "sugerido_local" &&
+    Array.isArray(technicalReportesForBanner.reportesSugeridos) &&
+    technicalReportesForBanner.reportesSugeridos.length > 0;
+  const technicalJsonReportesSugeridosNotaRaw = trimStrTechnical(
+    technicalReportesForBanner.notaValidacion
+  );
+  const technicalJsonReportesSugeridosNota =
+    technicalJsonReportesSugeridosNotaRaw.length > 0
+      ? technicalJsonReportesSugeridosNotaRaw
+      : "Reportes sugeridos localmente · Pendientes de validación humana";
+
   const technicalJsonString = JSON.stringify(technicalJson, null, 2);
   const technicalJsonStringOk =
     typeof technicalJsonString === "string" && technicalJsonString.trim().length > 0;
@@ -3201,6 +3499,14 @@ export default function AuditoriaPage() {
                 </span>
               ) : null}
             </div>
+            {technicalJsonReportesSugeridosBanner ? (
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <p className="text-[11px] font-semibold leading-relaxed text-amber-900">
+                  {technicalJsonReportesSugeridosNota}
+                </p>
+              </div>
+            ) : null}
             <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
               <pre className="max-h-[min(28rem,70vh)] overflow-x-auto overflow-y-auto p-4 text-left">
                 <code className="font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200">
@@ -3349,14 +3655,18 @@ export default function AuditoriaPage() {
                     className={
                       technicalSummaryVm.reportes === "Configurado"
                         ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
-                        : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                        : technicalSummaryVm.reportes === "Sugerido local"
+                          ? "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800"
+                          : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
                     }
                   >
                     {technicalSummaryVm.reportes}
                   </span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-slate-500">
-                  Origen técnico: bloque reportes del JSON consolidado.
+                  {technicalSummaryVm.reportes === "Sugerido local"
+                    ? "Origen técnico: bloque reportes con origen sugerido_local en el JSON consolidado (validación humana pendiente)."
+                    : "Origen técnico: bloque reportes del JSON consolidado."}
                 </p>
               </div>
               </div>
