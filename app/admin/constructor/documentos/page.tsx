@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -16,6 +16,7 @@ import {
   Upload,
   Plus,
   Trash2,
+  ChevronDown,
   ChevronLeft,
   Info,
   AlertCircle,
@@ -474,13 +475,74 @@ const SELECT_CLASS =
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5N: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleDocumentosSectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleDocumentosSection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleDocumentosSectionProps) {
   return (
-    <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-        {letter}
-      </div>
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+          {letter}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -497,6 +559,8 @@ export default function DocumentosPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [openDocumentosSection, setOpenDocumentosSection] =
+    useState<string>("materiales");
 
   useEffect(() => {
     let cancelled = false;
@@ -641,6 +705,10 @@ export default function DocumentosPage() {
     }
   }
 
+  function handleDocumentosSectionToggle(id: string) {
+    setOpenDocumentosSection((prev) => (prev === id ? "" : id));
+  }
+
   const TIPO_LABEL: Record<TipoDocumento, string> = Object.fromEntries(
     TIPO_DOCS.map((t) => [t.id, t.label])
   ) as Record<TipoDocumento, string>;
@@ -725,9 +793,15 @@ export default function DocumentosPage() {
             })}
           />
 
+          <div className="space-y-4">
           {/* ── A: Tipos de documentos ──────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="A" title="¿Qué tipos de documentos tenés?" />
+          <CollapsibleDocumentosSection
+            id="materiales"
+            letter="A"
+            title="¿Qué tipos de documentos tenés?"
+            isOpen={openDocumentosSection === "materiales"}
+            onToggle={handleDocumentosSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Seleccioná todos los tipos que aplican a tu negocio. Podés marcar más de uno.
             </p>
@@ -787,11 +861,16 @@ export default function DocumentosPage() {
                 );
               })}
             </div>
-          </div>
+          </CollapsibleDocumentosSection>
 
           {/* ── B: Dropzone simulado ────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="B" title="Zona de carga (próximamente)" />
+          <CollapsibleDocumentosSection
+            id="carga"
+            letter="B"
+            title="Zona de carga (próximamente)"
+            isOpen={openDocumentosSection === "carga"}
+            onToggle={handleDocumentosSectionToggle}
+          >
             <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200">
                 <Upload className="h-5 w-5 text-slate-500" />
@@ -810,11 +889,16 @@ export default function DocumentosPage() {
                 Disponible en Bloque 2A — Supabase Storage
               </div>
             </div>
-          </div>
+          </CollapsibleDocumentosSection>
 
           {/* ── C: Registro manual ──────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="C" title="Registrar documento manualmente" />
+          <CollapsibleDocumentosSection
+            id="registro"
+            letter="C"
+            title="Registrar documento manualmente"
+            isOpen={openDocumentosSection === "registro"}
+            onToggle={handleDocumentosSectionToggle}
+          >
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
               <div className="grid gap-4 sm:grid-cols-2">
 
@@ -926,11 +1010,16 @@ export default function DocumentosPage() {
                 )}
               </div>
             </div>
-          </div>
+          </CollapsibleDocumentosSection>
 
           {/* ── D: Lista de documentos registrados ──────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="D" title="Documentos registrados en esta sesión" />
+          <CollapsibleDocumentosSection
+            id="lista"
+            letter="D"
+            title="Documentos registrados en esta sesión"
+            isOpen={openDocumentosSection === "lista"}
+            onToggle={handleDocumentosSectionToggle}
+          >
             <FieldQualityHint hint={readiness.fieldHints.materialesDisponibles} />
             {lista.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center">
@@ -1011,11 +1100,16 @@ export default function DocumentosPage() {
               Esta lista se guarda como referencia del Constructor. La carga real
               de archivos se conectará en un bloque posterior.
             </p>
-          </div>
+          </CollapsibleDocumentosSection>
 
           {/* ── E: Preguntas guía ────────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="E" title="Preguntas guía" />
+          <CollapsibleDocumentosSection
+            id="guia"
+            letter="E"
+            title="Preguntas guía"
+            isOpen={openDocumentosSection === "guia"}
+            onToggle={handleDocumentosSectionToggle}
+          >
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
               <p className="mb-3 text-xs font-semibold text-blue-800">
                 Usá estas preguntas para identificar qué documentos buscar en tu negocio:
@@ -1040,11 +1134,16 @@ export default function DocumentosPage() {
                 ))}
               </ul>
             </div>
-          </div>
+          </CollapsibleDocumentosSection>
 
           {/* ── F: Próximos pasos ────────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="F" title="¿Qué pasa con estos documentos?" />
+          <CollapsibleDocumentosSection
+            id="proximos"
+            letter="F"
+            title="¿Qué pasa con estos documentos?"
+            isOpen={openDocumentosSection === "proximos"}
+            onToggle={handleDocumentosSectionToggle}
+          >
             <div className="grid gap-3 sm:grid-cols-3">
               {[
                 {
@@ -1078,6 +1177,7 @@ export default function DocumentosPage() {
                 </div>
               ))}
             </div>
+          </CollapsibleDocumentosSection>
           </div>
 
           {/* ── Navegación ──────────────────────────────────────────────── */}
