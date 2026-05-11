@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
@@ -662,13 +662,74 @@ const TEXTAREA_CLASS =
 
 const LABEL_CLASS = "block text-sm font-medium text-slate-700";
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5M: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleCuestionarioSectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleCuestionarioSection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleCuestionarioSectionProps) {
   return (
-    <div className="flex items-center gap-2 pb-3">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
-        {letter}
-      </span>
-      <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+          {letter}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -746,6 +807,8 @@ export default function CuestionarioPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [openCuestionarioSection, setOpenCuestionarioSection] =
+    useState<string>("modelo");
   const {
     suggestions: mockAIProcesoSuggestions,
     loading: mockAIProcesoLoading,
@@ -868,6 +931,10 @@ export default function CuestionarioPage() {
     if (!s) return;
     setSegmentosCustom((prev) => [...prev, s]);
     setSegmentoInput("");
+  }
+
+  function handleCuestionarioSectionToggle(id: string) {
+    setOpenCuestionarioSection((prev) => (prev === id ? "" : id));
   }
 
   async function handleSave() {
@@ -1161,8 +1228,13 @@ export default function CuestionarioPage() {
           <div className="space-y-8">
 
             {/* A. Modelo comercial */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="A" title="Modelo comercial" />
+            <CollapsibleCuestionarioSection
+              id="modelo"
+              letter="A"
+              title="Modelo comercial"
+              isOpen={openCuestionarioSection === "modelo"}
+              onToggle={handleCuestionarioSectionToggle}
+            >
               <div className="space-y-5">
 
                 <div>
@@ -1215,11 +1287,16 @@ export default function CuestionarioPage() {
                 </div>
 
               </div>
-            </section>
+            </CollapsibleCuestionarioSection>
 
             {/* B. Clientes y decisores */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="B" title="Clientes y decisores" />
+            <CollapsibleCuestionarioSection
+              id="clientes"
+              letter="B"
+              title="Clientes y decisores"
+              isOpen={openCuestionarioSection === "clientes"}
+              onToggle={handleCuestionarioSectionToggle}
+            >
               <div className="space-y-5">
 
                 <div>
@@ -1310,11 +1387,16 @@ export default function CuestionarioPage() {
                 </div>
 
               </div>
-            </section>
+            </CollapsibleCuestionarioSection>
 
             {/* C. Proceso actual */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="C" title="Proceso actual" />
+            <CollapsibleCuestionarioSection
+              id="proceso"
+              letter="C"
+              title="Proceso actual"
+              isOpen={openCuestionarioSection === "proceso"}
+              onToggle={handleCuestionarioSectionToggle}
+            >
               <div className="space-y-5">
 
                 <div>
@@ -1414,11 +1496,16 @@ export default function CuestionarioPage() {
                 </div>
 
               </div>
-            </section>
+            </CollapsibleCuestionarioSection>
 
             {/* D. Propuesta y cierre */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="D" title="Propuesta y cierre" />
+            <CollapsibleCuestionarioSection
+              id="propuesta"
+              letter="D"
+              title="Propuesta y cierre"
+              isOpen={openCuestionarioSection === "propuesta"}
+              onToggle={handleCuestionarioSectionToggle}
+            >
               <div className="space-y-5">
 
                 <div>
@@ -1479,11 +1566,16 @@ export default function CuestionarioPage() {
                 </div>
 
               </div>
-            </section>
+            </CollapsibleCuestionarioSection>
 
             {/* E. Reportes y control */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="E" title="Reportes y control" />
+            <CollapsibleCuestionarioSection
+              id="reportes"
+              letter="E"
+              title="Reportes y control"
+              isOpen={openCuestionarioSection === "reportes"}
+              onToggle={handleCuestionarioSectionToggle}
+            >
               <div className="space-y-5">
 
                 <div>
@@ -1527,11 +1619,16 @@ export default function CuestionarioPage() {
                 </div>
 
               </div>
-            </section>
+            </CollapsibleCuestionarioSection>
 
             {/* F. Validación humana e IA futura */}
-            <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-5">
-              <SectionHeader letter="F" title="Validación humana e IA futura" />
+            <CollapsibleCuestionarioSection
+              id="ia"
+              letter="F"
+              title="Validación humana e IA futura"
+              isOpen={openCuestionarioSection === "ia"}
+              onToggle={handleCuestionarioSectionToggle}
+            >
               <div className="space-y-5">
 
                 <div>
@@ -1580,7 +1677,7 @@ export default function CuestionarioPage() {
                 </div>
 
               </div>
-            </section>
+            </CollapsibleCuestionarioSection>
 
           </div>
 
