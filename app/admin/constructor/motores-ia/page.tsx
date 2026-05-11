@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronLeft,
   Info,
   Bot,
@@ -375,13 +376,74 @@ function slugFromText(value: string) {
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5Q: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleMotoresIASectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleMotoresIASection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleMotoresIASectionProps) {
   return (
-    <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-        {letter}
-      </div>
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+          {letter}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -634,6 +696,8 @@ export default function MotoresIAPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [openMotoresIASection, setOpenMotoresIASection] =
+    useState<string>("catalogo");
   const [constructorContext, setConstructorContext] = useState<SetupRecord | null>(null);
   const [mockAIMotoresRequested, setMockAIMotoresRequested] = useState(false);
   const [mockAIApplyMessage, setMockAIApplyMessage] = useState<string | null>(null);
@@ -772,6 +836,10 @@ export default function MotoresIAPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleMotoresIASectionToggle(id: string) {
+    setOpenMotoresIASection((prev) => (prev === id ? "" : id));
   }
 
   function setMotor<K extends keyof MotorIA>(
@@ -1418,9 +1486,15 @@ export default function MotoresIAPage() {
             </p>
           </div>
 
+          <div className="space-y-4">
           {/* ── A: Explicación conceptual ────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="A" title="Tipos de motores IA en el Constructor" />
+          <CollapsibleMotoresIASection
+            id="concepto"
+            letter="A"
+            title="Tipos de motores IA en el Constructor"
+            isOpen={openMotoresIASection === "concepto"}
+            onToggle={handleMotoresIASectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               El sistema distingue tres categorías de motores según su momento de uso y propósito.
             </p>
@@ -1482,11 +1556,16 @@ export default function MotoresIAPage() {
                 </p>
               </div>
             </div>
-          </div>
+          </CollapsibleMotoresIASection>
 
           {/* ── B: Diseñador de motores ──────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="B" title="Diseñador de motores IA operativos" />
+          <CollapsibleMotoresIASection
+            id="catalogo"
+            letter="B"
+            title="Diseñador de motores IA operativos"
+            isOpen={openMotoresIASection === "catalogo"}
+            onToggle={handleMotoresIASectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Editá cada motor según las necesidades reales del proceso. Los cambios son locales —
               no se guardan todavía.
@@ -1728,11 +1807,16 @@ export default function MotoresIAPage() {
             </p>
             {renderFieldSuggestions("motores")}
             {renderFieldSuggestions("inputsOutputs")}
-          </div>
+          </CollapsibleMotoresIASection>
 
           {/* ── C: Mapa de motores por etapa ─────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="C" title="Mapa de motores por etapa comercial" />
+          <CollapsibleMotoresIASection
+            id="mapa"
+            letter="C"
+            title="Mapa de motores por etapa comercial"
+            isOpen={openMotoresIASection === "mapa"}
+            onToggle={handleMotoresIASectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Vista derivada del estado local. Muestra en qué momento del proceso comercial actúa
               cada motor, si requiere validación y su nivel de riesgo.
@@ -1793,11 +1877,16 @@ export default function MotoresIAPage() {
                 );
               })}
             </div>
-          </div>
+          </CollapsibleMotoresIASection>
 
           {/* ── D: Reglas de uso y validación humana ─────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="D" title="Reglas de uso y validación humana" />
+          <CollapsibleMotoresIASection
+            id="reglas"
+            letter="D"
+            title="Reglas de uso y validación humana"
+            isOpen={openMotoresIASection === "reglas"}
+            onToggle={handleMotoresIASectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Definí las reglas generales que gobiernan cuándo la IA puede actuar sola y cuándo
               necesita intervención humana antes de ejecutar o entregar output.
@@ -1871,11 +1960,16 @@ export default function MotoresIAPage() {
               </div>
             </div>
             {renderFieldSuggestions("reglas")}
-          </div>
+          </CollapsibleMotoresIASection>
 
           {/* ── E: Preview JSON ──────────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="E" title="Preview del futuro JSON de configuración" />
+          <CollapsibleMotoresIASection
+            id="preview"
+            letter="E"
+            title="Preview del futuro JSON de configuración"
+            isOpen={openMotoresIASection === "preview"}
+            onToggle={handleMotoresIASectionToggle}
+          >
             <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 mb-4">
               <Code2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
               <p className="text-xs leading-relaxed text-blue-700">
@@ -1933,6 +2027,7 @@ export default function MotoresIAPage() {
                 </code>
               </pre>
             </div>
+          </CollapsibleMotoresIASection>
           </div>
 
           {(loading || saveMessage || saveError) && (
