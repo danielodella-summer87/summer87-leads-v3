@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronLeft,
   Info,
   AlertTriangle,
@@ -597,13 +598,74 @@ const INPUT_CLASS =
 
 // ─── Subcomponentes ───────────────────────────────────────────────────────────
 
-function SectionHeader({ letter, title }: { letter: string; title: string }) {
+/** Fase 5O: acordeón local (un panel abierto a la vez; el abierto puede cerrarse). */
+type CollapsibleDiagnosticoSectionProps = {
+  id: string;
+  letter: string;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  statusLabel?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  children: ReactNode;
+};
+
+function CollapsibleDiagnosticoSection({
+  id,
+  letter,
+  title,
+  description,
+  badge,
+  statusLabel,
+  isOpen,
+  onToggle,
+  children,
+}: CollapsibleDiagnosticoSectionProps) {
   return (
-    <div className="mb-4 flex items-center gap-3">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-        {letter}
-      </div>
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
+          {letter}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-snug text-slate-800">{title}</p>
+          {statusLabel ? (
+            <p className="mt-0.5 text-[11px] text-slate-500">{statusLabel}</p>
+          ) : null}
+        </div>
+        {badge ? (
+          <div className="hidden max-w-[40%] shrink-0 sm:flex sm:justify-end">{badge}</div>
+        ) : null}
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <span className="text-[10px] font-medium text-slate-500">
+            {isOpen ? "Contraer" : "Expandir"}
+          </span>
+          <ChevronDown
+            className={[
+              "h-4 w-4 text-slate-500 transition-transform",
+              isOpen ? "rotate-180" : "",
+            ].join(" ")}
+            aria-hidden
+          />
+        </div>
+      </button>
+      {badge ? (
+        <div className="border-t border-slate-100 px-4 py-2 sm:hidden">{badge}</div>
+      ) : null}
+      {isOpen ? (
+        <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+          {description ? (
+            <p className="mb-4 text-xs leading-relaxed text-slate-500">{description}</p>
+          ) : null}
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -649,6 +711,8 @@ export default function DiagnosticoPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [openDiagnosticoSection, setOpenDiagnosticoSection] =
+    useState<string>("contexto");
   const [aiApplyMessage, setAIApplyMessage] = useState<string | null>(null);
   const [sandboxAIWarning, setSandboxAIWarning] = useState<string | null>(null);
   const {
@@ -802,6 +866,10 @@ export default function DiagnosticoPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleDiagnosticoSectionToggle(id: string) {
+    setOpenDiagnosticoSection((prev) => (prev === id ? "" : id));
   }
 
   function setField<K extends keyof DiagnosticoForm>(
@@ -1153,9 +1221,15 @@ export default function DiagnosticoPage() {
             })}
           />
 
+          <div className="space-y-4">
           {/* ── A: Resumen del diagnóstico esperado ─────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="A" title="Resumen del diagnóstico esperado" />
+          <CollapsibleDiagnosticoSection
+            id="contexto"
+            letter="A"
+            title="Resumen del diagnóstico esperado"
+            isOpen={openDiagnosticoSection === "contexto"}
+            onToggle={handleDiagnosticoSectionToggle}
+          >
             <div className="grid gap-6 sm:grid-cols-2">
 
               <div className="sm:col-span-2">
@@ -1225,11 +1299,16 @@ export default function DiagnosticoPage() {
               </div>
 
             </div>
-          </div>
+          </CollapsibleDiagnosticoSection>
 
           {/* ── B: Hallazgos principales ─────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="B" title="Hallazgos principales" />
+          <CollapsibleDiagnosticoSection
+            id="hallazgos"
+            letter="B"
+            title="Hallazgos principales"
+            isOpen={openDiagnosticoSection === "hallazgos"}
+            onToggle={handleDiagnosticoSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Cargá cada hallazgo en orden. Las sugerencias y la asistencia IA aparecen
               debajo del campo correspondiente.
@@ -1398,11 +1477,16 @@ export default function DiagnosticoPage() {
               </div>
 
             </div>
-          </div>
+          </CollapsibleDiagnosticoSection>
 
           {/* ── C: Matriz de diagnóstico ─────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="C" title="Matriz de diagnóstico" />
+          <CollapsibleDiagnosticoSection
+            id="matriz"
+            letter="C"
+            title="Matriz de diagnóstico"
+            isOpen={openDiagnosticoSection === "matriz"}
+            onToggle={handleDiagnosticoSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Evaluá el estado actual de cada dimensión. Esto define dónde el sistema
               necesita más trabajo antes de activarse.
@@ -1475,11 +1559,16 @@ export default function DiagnosticoPage() {
               })}
             </div>
             {renderFieldSuggestions("recomendaciones")}
-          </div>
+          </CollapsibleDiagnosticoSection>
 
           {/* ── D: Recomendaciones preliminares ──────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="D" title="Recomendaciones preliminares" />
+          <CollapsibleDiagnosticoSection
+            id="recomendaciones"
+            letter="D"
+            title="Recomendaciones preliminares"
+            isOpen={openDiagnosticoSection === "recomendaciones"}
+            onToggle={handleDiagnosticoSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Seleccioná las acciones que deben completarse antes de diseñar el proceso
               y activar el CRM.
@@ -1513,11 +1602,16 @@ export default function DiagnosticoPage() {
               className="mt-3 text-[11px]"
               hint={readiness.fieldHints.recomendaciones}
             />
-          </div>
+          </CollapsibleDiagnosticoSection>
 
           {/* ── E: Preguntas abiertas ────────────────────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="E" title="Preguntas abiertas para completar antes de diseñar el proceso" />
+          <CollapsibleDiagnosticoSection
+            id="preguntas"
+            letter="E"
+            title="Preguntas abiertas para completar antes de diseñar el proceso"
+            isOpen={openDiagnosticoSection === "preguntas"}
+            onToggle={handleDiagnosticoSectionToggle}
+          >
             <p className="mb-4 text-xs text-slate-500">
               Editá estas preguntas o usalas tal cual. Serán insumo para el diseño del proceso
               y pipeline en el próximo paso.
@@ -1542,11 +1636,16 @@ export default function DiagnosticoPage() {
               y pipeline.
             </p>
             {renderFieldSuggestions("preguntas")}
-          </div>
+          </CollapsibleDiagnosticoSection>
 
           {/* ── F: Vista previa del futuro output IA ─────────────────────── */}
-          <div className="mb-8">
-            <SectionHeader letter="F" title="Vista previa del futuro output IA" />
+          <CollapsibleDiagnosticoSection
+            id="vista"
+            letter="F"
+            title="Vista previa del futuro output IA"
+            isOpen={openDiagnosticoSection === "vista"}
+            onToggle={handleDiagnosticoSectionToggle}
+          >
             <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 mb-4">
               <Code2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
               <p className="text-xs leading-relaxed text-blue-700">
@@ -1606,6 +1705,7 @@ export default function DiagnosticoPage() {
                 )}</code>
               </pre>
             </div>
+          </CollapsibleDiagnosticoSection>
           </div>
 
           {(loading || saveMessage || saveError) && (
