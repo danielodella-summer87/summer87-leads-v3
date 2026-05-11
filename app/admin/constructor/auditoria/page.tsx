@@ -738,6 +738,254 @@ function buildTechnicalSummaryViewModel(
   };
 }
 
+type ActivationGateStatus = "listo" | "revisar" | "pendiente";
+
+type ActivationChecklistRow = {
+  key: string;
+  title: string;
+  status: ActivationGateStatus;
+  badgeLabel: string;
+  explanation: string;
+};
+
+function normalizeUbicacionToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Coincidencias mínimas con Empresa para advertir país/ciudad cruzados (sin API). */
+const UBIC_CIUDAD_EN_PAIS: readonly string[] = [
+  "cordoba",
+  "córdoba",
+  "buenos aires",
+  "montevideo",
+  "rosario",
+];
+
+const UBIC_PAIS_EN_CIUDAD: readonly string[] = [
+  "argentina",
+  "uruguay",
+  "chile",
+  "brasil",
+  "brazil",
+  "paraguay",
+];
+
+function ubicacionInconsistenciaSospechosa(empresaUnknown: unknown): boolean {
+  const e = asRecord(empresaUnknown);
+  const pRaw = typeof e.pais === "string" ? e.pais : "";
+  const cRaw = typeof e.ciudad === "string" ? e.ciudad : "";
+  const p = normalizeUbicacionToken(pRaw);
+  const c = normalizeUbicacionToken(cRaw);
+  if (!p || !c) return false;
+  const paisPareceCiudad = UBIC_CIUDAD_EN_PAIS.some((term) =>
+    p.includes(normalizeUbicacionToken(term))
+  );
+  const ciudadParecePais = UBIC_PAIS_EN_CIUDAD.some((term) => {
+    const n = normalizeUbicacionToken(term);
+    return c === n || c.includes(n);
+  });
+  return paisPareceCiudad && ciudadParecePais;
+}
+
+function pendientesMencionanUbicacion(pendientesRaw: unknown): boolean {
+  if (!Array.isArray(pendientesRaw)) return false;
+  for (const p of pendientesRaw) {
+    if (typeof p !== "string") continue;
+    const low = p.toLowerCase();
+    const tienePais = low.includes("país") || low.includes("pais");
+    const tieneCiudad = low.includes("ciudad");
+    if (tienePais && tieneCiudad) return true;
+  }
+  return false;
+}
+
+function readinessSeccionesMencionanUbicacion(
+  sectionsUnknown: unknown
+): boolean {
+  if (!Array.isArray(sectionsUnknown)) return false;
+  for (const s of sectionsUnknown) {
+    if (!s || typeof s !== "object") continue;
+    const rec = s as SetupRecord;
+    const detail = typeof rec.detail === "string" ? rec.detail.toLowerCase() : "";
+    if (!detail) continue;
+    const tienePais = detail.includes("país") || detail.includes("pais");
+    const tieneCiudad = detail.includes("ciudad");
+    const tieneInvert =
+      detail.includes("invert") || detail.includes("equivoc");
+    if (tienePais && (tieneCiudad || tieneInvert)) return true;
+  }
+  return false;
+}
+
+function gateLabel(s: ActivationGateStatus): string {
+  if (s === "listo") return "Listo";
+  if (s === "revisar") return "Revisar";
+  return "Pendiente";
+}
+
+function buildActivationChecklistViewModel(
+  technicalJson: Record<string, unknown> | null | undefined
+): { items: ActivationChecklistRow[]; allListo: boolean } {
+  const root = technicalJson ?? {};
+  const empresa = asRecord(root.empresa);
+  const diagnostico = asRecord(root.diagnostico);
+  const procesoPipeline = asRecord(root.procesoPipeline);
+  const motoresIA = asRecord(root.motoresIA);
+  const reportes = asRecord(root.reportes);
+
+  const auditoriaBlock = asRecord(root?.auditoria);
+  const readinessRecord = asRecord(auditoriaBlock?.readiness);
+
+  const pendientesArr = Array.isArray(root.pendientes) ? root.pendientes : [];
+  const pendientesStrings = pendientesArr.filter(
+    (p): p is string => typeof p === "string" && p.trim().length > 0
+  );
+  const pendientesCount = pendientesStrings.length;
+
+  const nombreComercialOk =
+    strFieldTechnical(empresa.nombreComercial) !== "No definido";
+  const nombreLegalOk =
+    strFieldTechnical(empresa.nombreLegal) !== "No definido";
+  const empresaIdentificada = nombreComercialOk || nombreLegalOk;
+
+  const paisOk = strFieldTechnical(empresa.pais) !== "No definido";
+  const ciudadOk = strFieldTechnical(empresa.ciudad) !== "No definido";
+  const ubicacionAdvertencia =
+    ubicacionInconsistenciaSospechosa(empresa) ||
+    pendientesMencionanUbicacion(pendientesArr) ||
+    readinessSeccionesMencionanUbicacion(readinessRecord?.sections);
+
+  let ubicacionStatus: ActivationGateStatus;
+  let ubicacionExplanation: string;
+  if (!paisOk && !ciudadOk) {
+    ubicacionStatus = "pendiente";
+    ubicacionExplanation =
+      "Faltan país y ciudad/región en los datos de empresa del Constructor.";
+  } else if (!paisOk || !ciudadOk) {
+    ubicacionStatus = "revisar";
+    ubicacionExplanation = !paisOk
+      ? "Falta país; completalo en Empresa."
+      : "Falta ciudad/región; completala en Empresa.";
+  } else if (ubicacionAdvertencia) {
+    ubicacionStatus = "revisar";
+    ubicacionExplanation =
+      "Hay señales de posible inconsistencia entre país y ciudad/región (datos, pendientes o notas de readiness). Revisá Empresa.";
+  } else {
+    ubicacionStatus = "listo";
+    ubicacionExplanation =
+      "País y ciudad/región están informados de forma coherente en esta vista.";
+  }
+
+  const diagnosticoOk = Object.keys(diagnostico).length > 0;
+  const pipelineOk = Object.keys(procesoPipeline).length > 0;
+  const motoresOk = Object.keys(motoresIA).length > 0;
+  const reportesOk = Object.keys(reportes).length > 0;
+
+  const pctRaw = readinessRecord.completionPercent;
+  const auditoriaPct =
+    typeof pctRaw === "number" && Number.isFinite(pctRaw) ? pctRaw : 0;
+  let auditoriaStatus: ActivationGateStatus;
+  let auditoriaExplanation: string;
+  if (auditoriaPct >= 80) {
+    auditoriaStatus = "listo";
+    auditoriaExplanation = `Readiness de auditoría en ${Math.round(auditoriaPct)}%. Adecuado para revisión de cierre en prototipo.`;
+  } else if (auditoriaPct >= 50) {
+    auditoriaStatus = "revisar";
+    auditoriaExplanation = `Readiness ${Math.round(auditoriaPct)}%: conviene revisar bloques antes de una activación real.`;
+  } else {
+    auditoriaStatus = "pendiente";
+    auditoriaExplanation = `Readiness ${Math.round(auditoriaPct)}%: aún hay brechas antes de cerrar el Constructor en prototipo.`;
+  }
+
+  let pendientesCriticosStatus: ActivationGateStatus;
+  let pendientesCriticosExplanation: string;
+  if (pendientesCount === 0) {
+    pendientesCriticosStatus = "listo";
+    pendientesCriticosExplanation =
+      "No hay pendientes listados en el JSON técnico para esta vista.";
+  } else {
+    pendientesCriticosStatus = "revisar";
+    pendientesCriticosExplanation = `Hay ${pendientesCount} pendiente${pendientesCount !== 1 ? "s" : ""} registrado${pendientesCount !== 1 ? "s" : ""} en consolidación técnica.`;
+  }
+
+  const items: ActivationChecklistRow[] = [
+    {
+      key: "empresa",
+      title: "Empresa identificada",
+      status: empresaIdentificada ? "listo" : "pendiente",
+      badgeLabel: gateLabel(empresaIdentificada ? "listo" : "pendiente"),
+      explanation: empresaIdentificada
+        ? "Nombre comercial o nombre legal cargado."
+        : "Falta nombre comercial y nombre legal reconocibles en Empresa.",
+    },
+    {
+      key: "ubicacion",
+      title: "Ubicación validada",
+      status: ubicacionStatus,
+      badgeLabel: gateLabel(ubicacionStatus),
+      explanation: ubicacionExplanation,
+    },
+    {
+      key: "diagnostico",
+      title: "Diagnóstico disponible",
+      status: diagnosticoOk ? "listo" : "pendiente",
+      badgeLabel: gateLabel(diagnosticoOk ? "listo" : "pendiente"),
+      explanation: diagnosticoOk
+        ? "Hay datos cargados en el bloque Diagnóstico."
+        : "El bloque Diagnóstico está vacío en el JSON técnico.",
+    },
+    {
+      key: "pipeline",
+      title: "Pipeline configurado",
+      status: pipelineOk ? "listo" : "pendiente",
+      badgeLabel: gateLabel(pipelineOk ? "listo" : "pendiente"),
+      explanation: pipelineOk
+        ? "Hay configuración cargada para proceso/Pipeline."
+        : "Sin datos cargados para procesoPipeline en el JSON técnico.",
+    },
+    {
+      key: "motores",
+      title: "Motores IA definidos",
+      status: motoresOk ? "listo" : "pendiente",
+      badgeLabel: gateLabel(motoresOk ? "listo" : "pendiente"),
+      explanation: motoresOk
+        ? "Hay datos en motores IA en el Constructor."
+        : "Motores IA vacíos según consolidación técnica.",
+    },
+    {
+      key: "reportes",
+      title: "Reportes configurados",
+      status: reportesOk ? "listo" : "pendiente",
+      badgeLabel: gateLabel(reportesOk ? "listo" : "pendiente"),
+      explanation: reportesOk
+        ? "Hay datos en reportes en el Constructor."
+        : "Reportes vacíos según consolidación técnica.",
+    },
+    {
+      key: "auditoria",
+      title: "Auditoría revisada",
+      status: auditoriaStatus,
+      badgeLabel: gateLabel(auditoriaStatus),
+      explanation: auditoriaExplanation,
+    },
+    {
+      key: "pendientes",
+      title: "Pendientes críticos",
+      status: pendientesCriticosStatus,
+      badgeLabel: gateLabel(pendientesCriticosStatus),
+      explanation: pendientesCriticosExplanation,
+    },
+  ];
+
+  const allListo = items.every((row) => row.status === "listo");
+
+  return { items, allListo };
+}
+
 function getText(record: SetupRecord, key: string): string {
   return formatReportValue(record[key]);
 }
@@ -992,6 +1240,7 @@ export default function AuditoriaPage() {
   );
   const technicalJsonString = JSON.stringify(technicalJson, null, 2);
   const technicalSummaryVm = buildTechnicalSummaryViewModel(technicalJson);
+  const activationChecklistVm = buildActivationChecklistViewModel(technicalJson);
 
   const setupStepStatus = {
     empresa: hasSetupData(setupData?.empresa),
@@ -3069,6 +3318,66 @@ export default function AuditoriaPage() {
                   </ul>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* ── Checklist final de activación (Fase 5C, prototipo) ── */}
+          <div className="mb-8">
+            <SectionHeader
+              letter="7"
+              title="Checklist final de activación"
+            />
+            <p className="mb-4 max-w-3xl text-xs leading-relaxed text-slate-500">
+              Validación visual de los bloques mínimos necesarios antes de permitir una
+              activación real en futuras fases. En esta etapa el CRM permanece en modo
+              prototipo.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {activationChecklistVm.items.map((row) => (
+                <div
+                  key={row.key}
+                  className="rounded-xl border border-slate-200 bg-white p-4"
+                >
+                  <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">{row.title}</p>
+                    <span
+                      className={[
+                        "inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold",
+                        row.status === "listo"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : row.status === "revisar"
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-rose-200 bg-rose-50 text-rose-800",
+                      ].join(" ")}
+                    >
+                      {row.badgeLabel}
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-slate-600">
+                    {row.explanation}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div
+              className={[
+                "mt-4 rounded-xl border px-4 py-3 text-xs leading-relaxed",
+                activationChecklistVm.allListo
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                  : "border-amber-200 bg-amber-50 text-amber-900",
+              ].join(" ")}
+            >
+              {activationChecklistVm.allListo ? (
+                <p className="font-medium">
+                  Checklist completo para revisión. La activación real sigue bloqueada
+                  en este prototipo.
+                </p>
+              ) : (
+                <p className="font-medium">
+                  Checklist incompleto. Revisá los bloques marcados antes de avanzar a
+                  una activación real.
+                </p>
+              )}
             </div>
           </div>
 
