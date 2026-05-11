@@ -1118,6 +1118,200 @@ function buildSuggestedDiagnosisFromTechnicalJson(input: {
   };
 }
 
+/** Fase 5G: documentos fuente sugeridos localmente cuando setup.documentos está vacío. */
+function buildSuggestedDocumentsFromTechnicalJson(input: {
+  empresa: SetupRecord;
+  cuestionario: SetupRecord;
+  procesoPipeline: SetupRecord;
+  motoresIA: SetupRecord;
+  reportes: SetupRecord;
+  diagnostico: SetupRecord;
+}): Record<string, unknown> {
+  const { empresa, cuestionario, procesoPipeline, motoresIA, reportes, diagnostico } =
+    input;
+
+  const queVendeEmpresa = trimStrTechnical(empresa.queVende);
+  const queVendeDetalle = trimStrTechnical(cuestionario.queVendeDetalle);
+  const queVendeFuente =
+    queVendeDetalle.length > 0
+      ? `empresa.queVende / cuestionario.queVendeDetalle (${queVendeDetalle.slice(0, 120)})`
+      : queVendeEmpresa.length > 0
+        ? `empresa.queVende (${queVendeEmpresa.slice(0, 120)})`
+        : "empresa.queVende / cuestionario.queVendeDetalle";
+
+  const decisionesNoIA = trimStrTechnical(cuestionario.decisionesNoIA);
+  const tipoCotizacion = trimStrTechnical(cuestionario.tipoCotizacion);
+  const queBloquea = trimStrTechnical(cuestionario.queBloquea);
+  const procesoActual = trimStrTechnical(cuestionario.procesoActual);
+  const comentariosAdicionales = trimStrTechnical(cuestionario.comentariosAdicionales);
+  const motivosPerdida = trimStrTechnical(cuestionario.motivosPerdida);
+  const queVerDireccion = trimStrTechnical(cuestionario.queVerDireccion);
+
+  const pipelineRes = pipelineSourceSummaryForSuggestions(procesoPipeline);
+  const motoresRes = motoresSourceSummaryForSuggestions(motoresIA);
+
+  const reportesSugArr = Array.isArray(reportes.reportesSugeridos)
+    ? reportes.reportesSugeridos
+    : [];
+  const nombresReportesSugeridos = reportesSugArr
+    .map((r) => trimStrTechnical(asRecord(r).nombre))
+    .filter((s) => s.length > 0);
+
+  const diagSug = asRecord(asRecord(diagnostico).diagnosticoSugerido);
+  const camposCriticosRaw = Array.isArray(diagSug.camposCriticosParaCRM)
+    ? diagSug.camposCriticosParaCRM
+    : [];
+  const camposCriticosStr = camposCriticosRaw
+    .filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+    .slice(0, 11)
+    .join(", ");
+  const camposFuente =
+    camposCriticosStr.length > 0
+      ? `diagnostico.diagnosticoSugerido.camposCriticosParaCRM (${camposCriticosStr})`
+      : "diagnostico.diagnosticoSugerido.camposCriticosParaCRM";
+
+  const cotizFuente =
+    decisionesNoIA.length > 0 || tipoCotizacion.length > 0
+      ? `cuestionario.decisionesNoIA / tipoCotizacion (${[decisionesNoIA.slice(0, 100), tipoCotizacion].filter((s) => s.length > 0).join(" · ")})`
+      : "cuestionario.decisionesNoIA · tipoCotizacion";
+
+  const stockFuente =
+    queBloquea.length > 0 || decisionesNoIA.length > 0
+      ? `cuestionario.queBloquea / decisionesNoIA (${[queBloquea.slice(0, 100), decisionesNoIA.slice(0, 80)].filter((s) => s.length > 0).join(" · ")})`
+      : "cuestionario.queBloquea · decisionesNoIA";
+
+  const faqFuente =
+    queVendeFuente.includes("(") || queBloquea.length > 0
+      ? `${queVendeFuente.split("(")[0]?.trim() ?? queVendeFuente} · cuestionario.queBloquea`
+      : "empresa.queVende · cuestionario.queBloquea";
+
+  const plantillasFuente =
+    procesoActual.length > 0 || comentariosAdicionales.length > 0
+      ? `cuestionario.procesoActual / comentariosAdicionales (${[procesoActual.slice(0, 100), comentariosAdicionales.slice(0, 80)].filter((s) => s.length > 0).join(" · ")})`
+      : "cuestionario.procesoActual · comentariosAdicionales";
+
+  const perdidaFuente =
+    queBloquea.length > 0 || motivosPerdida.length > 0
+      ? `cuestionario.queBloquea / motivosPerdida (${[queBloquea.slice(0, 90), motivosPerdida.slice(0, 90)].filter((s) => s.length > 0).join(" · ")})`
+      : "cuestionario.queBloquea · motivosPerdida";
+
+  const reportesNombresSlice = nombresReportesSugeridos.slice(0, 5).join(", ");
+  const guiaReportesFuente =
+    reportesNombresSlice.length > 0
+      ? `reportes.reportesSugeridos (${reportesNombresSlice}) · cuestionario.queVerDireccion`
+      : "reportes.reportesSugeridos · cuestionario.queVerDireccion";
+  const queVerFuente =
+    queVerDireccion.length > 0
+      ? `${guiaReportesFuente} (${queVerDireccion.slice(0, 120)})`
+      : guiaReportesFuente;
+
+  const documentosSugeridos: Record<string, unknown>[] = [
+    {
+      id: "d1",
+      nombre: "Catálogo de productos / servicios",
+      objetivo:
+        "Documentar accesorios, líneas, variantes y descripciones comerciales.",
+      prioridad: "alta",
+      fuente: queVendeFuente,
+      usoCRM:
+        "Alimentar campos de producto consultado, propuestas y recomendaciones IA.",
+      estado: "sugerido",
+    },
+    {
+      id: "d2",
+      nombre: "Lista de precios y condiciones comerciales",
+      objetivo: "Evitar cotizaciones inconsistentes y desalineadas con política comercial.",
+      prioridad: "alta",
+      fuente: cotizFuente,
+      usoCRM:
+        "Apoyar cotizaciones, aprobaciones humanas y límites de IA en propuestas.",
+      estado: "sugerido",
+    },
+    {
+      id: "d3",
+      nombre: "Política de stock, disponibilidad e instalación",
+      objetivo:
+        "Evitar promesas incorrectas de stock, fechas de entrega o instalación.",
+      prioridad: "alta",
+      fuente: stockFuente,
+      usoCRM: "Reglas de avance en pipeline, alertas y validaciones humanas.",
+      estado: "sugerido",
+    },
+    {
+      id: "d4",
+      nombre: "Preguntas frecuentes de compatibilidad",
+      objetivo:
+        "Responder dudas por marca, modelo, año y tipo de vehículo o contexto de uso.",
+      prioridad: "media",
+      fuente: faqFuente,
+      usoCRM: "Guiar calificación inicial y respuestas asistidas en primer contacto.",
+      estado: "sugerido",
+    },
+    {
+      id: "d5",
+      nombre: "Plantillas de respuesta para WhatsApp, Instagram y web",
+      objetivo: "Estandarizar el primer contacto y seguimientos por canal.",
+      prioridad: "media",
+      fuente: plantillasFuente,
+      usoCRM: "Alimentar seguimiento inteligente y mensajes sugeridos en el CRM.",
+      estado: "sugerido",
+    },
+    {
+      id: "d6",
+      nombre: "Guía de motivos de pérdida y objeciones frecuentes",
+      objetivo:
+        "Registrar por qué se pierden oportunidades y capturar objeciones típicas.",
+      prioridad: "media",
+      fuente: perdidaFuente,
+      usoCRM: "Alimentar reportes de pérdida y diagnóstico comercial.",
+      estado: "sugerido",
+    },
+    {
+      id: "d7",
+      nombre: "Criterios de calificación de oportunidades",
+      objetivo: "Definir cuándo un lead avanza o no avanza en el embudo.",
+      prioridad: "alta",
+      fuente: `procesoPipeline.etapas / columnas (${pipelineRes})`,
+      usoCRM: "Reglas de pipeline y scoring comercial futuro.",
+      estado: "sugerido",
+    },
+    {
+      id: "d8",
+      nombre: "Manual interno de validación humana",
+      objetivo: "Definir qué decisiones no puede tomar la IA sin supervisión.",
+      prioridad: "alta",
+      fuente: `cuestionario.decisionesNoIA · ${motoresRes}`,
+      usoCRM: "Límites de IA, validadores y trazas de auditoría.",
+      estado: "sugerido",
+    },
+    {
+      id: "d9",
+      nombre: "Guía de reportes comerciales",
+      objetivo: "Definir métricas, audiencia y frecuencia de lectura dirección/comercial.",
+      prioridad: "media",
+      fuente: queVerFuente,
+      usoCRM: "Validar dashboards y reportes semanales antes de go-live.",
+      estado: "sugerido",
+    },
+    {
+      id: "d10",
+      nombre: "Glosario de campos críticos del CRM",
+      objetivo: "Estandarizar nombres y significado de campos mínimos del negocio.",
+      prioridad: "media",
+      fuente: camposFuente,
+      usoCRM: "Configuración futura de entidades y campos en el CRM.",
+      estado: "sugerido",
+    },
+  ];
+
+  return {
+    origen: "sugerido_local",
+    notaValidacion:
+      "Documentos fuente sugeridos localmente. Requieren carga o validación humana antes de activar CRM real.",
+    documentosSugeridos,
+  };
+}
+
 /** JSON técnico de solo lectura (Fase 5A): armado sólo desde setup + readiness local; sin merges de contratos riesgosos. */
 function buildConstructorTechnicalJson(
   setupData: ConstructorSetup | undefined | null,
@@ -1154,7 +1348,7 @@ function buildConstructorTechnicalJson(
 
   const empresaOut = asRecord(setupRecord?.empresa);
   const cuestionarioOut = asRecord(setupRecord?.cuestionario);
-  const documentosOut = asRecord(setupRecord?.documentos);
+  const documentosBase = asRecord(setupRecord?.documentos);
   const diagnosticoBase = asRecord(setupRecord?.diagnostico);
   const procesoPipelineOut = asRecord(
     setupRecord?.procesoPipeline ?? setupRecord?.proceso_pipeline
@@ -1183,6 +1377,18 @@ function buildConstructorTechnicalJson(
           reportes: reportesOut,
         });
 
+  const documentosOut =
+    Object.keys(documentosBase).length > 0
+      ? documentosBase
+      : buildSuggestedDocumentsFromTechnicalJson({
+          empresa: empresaOut,
+          cuestionario: cuestionarioOut,
+          procesoPipeline: procesoPipelineOut,
+          motoresIA: motoresIAOut,
+          reportes: reportesOut,
+          diagnostico: diagnosticoOut,
+        });
+
   const motoresSetupOk = Object.keys(motoresIAOut).length > 0;
   const reportesRecOut = asRecord(reportesOut);
   const reportesEsSugerido =
@@ -1197,7 +1403,16 @@ function buildConstructorTechnicalJson(
     diagnosticoRecOut.diagnosticoSugerido !== null &&
     !Array.isArray(diagnosticoRecOut.diagnosticoSugerido);
 
+  const documentosRecOut = asRecord(documentosOut);
+  const documentosEsSugerido =
+    documentosRecOut.origen === "sugerido_local" &&
+    Array.isArray(documentosRecOut.documentosSugeridos) &&
+    documentosRecOut.documentosSugeridos.length > 0;
+
   const pipelineSetupOk = Object.keys(procesoPipelineOut).length > 0;
+  const empresaDatosBaseOk = hasSetupData(setupRecord?.empresa);
+  const cuestionarioDatosBaseOk = hasSetupData(setupRecord?.cuestionario);
+  const documentosSetupVacio = Object.keys(documentosBase).length === 0;
 
   let pendientesOut = pendientes;
   if (reportesEsSugerido && motoresSetupOk) {
@@ -1207,6 +1422,18 @@ function buildConstructorTechnicalJson(
     pendientesOut = pendientesOut.map((line) =>
       line.startsWith("Diagnóstico y proceso:")
         ? "Diagnóstico y proceso: Diagnóstico sugerido localmente pendiente de validación humana; proceso/pipeline tiene datos cargados."
+        : line
+    );
+  }
+  if (
+    documentosEsSugerido &&
+    empresaDatosBaseOk &&
+    cuestionarioDatosBaseOk &&
+    documentosSetupVacio
+  ) {
+    pendientesOut = pendientesOut.map((line) =>
+      line.startsWith("Datos base:")
+        ? "Datos base: Documentos fuente: propuesta sugerida localmente pendiente de carga o validación humana."
         : line
     );
   }
@@ -1288,6 +1515,21 @@ function diagnosticoBlockLabel(
   return "Configurado";
 }
 
+function documentosBlockLabel(
+  documentosUnknown: unknown
+): "Configurado" | "Sugerido local" | "Pendiente" {
+  const d = asRecord(documentosUnknown);
+  if (Object.keys(d).length === 0) return "Pendiente";
+  if (
+    d.origen === "sugerido_local" &&
+    Array.isArray(d.documentosSugeridos) &&
+    d.documentosSugeridos.length > 0
+  ) {
+    return "Sugerido local";
+  }
+  return "Configurado";
+}
+
 function buildTechnicalSummaryViewModel(
   technicalJson: Record<string, unknown> | null | undefined
 ) {
@@ -1297,6 +1539,7 @@ function buildTechnicalSummaryViewModel(
   const motoresUnknown = root.motoresIA;
   const reportesUnknown = root.reportes;
   const diagnosticoUnknown = root.diagnostico;
+  const documentosUnknown = root.documentos;
 
   const rubroNombre = strFieldTechnical(empresa.rubro);
   const rubroPersonalizado = strFieldTechnical(empresa.rubroPersonalizado);
@@ -1356,6 +1599,7 @@ function buildTechnicalSummaryViewModel(
     motoresIA: structuralBlockStatus(motoresUnknown),
     reportes: reportesBlockLabel(reportesUnknown),
     diagnostico: diagnosticoBlockLabel(diagnosticoUnknown),
+    documentos: documentosBlockLabel(documentosUnknown),
     auditoria: {
       completionPercent,
       overallStatus: overallStatusStr,
@@ -1460,6 +1704,7 @@ function buildActivationChecklistViewModel(
 ): { items: ActivationChecklistRow[]; allListo: boolean } {
   const root = technicalJson ?? {};
   const empresa = asRecord(root.empresa);
+  const documentos = asRecord(root.documentos);
   const diagnostico = asRecord(root.diagnostico);
   const procesoPipeline = asRecord(root.procesoPipeline);
   const motoresIA = asRecord(root.motoresIA);
@@ -1506,6 +1751,30 @@ function buildActivationChecklistViewModel(
     ubicacionStatus = "listo";
     ubicacionExplanation =
       "País y ciudad/región están informados de forma coherente en esta vista.";
+  }
+
+  const documentosSugArr = Array.isArray(documentos.documentosSugeridos)
+    ? documentos.documentosSugeridos
+    : [];
+  const documentosEsSugeridoLocal =
+    documentos.origen === "sugerido_local" && documentosSugArr.length > 0;
+  const documentosKeys = Object.keys(documentos);
+  const documentosConfiguradoReal =
+    documentosKeys.length > 0 && !documentosEsSugeridoLocal;
+
+  let documentosGateStatus: ActivationGateStatus;
+  let documentosGateExplanation: string;
+  if (documentosConfiguradoReal) {
+    documentosGateStatus = "listo";
+    documentosGateExplanation =
+      "Hay documentos fuente cargados en el Constructor (no es solo sugerido local).";
+  } else if (documentosEsSugeridoLocal) {
+    documentosGateStatus = "revisar";
+    documentosGateExplanation = `Lista local de ${documentosSugArr.length} documentos sugeridos en el JSON técnico; cargá o validá en Documentos fuente del Constructor.`;
+  } else {
+    documentosGateStatus = "pendiente";
+    documentosGateExplanation =
+      "Documentos fuente vacíos en el JSON técnico (sin sugeridos locales).";
   }
 
   const diagnosticoSugeridoRec = asRecord(diagnostico.diagnosticoSugerido);
@@ -1602,6 +1871,13 @@ function buildActivationChecklistViewModel(
       status: ubicacionStatus,
       badgeLabel: gateLabel(ubicacionStatus),
       explanation: ubicacionExplanation,
+    },
+    {
+      key: "documentos",
+      title: "Documentos fuente",
+      status: documentosGateStatus,
+      badgeLabel: gateLabel(documentosGateStatus),
+      explanation: documentosGateExplanation,
     },
     {
       key: "diagnostico",
@@ -1937,6 +2213,19 @@ export default function AuditoriaPage() {
     technicalJsonDiagnosticoSugeridoNotaRaw.length > 0
       ? technicalJsonDiagnosticoSugeridoNotaRaw
       : "Diagnóstico sugerido localmente · Pendiente de validación humana";
+
+  const technicalDocumentosForBanner = asRecord(technicalJson.documentos);
+  const technicalJsonDocumentosSugeridosBanner =
+    technicalDocumentosForBanner.origen === "sugerido_local" &&
+    Array.isArray(technicalDocumentosForBanner.documentosSugeridos) &&
+    technicalDocumentosForBanner.documentosSugeridos.length > 0;
+  const technicalJsonDocumentosSugeridosNotaRaw = trimStrTechnical(
+    technicalDocumentosForBanner.notaValidacion
+  );
+  const technicalJsonDocumentosSugeridosNota =
+    technicalJsonDocumentosSugeridosNotaRaw.length > 0
+      ? technicalJsonDocumentosSugeridosNotaRaw
+      : "Documentos sugeridos localmente · Pendientes de carga o validación humana";
 
   const technicalJsonString = JSON.stringify(technicalJson, null, 2);
   const technicalJsonStringOk =
@@ -3912,6 +4201,14 @@ export default function AuditoriaPage() {
                 </p>
               </div>
             ) : null}
+            {technicalJsonDocumentosSugeridosBanner ? (
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
+                <p className="text-[11px] font-semibold leading-relaxed text-teal-900">
+                  {technicalJsonDocumentosSugeridosNota}
+                </p>
+              </div>
+            ) : null}
             <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
               <pre className="max-h-[min(28rem,70vh)] overflow-x-auto overflow-y-auto p-4 text-left">
                 <code className="font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200">
@@ -4011,8 +4308,31 @@ export default function AuditoriaPage() {
                   </div>
                 </dl>
               </div>
-              <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2 xl:grid-cols-4">
-              {/* Diagnóstico, Pipeline, Motores, Reportes */}
+              <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {/* Documentos, Diagnóstico, Pipeline, Motores, Reportes */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Documentos
+                  </p>
+                  <span
+                    className={
+                      technicalSummaryVm.documentos === "Configurado"
+                        ? "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700"
+                        : technicalSummaryVm.documentos === "Sugerido local"
+                          ? "inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800"
+                          : "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                    }
+                  >
+                    {technicalSummaryVm.documentos}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                  {technicalSummaryVm.documentos === "Sugerido local"
+                    ? "Origen técnico: bloque documentos con origen sugerido_local en el JSON consolidado (carga o validación humana pendiente)."
+                    : "Origen técnico: bloque documentos del JSON consolidado."}
+                </p>
+              </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
