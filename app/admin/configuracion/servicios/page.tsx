@@ -646,9 +646,9 @@ export default function ServiciosAgenciaPage() {
           <Link href="/admin/configuracion" className="text-sm text-blue-600 hover:underline">
             ← Configuración
           </Link>
-          <h1 className="mt-2 text-xl font-semibold text-slate-900">Servicios de la agencia</h1>
+          <h1 className="mt-2 text-xl font-semibold text-slate-900">Catálogo comercial</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Roles (tarifas), categorías opcionales, servicios y esfuerzo por rol en cada servicio.
+            Roles con tarifa (costeo interno), categorías opcionales, ítems del catálogo y esfuerzo por rol en cada uno.
           </p>
         </div>
 
@@ -665,7 +665,7 @@ export default function ServiciosAgenciaPage() {
               aria-expanded={accordionOpen.roles}
             >
               <AccordionChevron expanded={accordionOpen.roles} />
-              <h2 className="text-sm font-semibold text-slate-900">Roles de agencia</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Roles internos y tarifas</h2>
             </button>
             <button
               type="button"

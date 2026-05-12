@@ -162,9 +162,9 @@ function ConfiguracionContent() {
             href="/admin/configuracion/servicios"
             className="rounded-2xl border bg-white p-4 hover:bg-slate-50 transition"
           >
-            <div className="text-sm font-semibold text-slate-900">Servicios de la agencia</div>
+            <div className="text-sm font-semibold text-slate-900">Catálogo comercial</div>
             <div className="mt-1 text-xs text-slate-600">
-              Catálogo maestro (precio, unidad, cantidad sugerida) usado al armar propuestas comerciales.
+              Productos, servicios o ítems comerciales usados para armar propuestas, cotizaciones y recomendaciones.
             </div>
           </Link>
         </div>
