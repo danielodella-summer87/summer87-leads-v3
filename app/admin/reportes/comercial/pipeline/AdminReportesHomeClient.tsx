@@ -70,16 +70,16 @@ export default function AdminReportesHomeClient() {
   const byTab: Record<TabKey, ReportCard[]> = {
     resumen: [
       {
-        title: "Vista general (demo)",
+        title: "Vista general",
         desc: "Entrada rápida: elegí un rol para ver reportes disponibles.",
         disabled: true,
-        tag: "demo",
+        tag: "Referencia",
       },
     ],
     direccion: [
       {
-        title: `Ingresos / ${labelPlural} / Renovaciones (demo)`,
-        desc: "KPIs y listados ejecutivos (cuando tengamos datos reales).",
+        title: `Ingresos / ${labelPlural} / Renovaciones`,
+        desc: "KPIs y listados ejecutivos. Vista de referencia hasta conectar métricas reales de la instancia.",
         disabled: true,
         tag: "próximo",
       },
@@ -97,32 +97,32 @@ export default function AdminReportesHomeClient() {
         tag: "nuevo",
       },
       {
-        title: "Propuestas (historial) (demo)",
-        desc: "Listado de PDFs por lead, fechas, estado, export.",
+        title: "Propuestas (historial)",
+        desc: "Listado de PDFs por lead, fechas, estado, export. Vista de referencia hasta conectar datos operativos.",
         disabled: true,
         tag: "próximo",
       },
     ],
     marketing: [
       {
-        title: "Origen / Campañas / Conversión (demo)",
-        desc: "Rendimiento por canal y atribución.",
+        title: "Origen / Campañas / Conversión",
+        desc: "Rendimiento por canal y atribución. Vista de referencia hasta conectar datos operativos.",
         disabled: true,
         tag: "próximo",
       },
     ],
     administracion: [
       {
-        title: "Pagos / Mora / Renovaciones (demo)",
-        desc: "Control administrativo (cuando existan tablas).",
+        title: "Pagos / Mora / Renovaciones",
+        desc: "Control administrativo. Vista de referencia cuando existan tablas conectadas.",
         disabled: true,
         tag: "próximo",
       },
     ],
     tecnico: [
       {
-        title: "Tickets / Estado portal / Incidentes (demo)",
-        desc: "Operación del portal (cuando existan registros).",
+        title: "Tickets / Estado portal / Incidentes",
+        desc: "Operación del portal. Vista de referencia hasta conectar registros operativos.",
         disabled: true,
         tag: "próximo",
       },
