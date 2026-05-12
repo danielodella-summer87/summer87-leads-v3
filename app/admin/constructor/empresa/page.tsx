@@ -3,7 +3,6 @@
 import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
   ChevronRight,
   ChevronDown,
   AlertTriangle,
@@ -12,6 +11,7 @@ import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionC
 import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ConstructorStepsBreadcrumb } from "@/components/constructor/ConstructorStepsBreadcrumb";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import {
   type ConstructorMockAISuggestion,
@@ -891,6 +891,7 @@ export default function EmpresaPage() {
   return (
     <PageContainer>
       <div className="space-y-5">
+        <ConstructorStepsBreadcrumb currentStepId="empresa" />
 
         {/* ── Aviso de persistencia ─────────────────────────────────────── */}
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
@@ -906,19 +907,6 @@ export default function EmpresaPage() {
 
         {/* ── Card principal ───────────────────────────────────────────────── */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8">
-
-          {/* Breadcrumb / back */}
-          <div className="mb-6 flex items-center gap-2 text-xs text-slate-400">
-            <Link
-              href="/admin/constructor"
-              className="inline-flex items-center gap-1 hover:text-slate-700 transition-colors"
-            >
-              <ArrowLeft className="h-3 w-3" />
-              Constructor CRM
-            </Link>
-            <ChevronRight className="h-3 w-3" />
-            <span className="text-slate-600">Empresa</span>
-          </div>
 
           {/* Header */}
           <div className="mb-8">

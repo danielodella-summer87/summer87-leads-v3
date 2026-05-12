@@ -21,6 +21,7 @@ import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionC
 import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ConstructorStepsBreadcrumb } from "@/components/constructor/ConstructorStepsBreadcrumb";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type { ConstructorMockAISuggestion } from "@/lib/constructor-ai/client";
 import { useConstructorMockAI } from "@/lib/constructor-ai/useConstructorMockAI";
@@ -1196,25 +1197,7 @@ export default function DiagnosticoPage() {
       <div className="space-y-6">
 
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          <Link href="/admin/constructor" className="hover:text-slate-800 transition-colors">
-            ← Constructor CRM
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/empresa" className="hover:text-slate-800 transition-colors">
-            Empresa
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/cuestionario" className="hover:text-slate-800 transition-colors">
-            Cuestionario
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/documentos" className="hover:text-slate-800 transition-colors">
-            Documentos
-          </Link>
-          <span>/</span>
-          <span className="font-medium text-slate-800">Diagnóstico comercial</span>
-        </div>
+        <ConstructorStepsBreadcrumb currentStepId="diagnostico" />
 
         {/* ── Card principal ──────────────────────────────────────────────── */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8">

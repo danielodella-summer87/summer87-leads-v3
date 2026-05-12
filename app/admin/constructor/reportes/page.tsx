@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import { ConstructorStepsBreadcrumb } from "@/components/constructor/ConstructorStepsBreadcrumb";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
 import type {
@@ -1584,58 +1585,7 @@ export default function ReportesPage() {
       <div className="space-y-6">
 
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          <Link
-            href="/admin/constructor"
-            className="hover:text-slate-800 transition-colors"
-          >
-            ← Constructor CRM
-          </Link>
-          <span>/</span>
-          <Link
-            href="/admin/constructor/empresa"
-            className="hover:text-slate-800 transition-colors"
-          >
-            Empresa
-          </Link>
-          <span>/</span>
-          <Link
-            href="/admin/constructor/cuestionario"
-            className="hover:text-slate-800 transition-colors"
-          >
-            Cuestionario
-          </Link>
-          <span>/</span>
-          <Link
-            href="/admin/constructor/documentos"
-            className="hover:text-slate-800 transition-colors"
-          >
-            Documentos
-          </Link>
-          <span>/</span>
-          <Link
-            href="/admin/constructor/diagnostico"
-            className="hover:text-slate-800 transition-colors"
-          >
-            Diagnóstico
-          </Link>
-          <span>/</span>
-          <Link
-            href="/admin/constructor/proceso-pipeline"
-            className="hover:text-slate-800 transition-colors"
-          >
-            Proceso y pipeline
-          </Link>
-          <span>/</span>
-          <Link
-            href="/admin/constructor/motores-ia"
-            className="hover:text-slate-800 transition-colors"
-          >
-            Motores IA
-          </Link>
-          <span>/</span>
-          <span className="font-medium text-slate-800">Reportes</span>
-        </div>
+        <ConstructorStepsBreadcrumb currentStepId="reportes" />
 
         {/* ── Card principal ──────────────────────────────────────────────── */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8">

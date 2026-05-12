@@ -24,6 +24,7 @@ import {
   Download,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ConstructorStepsBreadcrumb } from "@/components/constructor/ConstructorStepsBreadcrumb";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import type {
   BaseReadiness,
@@ -3835,44 +3836,7 @@ export default function AuditoriaPage() {
       <div className="space-y-6">
 
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          <Link
-            href="/admin/constructor"
-            className="hover:text-slate-800 transition-colors"
-          >
-            ← Constructor CRM
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/empresa" className="hover:text-slate-800 transition-colors">
-            Empresa
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/cuestionario" className="hover:text-slate-800 transition-colors">
-            Cuestionario
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/documentos" className="hover:text-slate-800 transition-colors">
-            Documentos
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/diagnostico" className="hover:text-slate-800 transition-colors">
-            Diagnóstico
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/proceso-pipeline" className="hover:text-slate-800 transition-colors">
-            Proceso y pipeline
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/motores-ia" className="hover:text-slate-800 transition-colors">
-            Motores IA
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/reportes" className="hover:text-slate-800 transition-colors">
-            Reportes
-          </Link>
-          <span>/</span>
-          <span className="font-medium text-slate-800">Auditoría final</span>
-        </div>
+        <ConstructorStepsBreadcrumb currentStepId="auditoria" />
 
         {/* ── Card principal ──────────────────────────────────────────────── */}
         <div className="rounded-2xl border border-slate-200 bg-white p-8">

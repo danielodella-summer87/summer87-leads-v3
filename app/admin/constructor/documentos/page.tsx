@@ -22,6 +22,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ConstructorStepsBreadcrumb } from "@/components/constructor/ConstructorStepsBreadcrumb";
 import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
@@ -773,21 +774,7 @@ export default function DocumentosPage() {
       <div className="space-y-6">
 
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          <Link href="/admin/constructor" className="hover:text-slate-800 transition-colors">
-            ← Constructor CRM
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/empresa" className="hover:text-slate-800 transition-colors">
-            Empresa
-          </Link>
-          <span>/</span>
-          <Link href="/admin/constructor/cuestionario" className="hover:text-slate-800 transition-colors">
-            Cuestionario
-          </Link>
-          <span>/</span>
-          <span className="font-medium text-slate-800">Documentos fuente</span>
-        </div>
+        <ConstructorStepsBreadcrumb currentStepId="documentos" />
 
         {/* ── Aviso de persistencia ─────────────────────────────────────── */}
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
