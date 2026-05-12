@@ -682,7 +682,7 @@ const NEXT_STEP_CONFIG: Record<
     tab: "datos",
     section: "lead-data-base",
     generar: {
-      description: "Completá los datos mínimos del lead (contacto, instalación, objetivo y requerimientos) para poder avanzar con la evaluación.",
+      description: "Completá los datos mínimos del lead (contacto, contexto operativo, objetivo y requerimientos) para poder avanzar con la evaluación.",
       cta: "Ir a completar datos",
       checklist: ["Verificar nombre, contacto y teléfono", "Completar web, objetivos y audiencia", "Confirmar vínculo con iniciativa si corresponde"],
     },
@@ -694,7 +694,7 @@ const NEXT_STEP_CONFIG: Record<
     generar: {
       description: "Falta completar o validar información mínima del prospecto. Revisá datos clave como contacto, teléfono, dirección, rubro/sector, superficie y visita antes de continuar.",
       cta: "Revisar datos del lead",
-      checklist: ["Verificar nombre, contacto y teléfono", "Completar dirección, rubro/sector y datos de instalación", "Confirmar visita técnica si corresponde"],
+      checklist: ["Verificar nombre, contacto y teléfono", "Completar dirección, rubro/sector y contexto operativo relevante", "Confirmar visita o reunión si corresponde"],
     },
   },
   investigacion: {
@@ -704,7 +704,7 @@ const NEXT_STEP_CONFIG: Record<
     generar: {
       description: "Aún no está preparada la visita. Prepará el checklist de visita para construir la base necesaria antes de la evaluación.",
       cta: "Preparar visita",
-      checklist: ["Preparar checklist de visita", "Revisar datos del prospecto y características de la instalación", "Validar información mínima antes de la evaluación"],
+      checklist: ["Preparar checklist de visita", "Revisar datos del prospecto y contexto operativo relevante", "Validar información mínima antes de la evaluación"],
     },
     revisar: {
       description: "Ya existe una base preparada para la visita. Revisá la información del lead antes de avanzar a la evaluación de necesidades.",
@@ -1303,7 +1303,7 @@ export default function LeadDetailPage() {
     ((leadServices?.length ?? 0) > 0 && ((proposalExportPayload?.monthlyTable?.rows?.length ?? 0) > 0))
   );
 
-  /** Paso comercial 1–6, CTA y copy alineados con LEADS87 (getCommercialNextAction). */
+  /** Paso comercial 1–6, CTA y copy del flujo comercial (getCommercialNextAction). */
   const commercialNext = useMemo(
     () =>
       getCommercialNextAction({
@@ -1337,7 +1337,7 @@ export default function LeadDetailPage() {
         return {
           title: "Paso 6 — Presentación comercial",
           description:
-            "Generá y archivá la presentación en LEADS87 o revisá el material ya listo; luego avanzá a cierre y seguimiento.",
+            "Generá y archivá la presentación en el CRM o revisá el material ya listo; luego avanzá a cierre y seguimiento.",
           nextStep: "Cierre y seguimiento",
         };
       }
@@ -1363,7 +1363,7 @@ export default function LeadDetailPage() {
             currentStep === 4
               ? "Paso 5 — Propuesta comercial"
               : currentStep === 5
-                ? "Paso 6 — Presentación comercial (LEADS87)"
+                ? "Paso 6 — Presentación comercial"
                 : "Cierre y seguimiento",
         };
       }
@@ -3955,7 +3955,7 @@ export default function LeadDetailPage() {
                 </dl>
               </div>
 
-              {/* Datos del prospecto e instalación */}
+              {/* Datos del prospecto (comercial) */}
               <div className="rounded-2xl border bg-white">
                 <div
                   role="button"
@@ -3965,7 +3965,7 @@ export default function LeadDetailPage() {
                   className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-900 flex items-center gap-2"
                 >
                   <span className="text-slate-500">{investigacionOpen ? "▼" : "▶"}</span>
-                  Datos del prospecto e instalación
+                  Datos del prospecto
                 </div>
                 {investigacionOpen && (
                 <div className="p-4">
@@ -4375,7 +4375,7 @@ export default function LeadDetailPage() {
                         onChange={(e) => setDraft((p) => ({ ...p, objetivos: e.target.value }))}
                         className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                         rows={3}
-                        placeholder="Ej: tipo de servicio requerido, horarios, instalación, necesidades operativas..."
+                        placeholder="Ej: tipo de servicio requerido, horarios, contexto operativo, necesidades del cliente..."
                       />
                     ) : (
                       <div className="mt-1 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap">
@@ -4385,7 +4385,7 @@ export default function LeadDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-500">¿Ya es cliente de Casalimpia?</div>
+                    <div className="text-xs text-slate-500">¿Ya es cliente?</div>
                     {editing ? (
                       <textarea
                         value={(draft.audiencia as any) ?? ""}
@@ -4611,7 +4611,7 @@ export default function LeadDetailPage() {
                   </div>
 
                   <div className="rounded-xl border bg-slate-50 p-4">
-                    <h3 className="text-sm font-semibold text-slate-900">Características de la instalación</h3>
+                    <h3 className="text-sm font-semibold text-slate-900">Contexto operativo</h3>
                     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div>
                         <label className="text-xs font-semibold text-slate-500" htmlFor="visita-superficie">
@@ -4916,9 +4916,9 @@ export default function LeadDetailPage() {
                 </div>
               </div>
 
-              {/* PROCESO COMERCIAL — flujo Casalimpia */}
+              {/* PROCESO COMERCIAL — flujo configurable */}
               <div id="proceso-comercial" className="rounded-2xl border-2 border-slate-200 bg-white p-6 shadow-sm">
-                <Tooltip content="Flujo Casalimpia: Datos del prospecto → Visita → Evaluación → Servicios → Costeo → Cotización / Propuesta → Presentación." maxWidth="340px">
+                <Tooltip content="Flujo comercial: datos del prospecto → visita → evaluación → servicios → costeo → cotización / propuesta → presentación." maxWidth="340px">
                   <h2 className="text-xl font-semibold text-slate-900 inline-block cursor-help">Proceso comercial</h2>
                 </Tooltip>
                 <p className="mt-1 text-sm text-slate-600">
@@ -4958,13 +4958,13 @@ export default function LeadDetailPage() {
                   {([
                     { n: 1, label: "Preparación", tip: "Preparación del lead con IA. Entrada: datos del lead. Salida: informe interno que alimenta evaluación y estrategia." },
                     { n: 2, label: "Evaluación", tip: "Documento consultivo de evaluación. Usa el análisis interno. Salida: evaluación lista para presentar al lead." },
-                    { n: 3, label: "Estrategia", tip: "Visión estratégica de crecimiento. Usa la evaluación. Salida: documento de estrategia o confirmación en LEADS87." },
+                    { n: 3, label: "Estrategia", tip: "Visión estratégica de crecimiento. Usa la evaluación. Salida: documento de estrategia o confirmación en el CRM." },
                     { n: 4, label: "Estructura", tip: "Estructura de servicios y costos. Se define en Consultor. Base económica de la propuesta." },
                     { n: 5, label: "Propuesta final", tip: "Propuesta comercial y documento final para el cliente. Revisar, compartir y marcar envío." },
                     {
                       n: 6,
                       label: "Presentación",
-                      tip: "Presentación comercial archivada para el cliente y cierre de etapa (LEADS87 paso 6).",
+                      tip: "Presentación comercial archivada para el cliente y cierre de etapa (paso 6 del flujo comercial).",
                     },
                   ] as const).map(({ n, label, tip }) => {
                     const done =
@@ -5008,7 +5008,7 @@ export default function LeadDetailPage() {
                     {currentStep === 4 && "Tabla de servicios, alcance y costos definida en Consultor (base de la propuesta)."}
                     {currentStep === 5 && "Documento final para compartir con el cliente, descargar PDF y marcar como enviada."}
                     {currentStep === 6 &&
-                      "Presentación comercial archivada y cierre de etapa alineado con LEADS87 (sin recomendar estrategia si ya está aprobada)."}
+                      "Presentación comercial archivada y cierre de etapa alineado con el flujo comercial (sin recomendar estrategia si ya está aprobada)."}
                   </p>
                   <div className="mt-3">
                     {currentStep === 1 && (
@@ -5069,7 +5069,7 @@ export default function LeadDetailPage() {
                       <span className="inline-block flex flex-wrap items-center gap-2">
                         {commercialNext.primaryCtaIntent === "proposal_review" && id ? (
                           <Tooltip
-                            content="Confirmá la revisión de la propuesta en LEADS87 para habilitar la presentación comercial."
+                            content="Confirmá la revisión de la propuesta en el flujo comercial para habilitar la presentación comercial."
                             maxWidth="320px"
                           >
                             <button
@@ -5143,7 +5143,7 @@ export default function LeadDetailPage() {
                       {currentStep === 2 && "Paso 3: Estrategia de crecimiento — visión estratégica que conecta evaluación con el plan."}
                       {currentStep === 3 && "Paso 4: Estructura de servicios — tabla de servicios y costos en el tab Consultor."}
                       {currentStep === 4 && "Paso 5: Propuesta final para cliente — documento integral, compartir y marcar envío."}
-                      {currentStep === 5 && "Paso 6: Presentación comercial — generá y archivá la presentación en LEADS87 (recomendado)."}
+                      {currentStep === 5 && "Paso 6: Presentación comercial — generá y archivá la presentación en el CRM (recomendado)."}
                     </p>
                   </div>
                 )}
@@ -5504,10 +5504,10 @@ export default function LeadDetailPage() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-6">
                   <h2 className="text-lg font-semibold text-slate-900">Informe de evaluación</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Documento de respaldo con evaluación del prospecto, características de la instalación, oportunidades, acciones y plan de avance.
+                    Documento de respaldo con evaluación del prospecto, contexto operativo, oportunidades, acciones y plan de avance.
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
-                    Incluye: datos del prospecto, contexto operativo, instalación, oportunidades, acciones 72h y plan 30–90 días.
+                    Incluye: datos del prospecto, contexto operativo, condiciones del entorno, oportunidades, acciones 72h y plan 30–90 días.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {id && (
