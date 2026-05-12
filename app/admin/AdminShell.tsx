@@ -72,8 +72,8 @@ function getBreadcrumbParts(
     return [suite, leadsName, last];
   }
   if (pathname.startsWith("/admin/leads87")) return [suite, leadsName];
+  if (pathname.startsWith("/admin/leadsok")) return [suite, "Recorrido comercial guiado"];
   if (pathname.startsWith("/admin/leads")) return [suite, "Leads", "Gestión operativa"];
-  if (pathname.startsWith("/admin/leadsok")) return [suite, "LeadsOk"];
   if (pathname.startsWith("/admin/copilot")) return [suite, copilotName];
 
   const labelMap: Record<string, string> = {
