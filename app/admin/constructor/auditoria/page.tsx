@@ -2078,6 +2078,73 @@ const PILOT_SUCCESS_CRITERIA: ReadonlyArray<{
 const PILOT_PLAN_FINAL_RECOMMENDATION =
   "Este piloto debe validar comportamiento humano, claridad del pipeline y calidad de datos. Si el equipo puede operar 5 a 20 leads sin perder seguimiento, el CRM está en condiciones de avanzar hacia sincronización real, reportes conectados y automatizaciones controladas.";
 
+/** Fase 7A: arquitectura conceptual instalación → CRM operativo (solo lectura en Auditoría). */
+const INSTALLATION_LAYER_ITEMS = [
+  {
+    title: "Constructor CRM",
+    text: "Diseña el CRM ideal a partir del negocio.",
+    visibility: "Solo Summer87.",
+  },
+  {
+    title: "Auditoría CRM",
+    text: "Valida si la configuración está lista para avanzar.",
+    visibility: "Solo Summer87.",
+  },
+  {
+    title: "Instalador CRM",
+    text: "Convierte el diseño en configuración operativa.",
+    visibility: "Solo Summer87.",
+  },
+  {
+    title: "CRM operativo",
+    text: "Es el sistema que usará el cliente final.",
+    visibility: "Cliente + Summer87.",
+  },
+  {
+    title: "Copilot / IA",
+    text: "Sugiere acciones, reportes y riesgos según reglas activadas.",
+    visibility: "Según configuración.",
+  },
+] as const;
+
+const SUMMER87_PRIVATE_VIEW_ITEMS = [
+  "Constructor completo.",
+  "Auditoría técnica.",
+  "JSON técnico.",
+  "Vista ejecutiva.",
+  "Plan piloto.",
+  "Instalador CRM.",
+  "Configuración avanzada.",
+  "Activación y control de módulos.",
+] as const;
+
+const CLIENT_VISIBLE_VIEW_ITEMS = [
+  "Leads.",
+  "Kanban.",
+  "Agenda.",
+  "Reportes.",
+  "IA permitida.",
+  "Mesa de ayuda.",
+  "Manual de neuroventas, si aplica.",
+  "Configuración limitada.",
+] as const;
+
+const INSTALLATION_DECISION_ITEMS = [
+  "Nombre de la instancia cliente.",
+  "Supabase propio o entorno compartido.",
+  "Usuarios iniciales.",
+  "Módulos visibles para cliente.",
+  "Pipeline definitivo.",
+  "Motores IA activos.",
+  "Reportes visibles.",
+  "Permisos y roles.",
+  "Si se cargan datos de ejemplo o empieza vacío.",
+  "Si el Constructor queda oculto al cliente.",
+] as const;
+
+const INSTALLATION_ARCHITECTURE_VERDICT =
+  "Este Constructor no genera un CRM genérico. Genera una configuración operativa alineada al modelo comercial del cliente. La creación del CRM debe realizarse recién después de validar empresa, proceso, motores, reportes, documentos y reglas de uso.";
+
 function etapasTienenResponsable(etapasUnknown: unknown): boolean {
   if (!Array.isArray(etapasUnknown)) return false;
   for (const raw of etapasUnknown) {
@@ -5924,6 +5991,120 @@ export default function AuditoriaPage() {
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
                 >
                   Revisar Reportes
+                </Link>
+              </div>
+            </div>
+          </CollapsibleAuditSection>
+
+          <CollapsibleAuditSection
+            id="arquitectura-instalacion"
+            letter="11"
+            title="Arquitectura de instalación"
+            description="Ordena el paso posterior a la auditoría: qué se diseña en privado, qué queda para el cliente y qué deberá resolver el instalador antes de materializar el CRM operativo. Esta vista no crea instancias ni activa el producto."
+            statusLabel="Diseño de instancia · privado Summer87"
+            isOpen={openAuditSection === "arquitectura-instalacion"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                1. Modelo de capas
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {INSTALLATION_LAYER_ITEMS.map((layer) => (
+                  <div
+                    key={layer.title}
+                    className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-3"
+                  >
+                    <p className="text-xs font-semibold text-slate-900">{layer.title}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{layer.text}</p>
+                    <p className="mt-2 text-[10px] font-medium text-slate-500">
+                      Visibilidad: {layer.visibility}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-[11px] leading-relaxed text-slate-600">
+                Se está construyendo la <span className="font-semibold text-slate-800">configuración</span> del CRM
+                (pipeline, motores, reportes, reglas). El{" "}
+                <span className="font-semibold text-slate-800">futuro</span> botón «Crear CRM para [empresa]» (aún no
+                disponible aquí) será la acción del instalador para aplicar esa configuración en una instancia operativa
+                para el cliente, solo después de las decisiones del checklist y sin reemplazar validaciones de
+                negocio.
+              </p>
+            </div>
+
+            <div className="mb-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  2. Qué verá Summer87
+                </p>
+                <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                  {SUMMER87_PRIVATE_VIEW_ITEMS.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  3. Qué verá el cliente
+                </p>
+                <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                  {CLIENT_VISIBLE_VIEW_ITEMS.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                4. Decisiones antes de crear el CRM
+              </p>
+              <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+                Checklist orientativo para el instalador; no persiste estado ni dispara acciones.
+              </p>
+              <ul className="space-y-2">
+                {INSTALLATION_DECISION_ITEMS.map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs leading-snug text-slate-800"
+                  >
+                    <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-100">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                5. Dictamen de arquitectura
+              </p>
+              <p className="text-xs leading-relaxed">{INSTALLATION_ARCHITECTURE_VERDICT}</p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Acciones visuales
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="#checklist-final-activacion"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Auditoría
+                </Link>
+                <Link
+                  href="#vista-ejecutiva-paquete"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Vista ejecutiva
+                </Link>
+                <Link
+                  href="#plan-operativo-piloto"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar Plan piloto
                 </Link>
               </div>
             </div>
