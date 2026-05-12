@@ -2146,6 +2146,53 @@ const INSTALLATION_DECISION_ITEMS = [
 const INSTALLATION_ARCHITECTURE_VERDICT =
   "Este Constructor no genera un CRM genérico. Genera una configuración operativa alineada al modelo comercial del cliente. La creación del CRM debe realizarse recién después de validar empresa, proceso, motores, reportes, documentos y reglas de uso.";
 
+/** Fase 7S: modelo visual del Instalador en Auditoría (solo UI informativa; sin activación). */
+const INSTALLER_VISUAL_FLOW_STEPS = [
+  "Constructor completo",
+  "Auditoría validada",
+  "Preset sectorial sugerido",
+  "Validación del instalador",
+  "CRM operativo creado",
+] as const;
+
+const INSTALLER_VISUAL_INPUTS = [
+  "Empresa",
+  "Cuestionario",
+  "Documentos",
+  "Diagnóstico",
+  "Proceso y pipeline",
+  "Motores IA",
+  "Reportes",
+  "Auditoría",
+  "Preset sectorial",
+  "Decisiones del instalador",
+] as const;
+
+const INSTALLER_VISUAL_PROPOSALS = [
+  "Nombre de instancia.",
+  "Pipeline operativo.",
+  "Campos mínimos de lead.",
+  "Módulos visibles para cliente.",
+  "Reportes iniciales.",
+  "Motores IA en modo sugerencia.",
+  "Catálogo comercial.",
+  "Checklist de instalación.",
+  "Resumen para Summer87.",
+] as const;
+
+const INSTALLER_VISUAL_BLOCKED_ACTIONS = [
+  "Crear Supabase real.",
+  "Borrar datos.",
+  "Invitar usuarios finales.",
+  "Activar IA sensible.",
+  "Exponer Constructor al cliente.",
+  "Mezclar presets sectoriales.",
+  "Publicar producción.",
+] as const;
+
+const INSTALLER_VISUAL_VERDICT =
+  "El Instalador CRM debe convertir el diseño validado en configuración operativa, pero toda acción sensible requiere validación humana. Esta sección anticipa el flujo futuro y no modifica datos ni activa módulos reales.";
+
 function etapasTienenResponsable(etapasUnknown: unknown): boolean {
   if (!Array.isArray(etapasUnknown)) return false;
   for (const raw of etapasUnknown) {
@@ -6069,6 +6116,111 @@ export default function AuditoriaPage() {
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
                 >
                   Revisar Plan piloto
+                </Link>
+              </div>
+            </div>
+          </CollapsibleAuditSection>
+
+          <CollapsibleAuditSection
+            id="modelo-visual-instalador"
+            letter="12"
+            title="Modelo visual del Instalador CRM"
+            description="Cuando Constructor y Auditoría estén completos, el futuro flujo «Crear CRM para [empresa]» será una instalación guiada: propone configuración, pero las acciones sensibles quedan bloqueadas hasta confirmación humana. Esta sección no ejecuta nada."
+            statusLabel="Vista previa · sin activación real"
+            isOpen={openAuditSection === "modelo-visual-instalador"}
+            onToggle={handleAuditSectionToggle}
+          >
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                1. Flujo del Instalador
+              </p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs font-medium text-slate-800">
+                {INSTALLER_VISUAL_FLOW_STEPS.map((step, idx) => (
+                  <span key={step} className="inline-flex items-center gap-2">
+                    {idx > 0 ? (
+                      <span className="text-slate-400" aria-hidden>
+                        →
+                      </span>
+                    ) : null}
+                    <span className="rounded-lg border border-emerald-100 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] leading-snug text-emerald-900">
+                      {step}
+                    </span>
+                  </span>
+                ))}
+              </div>
+              <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+                Esta vista es descriptiva. No ejecuta acciones.
+              </p>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                2. Entradas que usará
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {INSTALLER_VISUAL_INPUTS.map((label) => (
+                  <div
+                    key={label}
+                    className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 text-xs font-medium text-slate-800"
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                3. Qué podrá proponer
+              </p>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-700">
+                {INSTALLER_VISUAL_PROPOSALS.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+              <p className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-amber-800">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                4. Qué queda bloqueado hasta confirmación humana
+              </p>
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-amber-950/90">
+                {INSTALLER_VISUAL_BLOCKED_ACTIONS.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-4 text-slate-100">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                5. Dictamen del modelo visual
+              </p>
+              <p className="text-xs leading-relaxed">{INSTALLER_VISUAL_VERDICT}</p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Acciones visuales
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href="#arquitectura-instalacion"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar arquitectura de instalación
+                </Link>
+                <Link
+                  href="#plan-operativo-piloto"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar plan operativo del piloto
+                </Link>
+                <Link
+                  href="#vista-ejecutiva-paquete"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  Revisar vista ejecutiva
                 </Link>
               </div>
             </div>
