@@ -89,7 +89,7 @@ function ConfiguracionContent() {
                 Administrá los rubros, pipelines, estados, roles y comerciales del sistema.
               </p>
               <p className="mt-2 text-xs text-slate-500">
-                Carga datos demo mínimos para activar la instancia.
+                Cargá datos iniciales mínimos para activar la instancia.
               </p>
               {setupCreated.length > 0 ? (
                 <p className="mt-2 text-xs text-emerald-700">

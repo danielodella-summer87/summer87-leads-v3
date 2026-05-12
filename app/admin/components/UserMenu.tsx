@@ -87,7 +87,7 @@ function getDisplayName(me: MeResponse | null): string {
   return "Usuario";
 }
 
-/** Sesión CRM (prototipo cédula+PIN). Fallback cuando app_user es null. */
+/** Sesión CRM (cédula+PIN). Fallback cuando app_user es null. */
 type CrmSession = { id: string; role: string } | null;
 
 export default function UserMenu() {
@@ -135,7 +135,7 @@ export default function UserMenu() {
   const displayName = useMemo(() => {
     const fromMe = getDisplayName(me);
     if (fromMe !== "Usuario") return fromMe;
-    if (crm) return "Prototipo";
+    if (crm) return "Panel administrativo";
     return fromMe;
   }, [me, crm]);
 

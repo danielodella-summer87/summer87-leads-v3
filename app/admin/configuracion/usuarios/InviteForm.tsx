@@ -183,7 +183,7 @@ export default function InviteForm() {
               {copied ? "Copiado" : "Copiar"}
             </button>
           </div>
-          <p className="text-sm text-slate-600">Enviá este link por WhatsApp/Email. (Test).</p>
+          <p className="text-sm text-slate-600">Enviá este link por WhatsApp o email.</p>
         </div>
       )}
       {linkError && (
