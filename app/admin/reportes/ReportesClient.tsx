@@ -20,7 +20,7 @@ type ReportCard = {
   desc: string;
   href?: string;
   disabled?: boolean;
-  tag?: string; // opcional (demo / próximo)
+  tag?: string; // opcional (referencia / próximo)
 };
 
 function SectionBadge({ text }: { text: string }) {
@@ -68,21 +68,22 @@ export default function ReportesClient() {
   const labelPlural = resolveEntityName("plural", { clientePlural, clienteSingular });
 
   const title = "Reportes";
-  const subtitle = "Catálogo de reportes (listados con filtros + export). Elegí un rol.";
+  const subtitle =
+    "Catálogo de reportes (listados con filtros + export). Elegí un rol. Las vistas marcadas como referencia se conectan a datos reales según la configuración del CRM.";
 
   const byTab: Record<TabKey, ReportCard[]> = {
     resumen: [
       {
-        title: "Vista general (demo)",
+        title: "Vista general",
         desc: "Entrada rápida: elegí un rol para ver reportes disponibles.",
         disabled: true,
-        tag: "demo",
+        tag: "Referencia",
       },
     ],
     direccion: [
       {
-        title: `Ingresos / ${labelPlural} / Renovaciones (demo)`,
-        desc: "KPIs y listados ejecutivos (cuando tengamos datos reales).",
+        title: `Ingresos / ${labelPlural} / Renovaciones`,
+        desc: "KPIs y listados ejecutivos. Vista de referencia hasta conectar métricas reales de la instancia.",
         disabled: true,
         tag: "próximo",
       },
@@ -94,38 +95,38 @@ export default function ReportesClient() {
         href: "/admin/reportes/comercial/leads?tab=comercial",
       },
       {
-        title: "Pipeline (listado + aging) (demo)",
-        desc: "Etapas, tiempo en etapa, oportunidades calientes/frías.",
+        title: "Pipeline (listado + aging)",
+        desc: "Etapas, tiempo en etapa, oportunidades calientes/frías. Vista de referencia hasta conectar datos operativos.",
         disabled: true,
         tag: "próximo",
       },
       {
-        title: "Propuestas (historial) (demo)",
-        desc: "Listado de PDFs por lead, fechas, estado, export.",
+        title: "Propuestas (historial)",
+        desc: "Listado de PDFs por lead, fechas, estado, export. Vista de referencia hasta conectar datos operativos.",
         disabled: true,
         tag: "próximo",
       },
     ],
     marketing: [
       {
-        title: "Origen / Campañas / Conversión (demo)",
-        desc: "Rendimiento por canal y atribución.",
+        title: "Origen / Campañas / Conversión",
+        desc: "Rendimiento por canal y atribución. Vista de referencia hasta conectar datos operativos.",
         disabled: true,
         tag: "próximo",
       },
     ],
     administracion: [
       {
-        title: "Pagos / Mora / Renovaciones (demo)",
-        desc: "Control administrativo (cuando existan tablas).",
+        title: "Pagos / Mora / Renovaciones",
+        desc: "Control administrativo. Vista de referencia cuando existan tablas conectadas.",
         disabled: true,
         tag: "próximo",
       },
     ],
     tecnico: [
       {
-        title: "Tickets / Estado portal / Incidentes (demo)",
-        desc: "Salud técnica y backlog.",
+        title: "Tickets / Estado portal / Incidentes",
+        desc: "Salud técnica y backlog. Vista de referencia hasta conectar registros operativos.",
         disabled: true,
         tag: "próximo",
       },
