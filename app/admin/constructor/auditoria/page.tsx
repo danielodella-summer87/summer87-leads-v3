@@ -2193,6 +2193,31 @@ const INSTALLER_VISUAL_BLOCKED_ACTIONS = [
 const INSTALLER_VISUAL_VERDICT =
   "El Instalador CRM debe convertir el diseño validado en configuración operativa, pero toda acción sensible requiere validación humana. Esta sección anticipa el flujo futuro y no modifica datos ni activa módulos reales.";
 
+/** Fase 7T: checklist estático del prototipo CTA (solo lectura en UI). */
+const INSTALLER_FUTURE_CTA_CHECKLIST = [
+  "Constructor completo.",
+  "Auditoría validada.",
+  "Preset revisado.",
+  "Instalador humano confirmado.",
+  "Acciones sensibles bloqueadas.",
+] as const;
+
+const INSTALLER_FUTURE_CTA_VERDICT =
+  "El CTA definitivo solo deberá habilitarse cuando el Instalador tenga confirmación humana y una matriz de activación aprobada.";
+
+/** Fase 7T: nombre para prototipo «Crear CRM para …» (solo lectura; no persiste). */
+function getInstallerPreviewCompanyName(
+  technicalJson: Record<string, unknown> | null | undefined
+): string {
+  const root = technicalJson ?? {};
+  const empresa = asRecord(root.empresa);
+  const comercial = trimStrTechnical(empresa.nombreComercial);
+  if (comercial.length > 0) return comercial;
+  const legal = trimStrTechnical(empresa.nombreLegal);
+  if (legal.length > 0) return legal;
+  return "esta empresa";
+}
+
 function etapasTienenResponsable(etapasUnknown: unknown): boolean {
   if (!Array.isArray(etapasUnknown)) return false;
   for (const raw of etapasUnknown) {
@@ -6178,6 +6203,48 @@ export default function AuditoriaPage() {
                   <li key={line}>{line}</li>
                 ))}
               </ul>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                CTA futuro del Instalador
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Vista previa · No ejecuta acciones
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-left text-sm font-semibold text-slate-400 opacity-90"
+                >
+                  Crear CRM para {getInstallerPreviewCompanyName(technicalJson)}
+                </button>
+                <p className="mt-3 text-[11px] leading-relaxed text-slate-600">
+                  Este botón representa el paso futuro del Instalador. En esta fase no crea Supabase, no genera
+                  usuarios, no activa módulos y no modifica datos.
+                </p>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Checklist orientativo (solo visual)
+                </p>
+                <ul className="space-y-2">
+                  {INSTALLER_FUTURE_CTA_CHECKLIST.map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs leading-snug text-slate-700"
+                    >
+                      <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-[11px] font-medium leading-relaxed text-slate-600">
+                  {INSTALLER_FUTURE_CTA_VERDICT}
+                </p>
+              </div>
             </div>
 
             <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
