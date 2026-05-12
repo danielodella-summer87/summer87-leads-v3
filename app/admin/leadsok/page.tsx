@@ -156,15 +156,15 @@ export default function LeadsOkPage() {
     <PageContainer>
       {/* A) Header superior */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">LeadsOk</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Recorrido comercial guiado</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Versión guiada de la gestión comercial por etapas y pasos.
+          Seguí el proceso comercial por etapas y pasos, con datos reales del CRM.
         </p>
 
-        {/* Lead de prueba */}
+        {/* Lead seleccionado para el recorrido */}
         <div className="mt-4">
           <label htmlFor="leadsok-lead-select" className="block text-xs font-medium text-slate-600">
-            Lead de prueba
+            Lead seleccionado
           </label>
           <select
             id="leadsok-lead-select"
@@ -190,12 +190,12 @@ export default function LeadsOkPage() {
           )}
         </div>
 
-        {/* B) Selector Lista | Kanban | Ficha */}
+        {/* B) Selector Lista | Kanban | Recorrido */}
         <div className="mt-4 flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-1">
           {[
             { id: "lista" as const, label: "Lista", Icon: List, href: "/admin/leads" },
             { id: "kanban" as const, label: "Kanban", Icon: LayoutGrid, href: "/admin/leads/kanban" },
-            { id: "ficha" as const, label: "Ficha", Icon: FileText, href: "/admin/leadsok" },
+            { id: "ficha" as const, label: "Recorrido", Icon: FileText, href: "/admin/leadsok" },
           ].map(({ id, label, Icon, href }) => {
             const isActive =
               (id === "ficha" && pathname?.startsWith("/admin/leadsok")) ||
@@ -223,7 +223,7 @@ export default function LeadsOkPage() {
           loadingLead && selectedLeadId ? (
             <p className="text-sm text-slate-500">Cargando datos del lead…</p>
           ) : (
-            <p className="text-sm text-slate-600">Selecciona un lead para ver el flujo guiado.</p>
+            <p className="text-sm text-slate-600">Seleccioná un lead para revisar su recorrido comercial.</p>
           )
         ) : (
           (() => {
@@ -591,7 +591,7 @@ export default function LeadsOkPage() {
         </p>
         <div className="mt-4 rounded-xl border-2 border-slate-200 bg-white p-4 shadow-sm min-h-[320px]">
           {!selectedLeadId ? (
-            <p className="text-sm text-slate-500 py-8 text-center">Selecciona un lead para ver el workspace.</p>
+            <p className="text-sm text-slate-500 py-8 text-center">Seleccioná un lead para abrir el workspace del paso activo.</p>
           ) : loadingLead && !fullLead ? (
             <p className="text-sm text-slate-500 py-8 text-center">Cargando datos del lead…</p>
           ) : activeWorkspaceStep >= 1 && activeWorkspaceStep <= 3 ? (
@@ -628,8 +628,10 @@ export default function LeadsOkPage() {
 
       {/* E) Acciones auxiliares */}
       <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50/50 p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Acciones auxiliares</h2>
-        <p className="mt-1 text-sm text-slate-500">Contenedor base para acciones auxiliares (sin lógica en esta fase).</p>
+        <h2 className="text-lg font-semibold text-slate-900">Acciones futuras</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Espacio reservado para acciones operativas futuras. No ejecuta automatizaciones.
+        </p>
         <div className="mt-4 min-h-[80px] rounded-lg border border-dashed border-slate-200 bg-white/50" />
       </div>
     </PageContainer>
