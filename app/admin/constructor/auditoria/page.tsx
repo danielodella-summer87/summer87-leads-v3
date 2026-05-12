@@ -2205,6 +2205,21 @@ const INSTALLER_FUTURE_CTA_CHECKLIST = [
 const INSTALLER_FUTURE_CTA_VERDICT =
   "El CTA definitivo solo deberá habilitarse cuando el Instalador tenga confirmación humana y una matriz de activación aprobada.";
 
+/** Fase 7U: componentes representativos del paquete instalable (solo lectura en UI). */
+const INSTALLER_PACKAGE_PREVIEW_COMPONENTS = [
+  "Identidad de empresa",
+  "Módulos CRM habilitados",
+  "Pipeline comercial",
+  "Campos y formularios",
+  "Reglas de permisos",
+  "Integraciones previstas",
+  "Reglas de IA permitidas",
+  "Auditoría previa a instalación",
+] as const;
+
+const INSTALLER_PACKAGE_PREVIEW_VERDICT =
+  "El paquete instalable todavía es una representación visual. La generación real del paquete, la creación de instancia y la activación del CRM operativo quedan bloqueadas hasta una fase posterior.";
+
 /** Fase 7T: nombre para prototipo «Crear CRM para …» (solo lectura; no persiste). */
 function getInstallerPreviewCompanyName(
   technicalJson: Record<string, unknown> | null | undefined
@@ -6244,6 +6259,54 @@ export default function AuditoriaPage() {
                 <p className="mt-4 text-[11px] font-medium leading-relaxed text-slate-600">
                   {INSTALLER_FUTURE_CTA_VERDICT}
                 </p>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                Paquete instalable del CRM
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Vista previa · No exporta todavía
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-left text-sm font-semibold text-slate-400 opacity-90"
+                >
+                  Exportar paquete instalable
+                </button>
+                <p className="mt-3 text-[11px] leading-relaxed text-slate-600">
+                  Este paquete representa la configuración que más adelante podría usarse para crear el CRM
+                  operativo de {getInstallerPreviewCompanyName(technicalJson)}. En esta fase no se exporta, no se
+                  instala y no se modifican datos.
+                </p>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Contenido representativo del paquete (solo visual)
+                </p>
+                <ul className="space-y-2">
+                  {INSTALLER_PACKAGE_PREVIEW_COMPONENTS.map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs leading-snug text-slate-700"
+                    >
+                      <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div
+                  className="mt-4 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2.5"
+                  role="note"
+                >
+                  <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
+                    {INSTALLER_PACKAGE_PREVIEW_VERDICT}
+                  </p>
+                </div>
               </div>
             </div>
 
