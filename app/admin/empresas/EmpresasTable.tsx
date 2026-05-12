@@ -288,7 +288,7 @@ export default function EmpresasTable() {
         return;
       }
 
-      router.push(`/admin/leads87/${leadId.trim()}`);
+      router.push(`/admin/leads/${leadId.trim()}`);
     } catch (e: any) {
       setError(e?.message ?? "Error al convertir");
     } finally {
@@ -635,7 +635,7 @@ export default function EmpresasTable() {
                     <div className="min-w-0 text-center text-slate-700">
                       {e.converted_lead_id?.trim() ? (
                         <Link
-                          href={`/admin/leads87/${e.converted_lead_id.trim()}`}
+                          href={`/admin/leads/${e.converted_lead_id.trim()}`}
                           className="text-xs font-medium text-blue-700 hover:underline"
                         >
                           Abrir

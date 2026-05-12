@@ -409,7 +409,7 @@ export default function EmpresaDetailPage() {
         return;
       }
 
-      router.push(`/admin/leads87/${leadId}`);
+      router.push(`/admin/leads/${leadId}`);
     } catch (e: any) {
       setError(e.message || "Error al convertir");
     }
@@ -472,7 +472,7 @@ export default function EmpresaDetailPage() {
                 <div className="flex flex-col items-start gap-0.5">
                   {convertedLeadId ? (
                     <Link
-                      href={`/admin/leads87/${convertedLeadId}`}
+                      href={`/admin/leads/${convertedLeadId}`}
                       className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
                     >
                       Abrir lead vinculado
@@ -546,7 +546,7 @@ export default function EmpresaDetailPage() {
               </p>
             </div>
             <Link
-              href={`/admin/leads87/${convertedLeadId}`}
+              href={`/admin/leads/${convertedLeadId}`}
               className="shrink-0 rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100/80"
             >
               Abrir lead vinculado
@@ -569,7 +569,7 @@ export default function EmpresaDetailPage() {
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
-              href={`/admin/leads87/${convertConflict.leadId}`}
+              href={`/admin/leads/${convertConflict.leadId}`}
               className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-100/80"
             >
               Abrir lead en LEADS87

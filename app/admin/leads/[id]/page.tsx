@@ -3712,7 +3712,7 @@ export default function LeadDetailPage() {
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        router.push(`/admin/leads87/${encodeURIComponent(id)}`)
+                                        router.push(`/admin/leads/${encodeURIComponent(id)}`)
                                       }
                                       className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
                                     >
@@ -5074,7 +5074,7 @@ export default function LeadDetailPage() {
                           >
                             <button
                               type="button"
-                              onClick={() => router.push(`/admin/leads87/${encodeURIComponent(id)}`)}
+                              onClick={() => router.push(`/admin/leads/${encodeURIComponent(id)}`)}
                               className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-emerald-700"
                             >
                               {nextStepConfig.ctaLabel}
@@ -5116,7 +5116,7 @@ export default function LeadDetailPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => router.push(`/admin/leads87/${encodeURIComponent(id)}`)}
+                            onClick={() => router.push(`/admin/leads/${encodeURIComponent(id)}`)}
                             className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-emerald-700"
                           >
                             {nextStepConfig.ctaLabel}
