@@ -57,6 +57,25 @@ const PAYLOAD_SECTION_KEYS: { key: string; label: string }[] = [
   { key: "activation_checklist", label: "Checklist de activación" },
 ];
 
+const POST_PILOT_PREP_CHECKLIST: string[] = [
+  "Validar cliente destino",
+  "Revisar configuración mínima del CRM",
+  "Confirmar módulos incluidos",
+  "Confirmar permisos iniciales",
+  "Confirmar integraciones permitidas",
+  "Preparar plan de instalación piloto",
+  "Registrar aprobación final antes de ejecutar",
+];
+
+const POST_PILOT_BLOCKED_IN_UI: string[] = [
+  "Crear tenant",
+  "Crear usuarios",
+  "Enviar invitaciones",
+  "Escribir en Zeta",
+  "Instalar CRM automáticamente",
+  "Publicar en producción",
+];
+
 function formatDt(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -268,6 +287,14 @@ export default function PaqueteDraftDetailPage() {
   const isRejectedState =
     meta &&
     (meta.status === "rejected" || data?.humanConfirmationStatus === "rejected");
+  const humanSt = data?.humanConfirmationStatus ?? "";
+  const showPostApprovalPilotPrep =
+    !!meta &&
+    !!data &&
+    meta.status !== "rejected" &&
+    humanSt !== "rejected" &&
+    humanSt !== "pending" &&
+    (meta.status === "approved_for_pilot" || humanSt === "approved");
   const warningsCount = Array.isArray(data?.warnings) ? data.warnings.length : 0;
   const blockedCount = Array.isArray(data?.blockedActions) ? data.blockedActions.length : 0;
   const busy = actionKind !== null;
@@ -477,6 +504,84 @@ export default function PaqueteDraftDetailPage() {
                 </p>
               )}
             </section>
+
+            {showPostApprovalPilotPrep && meta && data ? (
+              <section
+                className="rounded-xl border border-slate-200 bg-slate-50/80 p-5"
+                aria-labelledby="post-approval-pilot-prep-title"
+              >
+                <h2
+                  id="post-approval-pilot-prep-title"
+                  className="text-sm font-semibold text-slate-900"
+                >
+                  Siguiente paso: preparación de instalación piloto
+                </h2>
+                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-700">
+                  <p>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                      Estado
+                    </span>
+                    {": "}
+                    <span className="font-medium text-slate-800">No ejecutado</span>
+                  </p>
+                  <p>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Tipo</span>
+                    {": "}
+                    <span className="font-medium text-slate-800">Vista previa operativa</span>
+                  </p>
+                  <p>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                      Alcance
+                    </span>
+                    {": "}
+                    <span className="font-medium text-slate-800">preparación controlada</span>
+                  </p>
+                  <p>
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Riesgo</span>
+                    {": "}
+                    <span className="font-medium text-slate-800">sin ejecución automática</span>
+                  </p>
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-700">
+                  Este borrador ya fue aprobado para piloto. El siguiente paso será preparar una instalación
+                  controlada, pero esta pantalla todavía no crea tenant, usuarios ni CRM. Solo deja visible el
+                  camino operativo posterior a la aprobación.
+                </p>
+                <div className="mt-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Checklist visual
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                    {POST_PILOT_PREP_CHECKLIST.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mt-5 rounded-lg border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Acciones bloqueadas en esta fase
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                    {POST_PILOT_BLOCKED_IN_UI.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mt-5 flex flex-col items-start gap-2">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-80"
+                  >
+                    Preparar instalación piloto — Próximamente
+                  </button>
+                  <p className="text-xs text-slate-500">
+                    Botón informativo. No ejecuta acciones en esta fase.
+                  </p>
+                </div>
+              </section>
+            ) : null}
 
             <JsonBlock title="Warnings" value={data.warnings} />
             <JsonBlock title="Acciones bloqueadas (blocked_actions)" value={data.blockedActions} />
