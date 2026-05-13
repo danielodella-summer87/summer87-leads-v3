@@ -217,6 +217,16 @@ export default function ConstructorCRMPage() {
             })}
           </div>
 
+          <p className="mb-6 text-center text-sm text-slate-500">
+            <Link
+              href="/admin/constructor/paquetes"
+              className="font-medium text-slate-700 underline-offset-2 hover:underline"
+            >
+              Borradores de paquete instalable
+            </Link>
+            <span className="text-slate-400"> · solo lectura</span>
+          </p>
+
           {/* ── CTA ────────────────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center gap-4">
             <Link

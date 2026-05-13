@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { requirePermission } from "@/lib/rbac/requirePermission";
+import {
+  jsonError,
+  requireConstructorInstallablePackageAccess,
+  supabaseServiceRoleClient,
+} from "@/lib/admin/constructorInstallablePackageAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -52,12 +55,6 @@ type GenerateBody = {
   includeSampleData?: unknown;
 };
 
-type AccessUser = { id: string };
-
-function jsonError(status: number, code: string, message: string) {
-  return NextResponse.json({ ok: false, code, message }, { status });
-}
-
 function isUuid(value: string): boolean {
   return UUID_RE.test(value);
 }
@@ -83,22 +80,6 @@ function containsSecretLikeKey(obj: unknown, seen: WeakSet<object> = new WeakSet
     if (containsSecretLikeKey(rec[key], seen)) return true;
   }
   return false;
-}
-
-function supabaseServiceRoleClient(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-async function requireConstructorPackageAccess(req: NextRequest): Promise<AccessUser | null> {
-  if (process.env.NODE_ENV !== "production") {
-    return { id: "dev-preview" };
-  }
-  const user = await requirePermission(req, "config.read");
-  if (!user) return null;
-  return user;
 }
 
 function pickString(v: unknown): string | undefined {
@@ -192,7 +173,7 @@ function buildWarningsAndIds(params: {
  * Preview en memoria o persistencia de borrador (draft) en installer_package_drafts. Sin instalación CRM.
  */
 export async function POST(req: NextRequest) {
-  const user = await requireConstructorPackageAccess(req);
+  const user = await requireConstructorInstallablePackageAccess(req);
   if (!user) {
     return jsonError(403, "FORBIDDEN", "Not authorized to generate installable package preview.");
   }
