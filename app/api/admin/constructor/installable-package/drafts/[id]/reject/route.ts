@@ -70,6 +70,8 @@ function validateConfirmable(row: DraftReadRow): ReturnType<typeof jsonError> | 
 
 /**
  * POST /api/admin/constructor/installable-package/drafts/[id]/reject
+ * Trazabilidad mínima: rejected_by, rejected_at, rejection_reason, reviewed_* y trigger updated_at.
+ * No elimina fila ni instala CRM.
  */
 export async function POST(
   req: NextRequest,
@@ -167,6 +169,9 @@ export async function POST(
   return NextResponse.json(
     {
       ok: true,
+      packageId: u.id,
+      status: u.status,
+      human_confirmation_status: u.human_confirmation_status,
       draft: {
         id: u.id,
         status: u.status,
