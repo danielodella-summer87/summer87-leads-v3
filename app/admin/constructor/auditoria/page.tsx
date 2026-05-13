@@ -2254,6 +2254,21 @@ const INSTALLER_MANIFEST_PREVIEW_ITEMS = [
 const INSTALLER_MANIFEST_PREVIEW_VERDICT =
   "El manifiesto instalable todavía es una vista estática. No se genera ningún archivo real, no se exporta JSON, no se crea instancia y no se ejecuta ninguna acción operativa.";
 
+/** Fase 7Y: campos previstos del JSON de exportación simulada (solo lectura en UI). */
+const INSTALLER_JSON_EXPORT_PREVIEW_FIELDS = [
+  "packageVersion",
+  "generatedAt",
+  "targetClientName",
+  "installationMode",
+  "requiresHumanConfirmation",
+  "manifestFiles",
+  "blockedActions",
+  "validationStatus",
+] as const;
+
+const INSTALLER_JSON_EXPORT_PREVIEW_VERDICT =
+  "La exportación JSON todavía es simulada. No se genera ningún archivo, no se descarga contenido, no se llama a APIs y no se inicia ninguna instalación.";
+
 /** Fase 7T: nombre para prototipo «Crear CRM para …» (solo lectura; no persiste). */
 function getInstallerPreviewCompanyName(
   technicalJson: Record<string, unknown> | null | undefined
@@ -6479,6 +6494,68 @@ export default function AuditoriaPage() {
                 >
                   <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
                     {INSTALLER_MANIFEST_PREVIEW_VERDICT}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                Export JSON simulado
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Vista previa · JSON no exportado
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  Este bloque muestra cómo podría resumirse una futura exportación JSON del paquete instalable para{" "}
+                  {getInstallerPreviewCompanyName(technicalJson)}. En esta fase no se genera ni descarga ningún
+                  archivo.
+                </p>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Ejemplo conceptual (solo visual)
+                </p>
+                <div className="overflow-x-auto rounded-lg border border-slate-700 bg-slate-950 p-3">
+                  <pre className="m-0 text-left">
+                    <code className="font-mono text-[11px] leading-relaxed whitespace-pre text-slate-200">
+                      {`{
+  "packageVersion": "preview",
+  "targetClientName": ${JSON.stringify(getInstallerPreviewCompanyName(technicalJson))},
+  "installationMode": "human_review_required",
+  "requiresHumanConfirmation": true,
+  "validationStatus": "preview_only",
+  "blockedActions": [
+    "create_supabase",
+    "create_users",
+    "activate_ai",
+    "export_real_json"
+  ]
+}`}
+                    </code>
+                  </pre>
+                </div>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Campos previstos del JSON
+                </p>
+                <ul className="space-y-2">
+                  {INSTALLER_JSON_EXPORT_PREVIEW_FIELDS.map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 font-mono text-[11px] leading-snug text-slate-700"
+                    >
+                      <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div
+                  className="mt-4 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2.5"
+                  role="note"
+                >
+                  <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
+                    {INSTALLER_JSON_EXPORT_PREVIEW_VERDICT}
                   </p>
                 </div>
               </div>
