@@ -2236,6 +2236,24 @@ const INSTALLER_READINESS_CHECKLIST_ITEMS = [
 const INSTALLER_READINESS_VERDICT =
   "La activación real permanece bloqueada. Este checklist documenta las condiciones mínimas que deberían cumplirse antes de habilitar una exportación operativa, crear una instancia o activar el CRM para el cliente.";
 
+/** Fase 7X: archivos conceptuales del manifiesto instalable (solo lectura en UI). */
+const INSTALLER_MANIFEST_PREVIEW_ITEMS = [
+  "installation_manifest.json",
+  "client_identity.json",
+  "crm_modules_config.json",
+  "pipeline_config.json",
+  "lead_fields_config.json",
+  "permissions_config.json",
+  "ai_rules_config.json",
+  "reports_config.json",
+  "integrations_config.json",
+  "installer_decisions.json",
+  "activation_checklist.json",
+] as const;
+
+const INSTALLER_MANIFEST_PREVIEW_VERDICT =
+  "El manifiesto instalable todavía es una vista estática. No se genera ningún archivo real, no se exporta JSON, no se crea instancia y no se ejecuta ninguna acción operativa.";
+
 /** Fase 7T: nombre para prototipo «Crear CRM para …» (solo lectura; no persiste). */
 function getInstallerPreviewCompanyName(
   technicalJson: Record<string, unknown> | null | undefined
@@ -6387,6 +6405,80 @@ export default function AuditoriaPage() {
                 >
                   <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
                     {INSTALLER_READINESS_VERDICT}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                Manifiesto instalable del CRM
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Vista previa · Manifiesto no generado
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  Este manifiesto resume cómo podría estructurarse el paquete técnico para instalar el CRM operativo de{" "}
+                  {getInstallerPreviewCompanyName(technicalJson)}. En esta fase no se genera ningún archivo real.
+                </p>
+                <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-3">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Resumen estático del manifiesto
+                  </p>
+                  <dl className="space-y-2 text-xs leading-snug text-slate-800">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Cliente destino:</dt>
+                      <dd className="min-w-0 font-medium">
+                        {getInstallerPreviewCompanyName(technicalJson)}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Modo de instalación:</dt>
+                      <dd className="min-w-0">Pendiente de confirmación humana</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Entorno destino:</dt>
+                      <dd className="min-w-0">No definido todavía</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Validación humana:</dt>
+                      <dd className="min-w-0">Requerida</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Acciones bloqueadas:</dt>
+                      <dd className="min-w-0">
+                        Instalación, exportación real, usuarios, Supabase y producción
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Estado del paquete:</dt>
+                      <dd className="min-w-0">Vista previa</dd>
+                    </div>
+                  </dl>
+                </div>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Archivos conceptuales del manifiesto (solo visual)
+                </p>
+                <ul className="space-y-2">
+                  {INSTALLER_MANIFEST_PREVIEW_ITEMS.map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 font-mono text-[11px] leading-snug text-slate-700"
+                    >
+                      <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div
+                  className="mt-4 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2.5"
+                  role="note"
+                >
+                  <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
+                    {INSTALLER_MANIFEST_PREVIEW_VERDICT}
                   </p>
                 </div>
               </div>
