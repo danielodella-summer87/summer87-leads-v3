@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Copy, Check } from "lucide-react";
+import { ArrowLeft, Copy, Check, Loader2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 
 type DraftMetadata = {
@@ -42,6 +42,54 @@ type DraftDetailResponse = {
 };
 
 type ApiErrJson = { ok?: boolean; code?: string; message?: string };
+
+type SimulatePreinstallCheck = {
+  key: string;
+  label: string;
+  status: "passed" | "warning" | "blocked" | "failed";
+  message: string;
+};
+
+type SimulatePreinstallResponse = {
+  ok: boolean;
+  packageId: string;
+  mode: string;
+  simulationStatus: string;
+  canProceedToPilotPreparation: boolean;
+  riskLevel: string;
+  summary: string;
+  checks: SimulatePreinstallCheck[];
+  missingInputs: string[];
+  simulatedActions: string[];
+  blockedActions: string[];
+  nextRecommendedAction: string;
+};
+
+function simulateCheckBadgeClass(status: string): string {
+  switch (status) {
+    case "passed":
+      return "border border-emerald-200 bg-emerald-50 text-emerald-900";
+    case "warning":
+      return "border border-amber-200 bg-amber-50 text-amber-900";
+    case "failed":
+      return "border border-rose-200 bg-rose-50 text-rose-900";
+    case "blocked":
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-800";
+  }
+}
+
+function riskBadgeClass(level: string): string {
+  switch (level) {
+    case "high":
+      return "border border-rose-200 bg-rose-50 text-rose-900";
+    case "medium":
+      return "border border-amber-200 bg-amber-50 text-amber-900";
+    case "low":
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-800";
+  }
+}
 
 const PAYLOAD_SECTION_KEYS: { key: string; label: string }[] = [
   { key: "installation_manifest", label: "Manifest" },
@@ -154,6 +202,10 @@ export default function PaqueteDraftDetailPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const successClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [simulateLoading, setSimulateLoading] = useState(false);
+  const [simulateResult, setSimulateResult] = useState<SimulatePreinstallResponse | null>(null);
+  const [simulateError, setSimulateError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -179,6 +231,11 @@ export default function PaqueteDraftDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setSimulateResult(null);
+    setSimulateError(null);
+  }, [id]);
 
   async function copyId() {
     if (!id || !navigator.clipboard?.writeText) return;
@@ -245,6 +302,35 @@ export default function PaqueteDraftDetailPage() {
       setActionError(e instanceof Error ? e.message : "Error de red");
     } finally {
       setActionKind(null);
+    }
+  }
+
+  async function runSimulatePreinstall() {
+    if (!id || simulateLoading) return;
+    setSimulateLoading(true);
+    setSimulateError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulate-preinstall`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+          body: JSON.stringify({}),
+        }
+      );
+      const json = (await res.json()) as SimulatePreinstallResponse & ApiErrJson;
+      if (!res.ok || !json.ok) {
+        const msg = [json?.code, json?.message].filter(Boolean).join(" — ") || `Error HTTP ${res.status}`;
+        setSimulateError(msg);
+        setSimulateResult(null);
+        return;
+      }
+      setSimulateResult(json as SimulatePreinstallResponse);
+    } catch (e: unknown) {
+      setSimulateError(e instanceof Error ? e.message : "Error de red");
+      setSimulateResult(null);
+    } finally {
+      setSimulateLoading(false);
     }
   }
 
@@ -506,81 +592,225 @@ export default function PaqueteDraftDetailPage() {
             </section>
 
             {showPostApprovalPilotPrep && meta && data ? (
-              <section
-                className="rounded-xl border border-slate-200 bg-slate-50/80 p-5"
-                aria-labelledby="post-approval-pilot-prep-title"
-              >
-                <h2
-                  id="post-approval-pilot-prep-title"
-                  className="text-sm font-semibold text-slate-900"
+              <>
+                <section
+                  className="rounded-xl border border-slate-200 bg-slate-50/80 p-5"
+                  aria-labelledby="post-approval-pilot-prep-title"
                 >
-                  Siguiente paso: preparación de instalación piloto
-                </h2>
-                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-700">
-                  <p>
-                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                      Estado
-                    </span>
-                    {": "}
-                    <span className="font-medium text-slate-800">No ejecutado</span>
-                  </p>
-                  <p>
-                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Tipo</span>
-                    {": "}
-                    <span className="font-medium text-slate-800">Vista previa operativa</span>
-                  </p>
-                  <p>
-                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                      Alcance
-                    </span>
-                    {": "}
-                    <span className="font-medium text-slate-800">preparación controlada</span>
-                  </p>
-                  <p>
-                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Riesgo</span>
-                    {": "}
-                    <span className="font-medium text-slate-800">sin ejecución automática</span>
-                  </p>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-slate-700">
-                  Este borrador ya fue aprobado para piloto. El siguiente paso será preparar una instalación
-                  controlada, pero esta pantalla todavía no crea tenant, usuarios ni CRM. Solo deja visible el
-                  camino operativo posterior a la aprobación.
-                </p>
-                <div className="mt-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Checklist visual
-                  </p>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                    {POST_PILOT_PREP_CHECKLIST.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="mt-5 rounded-lg border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Acciones bloqueadas en esta fase
-                  </p>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                    {POST_PILOT_BLOCKED_IN_UI.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="mt-5 flex flex-col items-start gap-2">
-                  <button
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-80"
+                  <h2
+                    id="post-approval-pilot-prep-title"
+                    className="text-sm font-semibold text-slate-900"
                   >
-                    Preparar instalación piloto — Próximamente
-                  </button>
-                  <p className="text-xs text-slate-500">
-                    Botón informativo. No ejecuta acciones en esta fase.
+                    Siguiente paso: preparación de instalación piloto
+                  </h2>
+                  <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-700">
+                    <p>
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Estado
+                      </span>
+                      {": "}
+                      <span className="font-medium text-slate-800">No ejecutado</span>
+                    </p>
+                    <p>
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Tipo
+                      </span>
+                      {": "}
+                      <span className="font-medium text-slate-800">Vista previa operativa</span>
+                    </p>
+                    <p>
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Alcance
+                      </span>
+                      {": "}
+                      <span className="font-medium text-slate-800">preparación controlada</span>
+                    </p>
+                    <p>
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Riesgo
+                      </span>
+                      {": "}
+                      <span className="font-medium text-slate-800">sin ejecución automática</span>
+                    </p>
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-700">
+                    Este borrador ya fue aprobado para piloto. El siguiente paso será preparar una instalación
+                    controlada, pero esta pantalla todavía no crea tenant, usuarios ni CRM. Solo deja visible el
+                    camino operativo posterior a la aprobación.
                   </p>
-                </div>
-              </section>
+                  <div className="mt-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Checklist visual
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                      {POST_PILOT_PREP_CHECKLIST.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Acciones bloqueadas en esta fase
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                      {POST_PILOT_BLOCKED_IN_UI.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <p className="mt-5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-600">
+                    <span className="font-semibold text-slate-800">Simulación (solo lectura). </span>
+                    Esta simulación no crea tenant, no crea usuarios, no instala CRM y no escribe en Zeta.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => void runSimulatePreinstall()}
+                      disabled={simulateLoading || !id}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {simulateLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          Simulando…
+                        </>
+                      ) : (
+                        "Simular preinstalación"
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-80"
+                    >
+                      Preparar instalación piloto — Próximamente
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Botón &quot;Próximamente&quot; informativo. &quot;Simular preinstalación&quot; solo consulta el
+                    servidor en modo simulación; no modifica el borrador.
+                  </p>
+                </section>
+
+                {simulateError ? (
+                  <div
+                    className={`rounded-xl border p-4 text-sm ${
+                      simulateError.includes("DRAFT_NOT_FOUND")
+                        ? "border-red-200 bg-red-50 text-red-800"
+                        : "border-amber-200 bg-amber-50 text-amber-950"
+                    }`}
+                    role="alert"
+                  >
+                    {simulateError}
+                  </div>
+                ) : null}
+
+                {simulateResult ? (
+                  <section
+                    className="rounded-xl border border-slate-200 bg-white p-5"
+                    aria-labelledby="simulate-result-title"
+                  >
+                    <h2 id="simulate-result-title" className="text-sm font-semibold text-slate-900">
+                      Resultado de simulación
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Modo: {simulateResult.mode} · Estado: {simulateResult.simulationStatus}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-700">
+                      <p>
+                        <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                          Puede avanzar a preparación piloto
+                        </span>
+                        {": "}
+                        <span className="font-semibold text-slate-900">
+                          {simulateResult.canProceedToPilotPreparation ? "Sí" : "No"}
+                        </span>
+                      </p>
+                      <p className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                          Nivel de riesgo
+                        </span>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${riskBadgeClass(simulateResult.riskLevel)}`}
+                        >
+                          {simulateResult.riskLevel}
+                        </span>
+                      </p>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-700">{simulateResult.summary}</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Esta simulación no crea tenant, no crea usuarios, no instala CRM y no escribe en Zeta.
+                    </p>
+
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Checks</p>
+                      <ul className="mt-2 space-y-2">
+                        {simulateResult.checks.map((c) => (
+                          <li
+                            key={c.key}
+                            className="flex flex-col gap-1 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-slate-900">{c.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-600">{c.message}</p>
+                            </div>
+                            <span
+                              className={`shrink-0 self-start rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${simulateCheckBadgeClass(c.status)}`}
+                            >
+                              {c.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Faltantes / revisión
+                        </p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                          {simulateResult.missingInputs.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Acciones simuladas (futuro)
+                        </p>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                          {simulateResult.simulatedActions.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="mt-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Acciones bloqueadas (simulación)
+                      </p>
+                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                        {simulateResult.blockedActions.map((code) => (
+                          <li
+                            key={code}
+                            className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-800"
+                          >
+                            {code}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <p className="mt-5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                      <span className="font-semibold text-slate-900">Próximo paso sugerido: </span>
+                      {simulateResult.nextRecommendedAction}
+                    </p>
+                  </section>
+                ) : null}
+              </>
             ) : null}
 
             <JsonBlock title="Warnings" value={data.warnings} />
