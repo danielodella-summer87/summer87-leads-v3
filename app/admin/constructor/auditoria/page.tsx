@@ -2220,6 +2220,22 @@ const INSTALLER_PACKAGE_PREVIEW_COMPONENTS = [
 const INSTALLER_PACKAGE_PREVIEW_VERDICT =
   "El paquete instalable todavía es una representación visual. La generación real del paquete, la creación de instancia y la activación del CRM operativo quedan bloqueadas hasta una fase posterior.";
 
+/** Fase 7V: condiciones mínimas antes de activación/exportación real (solo lectura en UI). */
+const INSTALLER_READINESS_CHECKLIST_ITEMS = [
+  "Auditoría del Constructor aprobada",
+  "Empresa identificada",
+  "Módulos CRM definidos",
+  "Pipeline comercial revisado",
+  "Campos y formularios revisados",
+  "Permisos internos definidos",
+  "Integraciones marcadas como activas o pendientes",
+  "Reglas de IA revisadas",
+  "Confirmación humana pendiente",
+] as const;
+
+const INSTALLER_READINESS_VERDICT =
+  "La activación real permanece bloqueada. Este checklist documenta las condiciones mínimas que deberían cumplirse antes de habilitar una exportación operativa, crear una instancia o activar el CRM para el cliente.";
+
 /** Fase 7T: nombre para prototipo «Crear CRM para …» (solo lectura; no persiste). */
 function getInstallerPreviewCompanyName(
   technicalJson: Record<string, unknown> | null | undefined
@@ -6305,6 +6321,72 @@ export default function AuditoriaPage() {
                 >
                   <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
                     {INSTALLER_PACKAGE_PREVIEW_VERDICT}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                Checklist previo a activación real
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                    Bloqueado · Requiere validación humana
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  Antes de convertir el diseño en un CRM operativo para{" "}
+                  {getInstallerPreviewCompanyName(technicalJson)}, el instalador debería validar estas condiciones
+                  mínimas. En esta fase no se habilita ninguna acción real.
+                </p>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Condiciones mínimas (solo visual)
+                </p>
+                <ul className="space-y-2">
+                  {INSTALLER_READINESS_CHECKLIST_ITEMS.map((item, idx) => {
+                    const isFinalPending =
+                      idx === INSTALLER_READINESS_CHECKLIST_ITEMS.length - 1;
+                    return (
+                      <li
+                        key={item}
+                        className={
+                          isFinalPending
+                            ? "flex flex-col gap-1.5 rounded-lg border border-dashed border-amber-300/90 bg-amber-50/50 px-3 py-2.5 text-xs leading-snug text-amber-950/95"
+                            : "flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs leading-snug text-slate-700"
+                        }
+                      >
+                        {isFinalPending ? (
+                          <div className="flex items-start gap-2">
+                            <Square
+                              className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                            <div className="min-w-0">
+                              <span className="font-semibold text-amber-950">{item}</span>
+                              <p className="mt-0.5 text-[10px] font-medium leading-snug text-amber-800/90">
+                                Condición final · todavía no resuelta en esta fase
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                            <span>{item}</span>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div
+                  className="mt-4 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2.5"
+                  role="note"
+                >
+                  <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
+                    {INSTALLER_READINESS_VERDICT}
                   </p>
                 </div>
               </div>
