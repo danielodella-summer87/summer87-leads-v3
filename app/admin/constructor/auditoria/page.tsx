@@ -2269,6 +2269,23 @@ const INSTALLER_JSON_EXPORT_PREVIEW_FIELDS = [
 const INSTALLER_JSON_EXPORT_PREVIEW_VERDICT =
   "La exportación JSON todavía es simulada. No se genera ningún archivo, no se descarga contenido, no se llama a APIs y no se inicia ninguna instalación.";
 
+/** Fase 7Z: controles previstos del validador local simulado (solo lectura en UI). */
+const INSTALLER_LOCAL_VALIDATOR_PREVIEW_CHECKS = [
+  "Manifiesto presente",
+  "Cliente destino identificado",
+  "Módulos definidos",
+  "Pipeline revisado",
+  "Campos mínimos definidos",
+  "Permisos previstos",
+  "IA sensible bloqueada",
+  "Integraciones clasificadas",
+  "Acciones destructivas bloqueadas",
+  "Confirmación humana pendiente",
+] as const;
+
+const INSTALLER_LOCAL_VALIDATOR_PREVIEW_VERDICT =
+  "El validador local todavía es una vista estática. No ejecuta validaciones reales, no lee archivos externos, no llama APIs y no habilita instalación.";
+
 /** Fase 7T: nombre para prototipo «Crear CRM para …» (solo lectura; no persiste). */
 function getInstallerPreviewCompanyName(
   technicalJson: Record<string, unknown> | null | undefined
@@ -6556,6 +6573,102 @@ export default function AuditoriaPage() {
                 >
                   <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
                     {INSTALLER_JSON_EXPORT_PREVIEW_VERDICT}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                Validador local del paquete
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Vista previa · Validación no ejecutada
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  Este validador muestra qué controles podrían revisarse antes de instalar el CRM operativo de{" "}
+                  {getInstallerPreviewCompanyName(technicalJson)}. En esta fase no se ejecuta ninguna validación real.
+                </p>
+                <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-3">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Estado del validador
+                  </p>
+                  <dl className="space-y-2 text-xs leading-snug text-slate-800">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Modo:</dt>
+                      <dd className="min-w-0">Vista previa</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Ejecución:</dt>
+                      <dd className="min-w-0">No iniciada</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Resultado:</dt>
+                      <dd className="min-w-0">No vinculante</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Requiere humano:</dt>
+                      <dd className="min-w-0">Sí</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Bloquea instalación:</dt>
+                      <dd className="min-w-0">Sí, hasta confirmación humana</dd>
+                    </div>
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                      <dt className="shrink-0 font-semibold text-slate-600">Fuente evaluada:</dt>
+                      <dd className="min-w-0">Paquete instalable simulado</dd>
+                    </div>
+                  </dl>
+                </div>
+                <p className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Controles previstos
+                </p>
+                <ul className="space-y-2">
+                  {INSTALLER_LOCAL_VALIDATOR_PREVIEW_CHECKS.map((item, idx) => {
+                    const isFinalPending =
+                      idx === INSTALLER_LOCAL_VALIDATOR_PREVIEW_CHECKS.length - 1;
+                    return (
+                      <li
+                        key={item}
+                        className={
+                          isFinalPending
+                            ? "flex flex-col gap-1.5 rounded-lg border border-dashed border-amber-300/90 bg-amber-50/50 px-3 py-2.5 text-xs leading-snug text-amber-950/95"
+                            : "flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-xs leading-snug text-slate-700"
+                        }
+                      >
+                        {isFinalPending ? (
+                          <div className="flex items-start gap-2">
+                            <Square
+                              className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                            <div className="min-w-0">
+                              <span className="font-semibold text-amber-950">{item}</span>
+                              <p className="mt-0.5 text-[10px] font-medium leading-snug text-amber-800/90">
+                                Control final · todavía no resuelto en esta fase
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                            <span>{item}</span>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div
+                  className="mt-4 rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2.5"
+                  role="note"
+                >
+                  <p className="text-[11px] font-medium leading-relaxed text-amber-950/85">
+                    {INSTALLER_LOCAL_VALIDATOR_PREVIEW_VERDICT}
                   </p>
                 </div>
               </div>
