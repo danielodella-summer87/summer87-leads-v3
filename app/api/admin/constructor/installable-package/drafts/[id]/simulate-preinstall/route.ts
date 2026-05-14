@@ -49,9 +49,12 @@ const BLOCKED_ACTION_CODES = [
   "create_tenant",
   "create_users",
   "send_invites",
+  "write_kore",
   "write_zeta",
   "install_crm_automatically",
   "publish_production",
+  "enable_sensitive_automations",
+  "expose_constructor_to_client",
 ] as const;
 
 type CrmSectionStatus = "missing" | "partial" | "ready";

@@ -846,7 +846,7 @@ const FUTURE_EXECUTABLE_TECHNICAL_ACTIONS: {
     key: "apply_crm_base_config",
     label: "Aplicar configuración base CRM",
     estado: "Bloqueado",
-    motivo: "Requiere entorno piloto creado",
+    motivo: "Requiere entorno piloto en fase posterior (aún no ejecutado desde aquí)",
   },
   {
     key: "apply_pipeline_config",
@@ -2344,9 +2344,9 @@ export default function PaqueteDraftDetailPage() {
               <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
                 <p className="font-semibold text-slate-800">Uso / capacitación</p>
                 <p className="mt-1">
-                  Revisá warnings y acciones bloqueadas antes de decidir. Tras aprobar, el piloto real se
-                  dispara en otra fase con permisos y registros aparte. Si dudás, no apruebes: coordiná con
-                  quien opera el Constructor.
+                  Revisá warnings y acciones bloqueadas antes de decidir. Tras aprobar, un piloto real solo
+                  podría gestionarse en otra fase explícita, con permisos y registros aparte; esta pantalla no
+                  ejecuta instalación. Si dudás, no apruebes: coordiná con quien opera el Constructor.
                 </p>
               </div>
               {actionable ? (
