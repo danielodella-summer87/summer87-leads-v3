@@ -27,6 +27,31 @@ function jsonArrayLen(v: unknown): number {
   return Array.isArray(v) ? v.length : 0;
 }
 
+function emptyEvidenceSummary() {
+  return {
+    snapshotCount: 0,
+    latestSnapshotId: null as string | null,
+    latestSnapshotCreatedAt: null as string | null,
+    latestContractVersion: null as string | null,
+    latestReadinessScore: null as number | null,
+    latestFinalGoNoGo: null as string | null,
+    latestRiskLevel: null as string | null,
+    hasEvidence: false,
+  };
+}
+
+type EvidenceSummary = ReturnType<typeof emptyEvidenceSummary>;
+
+function isMissingSnapshotsTable(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "42P01") return true;
+  const m = (error.message ?? "").toLowerCase();
+  return m.includes("installer_package_simulation_snapshots") && m.includes("does not exist");
+}
+
+/** Máximo de filas de snapshots a traer para agregar en memoria (listado acotado de drafts). */
+const SNAPSHOTS_FETCH_CAP = 8000;
+
 /**
  * GET /api/admin/constructor/installable-package/drafts
  * Lista borradores persistidos (solo lectura; service role encapsulado en servidor).
@@ -97,8 +122,90 @@ export async function GET(req: NextRequest) {
     updatedAt: r.updated_at,
   }));
 
+  const draftIds = rows.map((r) => r.id).filter(Boolean);
+  const summaryByDraft = new Map<string, EvidenceSummary>();
+  let evidenceSummaryUnavailable = false;
+  let evidenceSummaryMessage: string | undefined;
+
+  if (draftIds.length > 0) {
+    const { data: snapData, error: snapErr } = await sb
+      .from("installer_package_simulation_snapshots")
+      .select(
+        "id, draft_id, contract_version, readiness_score, final_go_no_go, risk_level, created_at"
+      )
+      .in("draft_id", draftIds)
+      .order("created_at", { ascending: false })
+      .limit(SNAPSHOTS_FETCH_CAP);
+
+    if (snapErr) {
+      evidenceSummaryUnavailable = true;
+      evidenceSummaryMessage = isMissingSnapshotsTable(snapErr)
+        ? "La tabla de snapshots no existe o no está disponible."
+        : "No se pudo cargar el resumen de evidencias.";
+    } else {
+      const snapList = (snapData ?? []) as Array<{
+        id: string;
+        draft_id: string;
+        contract_version: string;
+        readiness_score: number | null;
+        final_go_no_go: string | null;
+        risk_level: string | null;
+        created_at: string;
+      }>;
+
+      const counts = new Map<string, number>();
+      const latest = new Map<string, (typeof snapList)[0]>();
+
+      for (const s of snapList) {
+        const did = s.draft_id;
+        if (!did) continue;
+        counts.set(did, (counts.get(did) ?? 0) + 1);
+        if (!latest.has(did)) latest.set(did, s);
+      }
+
+      for (const did of draftIds) {
+        const n = counts.get(did) ?? 0;
+        const l = latest.get(did);
+        if (n === 0 || !l) {
+          summaryByDraft.set(did, emptyEvidenceSummary());
+          continue;
+        }
+        const rs = l.readiness_score;
+        const readinessNum =
+          rs === null || rs === undefined || Number.isNaN(Number(rs)) ? null : Math.round(Number(rs));
+        summaryByDraft.set(did, {
+          snapshotCount: n,
+          latestSnapshotId: l.id,
+          latestSnapshotCreatedAt: l.created_at,
+          latestContractVersion: l.contract_version ?? null,
+          latestReadinessScore: readinessNum,
+          latestFinalGoNoGo: l.final_go_no_go,
+          latestRiskLevel: l.risk_level,
+          hasEvidence: true,
+        });
+      }
+    }
+  }
+
+  const getSummary = (draftId: string): EvidenceSummary =>
+    summaryByDraft.get(draftId) ?? emptyEvidenceSummary();
+
+  const itemsOut = items.map((it) => ({
+    ...it,
+    evidenceSummary: getSummary(it.id),
+  }));
+
   return NextResponse.json(
-    { ok: true, items },
+    {
+      ok: true,
+      items: itemsOut,
+      ...(evidenceSummaryUnavailable
+        ? {
+            evidenceSummaryUnavailable: true,
+            evidenceSummaryMessage: evidenceSummaryMessage ?? "",
+          }
+        : {}),
+    },
     { status: 200, headers: { "Cache-Control": "no-store" } }
   );
 }

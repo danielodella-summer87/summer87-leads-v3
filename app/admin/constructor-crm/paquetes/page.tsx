@@ -5,6 +5,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, Copy, Check } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 
+type EvidenceSummary = {
+  snapshotCount: number;
+  latestSnapshotId: string | null;
+  latestSnapshotCreatedAt: string | null;
+  latestContractVersion: string | null;
+  latestReadinessScore: number | null;
+  latestFinalGoNoGo: string | null;
+  latestRiskLevel: string | null;
+  hasEvidence: boolean;
+};
+
 type DraftListItem = {
   id: string;
   status: string;
@@ -19,6 +30,7 @@ type DraftListItem = {
   humanConfirmationStatus: string;
   createdAt: string;
   updatedAt: string;
+  evidenceSummary: EvidenceSummary;
 };
 
 type FilterTab = "all" | "pending" | "approved" | "rejected" | "expired";
@@ -98,12 +110,93 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+function defaultEvidenceSummary(): EvidenceSummary {
+  return {
+    snapshotCount: 0,
+    latestSnapshotId: null,
+    latestSnapshotCreatedAt: null,
+    latestContractVersion: null,
+    latestReadinessScore: null,
+    latestFinalGoNoGo: null,
+    latestRiskLevel: null,
+    hasEvidence: false,
+  };
+}
+
+function parseEvidenceSummary(raw: unknown): EvidenceSummary {
+  const d = defaultEvidenceSummary();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return d;
+  const e = raw as Record<string, unknown>;
+  const countRaw = e.snapshotCount ?? e.snapshot_count;
+  const n = typeof countRaw === "number" ? countRaw : Number(countRaw);
+  const scoreRaw = e.latestReadinessScore ?? e.latest_readiness_score;
+  const score =
+    scoreRaw === null || scoreRaw === undefined || Number.isNaN(Number(scoreRaw))
+      ? null
+      : Math.round(Number(scoreRaw));
+  const snapCount = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  const sid = e.latestSnapshotId ?? e.latest_snapshot_id;
+  const sca = e.latestSnapshotCreatedAt ?? e.latest_snapshot_created_at;
+  const lcv = e.latestContractVersion ?? e.latest_contract_version;
+  const fg = e.latestFinalGoNoGo ?? e.latest_final_go_no_go;
+  const rl = e.latestRiskLevel ?? e.latest_risk_level;
+  const str = (v: unknown) => {
+    if (v === null || v === undefined) return null;
+    const s = String(v).trim();
+    return s.length ? s : null;
+  };
+  return {
+    snapshotCount: snapCount,
+    latestSnapshotId: str(sid),
+    latestSnapshotCreatedAt: str(sca),
+    latestContractVersion: str(lcv),
+    latestReadinessScore: score,
+    latestFinalGoNoGo: str(fg),
+    latestRiskLevel: str(rl),
+    hasEvidence: Boolean(e.hasEvidence ?? e.has_evidence ?? snapCount > 0),
+  };
+}
+
+function evidenceCountLabel(n: number): string {
+  if (n <= 0) return "Sin evidencia";
+  if (n === 1) return "1 snapshot";
+  return `${n} snapshots`;
+}
+
+function goNoGoBadgeClass(v: string | null): string {
+  switch (v) {
+    case "no_go":
+      return "border border-rose-200/80 bg-rose-50 text-rose-900";
+    case "pending_inputs":
+      return "border border-amber-200/80 bg-amber-50 text-amber-950";
+    case "ready_for_manual_install":
+      return "border border-emerald-200/70 bg-emerald-50/90 text-emerald-900";
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+function riskListBadgeClass(v: string | null): string {
+  switch (v) {
+    case "high":
+      return "border border-rose-200/80 bg-rose-50 text-rose-900";
+    case "medium":
+      return "border border-amber-200/80 bg-amber-50 text-amber-950";
+    case "low":
+      return "border border-slate-200 bg-slate-100 text-slate-700";
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-500";
+  }
+}
+
 export default function PaquetesDraftsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<DraftListItem[]>([]);
   const [filter, setFilter] = useState<FilterTab>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [evidenceSummaryUnavailable, setEvidenceSummaryUnavailable] = useState(false);
+  const [evidenceSummaryMessage, setEvidenceSummaryMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,10 +206,23 @@ export default function PaquetesDraftsListPage() {
         cache: "no-store",
         headers: { "Cache-Control": "no-store" },
       });
-      const json = (await res.json()) as { ok?: boolean; items?: unknown; message?: string; code?: string };
+      const json = (await res.json()) as {
+        ok?: boolean;
+        items?: unknown;
+        message?: string;
+        code?: string;
+        evidenceSummaryUnavailable?: boolean;
+        evidenceSummaryMessage?: string;
+      };
       if (!res.ok) {
         throw new Error(json?.message ?? json?.code ?? "Error al cargar borradores");
       }
+      setEvidenceSummaryUnavailable(Boolean(json.evidenceSummaryUnavailable));
+      setEvidenceSummaryMessage(
+        typeof json.evidenceSummaryMessage === "string" && json.evidenceSummaryMessage.trim()
+          ? json.evidenceSummaryMessage.trim()
+          : null
+      );
       const raw = Array.isArray(json?.items) ? json.items : [];
       const normalized: DraftListItem[] = raw.map((x) => {
         const o = x as Record<string, unknown>;
@@ -139,12 +245,15 @@ export default function PaquetesDraftsListPage() {
           ),
           createdAt: String(o.createdAt ?? o.created_at ?? ""),
           updatedAt: String(o.updatedAt ?? o.updated_at ?? o.createdAt ?? o.created_at ?? ""),
+          evidenceSummary: parseEvidenceSummary(o.evidenceSummary ?? o.evidence_summary),
         };
       });
       setItems(normalized.filter((r) => r.id));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error");
       setItems([]);
+      setEvidenceSummaryUnavailable(false);
+      setEvidenceSummaryMessage(null);
     } finally {
       setLoading(false);
     }
@@ -253,6 +362,19 @@ export default function PaquetesDraftsListPage() {
               <span className="font-semibold text-slate-800">{filteredItems.length}</span> de {items.length}
             </p>
           </div>
+          {evidenceSummaryUnavailable ? (
+            <div
+              className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-950"
+              role="status"
+            >
+              <p className="font-medium">
+                No se pudo cargar el resumen de evidencias. El listado de borradores sigue disponible.
+              </p>
+              {evidenceSummaryMessage ? (
+                <p className="mt-1 text-xs text-amber-900/90">{evidenceSummaryMessage}</p>
+              ) : null}
+            </div>
+          ) : null}
           {loading ? (
             <p className="p-6 text-sm text-slate-500">Cargando…</p>
           ) : items.length === 0 ? (
@@ -261,7 +383,7 @@ export default function PaquetesDraftsListPage() {
             <p className="p-6 text-sm text-slate-500">No hay borradores en este filtro.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[1280px] text-left text-sm">
                 <thead className="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                   <tr>
                     <th className="px-3 py-2.5">ID</th>
@@ -273,6 +395,7 @@ export default function PaquetesDraftsListPage() {
                     <th className="px-3 py-2.5">constructor_id</th>
                     <th className="px-3 py-2.5">target_client_id</th>
                     <th className="px-3 py-2.5">Versión</th>
+                    <th className="min-w-[160px] px-3 py-2.5">Evidencia</th>
                     <th className="px-3 py-2.5">Señal</th>
                     <th className="px-3 py-2.5">Simulación</th>
                     <th className="px-3 py-2.5">Detalle</th>
@@ -285,6 +408,12 @@ export default function PaquetesDraftsListPage() {
                     const approved = isApprovedRow(row);
                     const rejected = isRejectedRow(row);
                     const simOk = simulationAvailable(row);
+
+                    const ev = row.evidenceSummary;
+                    const scoreLabel =
+                      ev.latestReadinessScore !== null && ev.latestReadinessScore !== undefined
+                        ? `${ev.latestReadinessScore}/100`
+                        : "—";
 
                     return (
                       <tr key={row.id} className="align-top hover:bg-slate-50/80">
@@ -327,6 +456,45 @@ export default function PaquetesDraftsListPage() {
                           {row.targetClientId ?? "—"}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-700">{row.packageVersion}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-col gap-1 text-[11px] leading-snug text-slate-700">
+                            <span className="font-medium text-slate-800">{evidenceCountLabel(ev.snapshotCount)}</span>
+                            <span>
+                              <span className="text-slate-500">Score:</span>{" "}
+                              <span className="font-mono tabular-nums text-slate-900">{scoreLabel}</span>
+                            </span>
+                            <span className="flex flex-wrap items-center gap-1">
+                              <span className="text-slate-500">Go/No-Go:</span>
+                              {ev.latestFinalGoNoGo ? (
+                                <span
+                                  className={cx(
+                                    "inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                                    goNoGoBadgeClass(ev.latestFinalGoNoGo)
+                                  )}
+                                >
+                                  {ev.latestFinalGoNoGo.replace(/_/g, " ")}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">—</span>
+                              )}
+                            </span>
+                            <span className="flex flex-wrap items-center gap-1">
+                              <span className="text-slate-500">Riesgo:</span>
+                              {ev.latestRiskLevel ? (
+                                <span
+                                  className={cx(
+                                    "inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                                    riskListBadgeClass(ev.latestRiskLevel)
+                                  )}
+                                >
+                                  {ev.latestRiskLevel}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">—</span>
+                              )}
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-3 py-2.5">
                           <div className="flex flex-wrap gap-1">
                             {rejected ? (
