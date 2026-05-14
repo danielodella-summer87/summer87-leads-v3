@@ -34,6 +34,7 @@ function extractTechnicalContract(body: Record<string, unknown>): Record<string,
 }
 
 function simulationPayloadFromBody(body: Record<string, unknown>, draftId: string): Record<string, unknown> {
+  /** Omite solo el contrato en JSONB; el resto (p. ej. executiveSummaryText, checks, …) se persiste en simulation_payload. */
   const omit = new Set(["technical_preinstall_contract", "technicalPreinstallContract"]);
   const out: Record<string, unknown> = { draftId };
   for (const [k, v] of Object.entries(body)) {

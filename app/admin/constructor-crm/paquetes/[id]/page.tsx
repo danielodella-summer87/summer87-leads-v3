@@ -772,11 +772,25 @@ export default function PaqueteDraftDetailPage() {
     setSnapshotError(null);
     setSnapshotSuccess(null);
     try {
-      const payload = {
-        ...simulateResult,
+      const payload: Record<string, unknown> = {
+        ...(simulateResult as unknown as Record<string, unknown>),
         technicalPreinstallContract: contract,
         packageId: simulateResult.packageId || id,
       };
+      try {
+        const executiveSummaryText = buildExecutiveSummaryPlainText({
+          draftId: id,
+          meta: meta ?? undefined,
+          humanConfirmationStatus: data?.humanConfirmationStatus ?? "",
+          simulateResult,
+          contract,
+        });
+        if (typeof executiveSummaryText === "string" && executiveSummaryText.trim().length > 0) {
+          payload.executiveSummaryText = executiveSummaryText.trim();
+        }
+      } catch {
+        /* Sin resumen ejecutivo: el snapshot se guarda igual. */
+      }
       const res = await fetch(
         `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulation-snapshots`,
         {
