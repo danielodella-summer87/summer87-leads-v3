@@ -265,6 +265,22 @@ function isKoreReadOnlyIntegration(pp: Record<string, unknown>): boolean {
   return false;
 }
 
+function clientIdentityOperationalName(pp: Record<string, unknown>): string | null {
+  const raw = payloadCfg(pp, "client_identity", "clientIdentity");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const n = o.clientName ?? o.client_name;
+  if (typeof n === "string" && n.trim()) return n.trim();
+  return null;
+}
+
+function integrationsConfigHasEntries(pp: Record<string, unknown>): boolean {
+  const raw = payloadCfg(pp, "integrations_config", "integrationsConfig");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const list = (raw as Record<string, unknown>).integrations;
+  return Array.isArray(list) && list.length > 0;
+}
+
 type ManualCheckStatus = "cumplido" | "pendiente" | "bloqueado";
 
 function manualChecklistStatusBadgeClass(s: ManualCheckStatus): string {
@@ -277,6 +293,12 @@ function manualChecklistStatusBadgeClass(s: ManualCheckStatus): string {
     default:
       return "border border-amber-200 bg-amber-50 text-amber-950";
   }
+}
+
+/** Badges discretos para preparación manual (sin énfasis verde tipo CTA). */
+function prepReadinessBadgeClass(s: ManualCheckStatus): string {
+  if (s === "cumplido") return "border border-slate-300 bg-slate-100 text-slate-800";
+  return "border border-amber-200 bg-amber-50 text-amber-950";
 }
 
 type ReunionChecklistBadgeKind = "pendiente" | "obligatorio" | "seguridad";
@@ -1521,6 +1543,18 @@ export default function PaqueteDraftDetailPage() {
     showPostApprovalPilotPrep &&
     latestSnapshot !== null &&
     latestSnapshot.finalGoNoGo === "ready_for_manual_install";
+
+  const latestAdvanceMeetingDecision = useMemo(() => {
+    const candidates = meetingDecisions.filter((d) => d.decision === "advance_manual_preparation");
+    if (candidates.length === 0) return null;
+    return candidates.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
+  }, [meetingDecisions]);
+
+  const showManualControlledPrepSection =
+    showExecutivePreManualReview &&
+    latestSnapshot !== null &&
+    latestSnapshot.finalGoNoGo === "ready_for_manual_install" &&
+    latestAdvanceMeetingDecision !== null;
 
   const copyPickup4x4MeetingDocument = useCallback(async () => {
     if (!meta || !latestSnapshot || !data || !navigator.clipboard?.writeText) return;
@@ -3517,6 +3551,243 @@ export default function PaqueteDraftDetailPage() {
                     )}
                   </div>
                 </div>
+              </section>
+            ) : null}
+
+            {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
+              <section
+                className="rounded-xl border border-slate-300 bg-slate-50/30 p-5"
+                aria-labelledby="manual-controlled-prep-title"
+              >
+                <h2 id="manual-controlled-prep-title" className="text-sm font-semibold text-slate-900">
+                  Preparación manual controlada
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  Vista operativa posterior a una decisión de reunión para avanzar. No crea entornos ni ejecuta
+                  acciones; solo resume qué falta antes de un piloto real.
+                </p>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado de preparación
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      "Preparación habilitada por decisión de reunión",
+                      "No ejecutada",
+                      "Pendiente de datos reales",
+                      "Instalación bloqueada hasta fase posterior",
+                    ].map((label) => (
+                      <li
+                        key={label}
+                        className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                      >
+                        {label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Evidencia base
+                  </p>
+                  <dl className="mt-2 grid gap-2 text-xs text-slate-800 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-slate-500">Snapshot</dt>
+                      <dd className="font-mono text-[11px]" title={latestSnapshot.id}>
+                        {shortSnapshotId(latestSnapshot.id)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Fecha</dt>
+                      <dd>{formatDt(latestSnapshot.createdAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Versión contrato</dt>
+                      <dd className="font-mono text-[11px]">{latestSnapshot.contractVersion || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Score</dt>
+                      <dd className="tabular-nums">
+                        {latestSnapshot.readinessScore != null && !Number.isNaN(Number(latestSnapshot.readinessScore))
+                          ? String(latestSnapshot.readinessScore)
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <dt className="text-slate-500">Go / No-Go</dt>
+                      <dd>
+                        {latestSnapshot.finalGoNoGo ? (
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotGoNoGoBadgeClass(latestSnapshot.finalGoNoGo)}`}
+                          >
+                            {latestSnapshot.finalGoNoGo.replace(/_/g, " ")}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <dt className="text-slate-500">Riesgo</dt>
+                      <dd>
+                        {latestSnapshot.riskLevel ? (
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotRiskBadgeClass(latestSnapshot.riskLevel)}`}
+                          >
+                            {latestSnapshot.riskLevel}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Decisión base (reunión)
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs text-slate-800">
+                    <li>
+                      <span className="font-semibold text-slate-900">Decisión: </span>
+                      {latestAdvanceMeetingDecision.decisionLabel}
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-900">Fecha: </span>
+                      {formatDt(latestAdvanceMeetingDecision.createdAt)}
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-900">Registró: </span>
+                      {latestAdvanceMeetingDecision.decidedBy ?? "—"}
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-900">Motivo (extracto): </span>
+                      {truncateMeetingDecisionPreview(latestAdvanceMeetingDecision.decisionReason, 160)}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Datos mínimos requeridos antes de crear entorno
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {(() => {
+                      const pp = packagePayload;
+                      const secOk = (snake: string, camel: string): ManualCheckStatus =>
+                        isManualInstallPayloadSectionEmpty(payloadCfg(pp, snake, camel))
+                          ? "pendiente"
+                          : "cumplido";
+                      const row = (label: string, status: ManualCheckStatus) => (
+                        <li
+                          key={label}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                        >
+                          <span className="text-xs text-slate-800">{label}</span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${prepReadinessBadgeClass(status)}`}
+                          >
+                            {status === "cumplido" ? "Con antecedentes" : "Pendiente"}
+                          </span>
+                        </li>
+                      );
+                      const idName = clientIdentityOperationalName(pp);
+                      const scopeReady =
+                        !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "crm_modules_config", "crmModulesConfig")) &&
+                        !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+                      const critOk =
+                        typeof latestAdvanceMeetingDecision.decisionReason === "string" &&
+                        latestAdvanceMeetingDecision.decisionReason.trim().length >= 20;
+                      return (
+                        <>
+                          {row(
+                            "Responsable operativo Pickup 4x4",
+                            idName ? "cumplido" : "pendiente"
+                          )}
+                          {row("Usuarios reales con email", "pendiente")}
+                          {row(
+                            "Roles y permisos por usuario",
+                            secOk("permissions_config", "permissionsConfig")
+                          )}
+                          {row(
+                            "Confirmación Kore read-only",
+                            isKoreReadOnlyIntegration(pp) ? "cumplido" : "pendiente"
+                          )}
+                          {row(
+                            "Documentación/API Kore",
+                            integrationsConfigHasEntries(pp) ? "cumplido" : "pendiente"
+                          )}
+                          {row("Alcance piloto cerrado", scopeReady ? "cumplido" : "pendiente")}
+                          {row("Criterio de éxito definido", critOk ? "cumplido" : "pendiente")}
+                          {row("Aprobación final explícita", "pendiente")}
+                        </>
+                      );
+                    })()}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Plan de preparación manual
+                  </p>
+                  <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                    <li>Revisar alcance final</li>
+                    <li>Confirmar usuarios</li>
+                    <li>Confirmar permisos</li>
+                    <li>Confirmar acceso Kore read-only</li>
+                    <li>Definir estructura inicial del entorno</li>
+                    <li>Preparar migración/configuración futura</li>
+                    <li>Solicitar aprobación final</li>
+                    <li>Recién después crear entorno piloto</li>
+                  </ol>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Acciones que siguen bloqueadas
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {[
+                      "create_tenant",
+                      "create_users",
+                      "send_invites",
+                      "write_kore",
+                      "write_zeta",
+                      "install_crm_automatically",
+                      "publish_production",
+                    ].map((code) => (
+                      <li
+                        key={code}
+                        className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                      >
+                        {code}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-90"
+                  >
+                    Crear entorno piloto — Próximamente
+                  </button>
+                  <p className="max-w-md text-[11px] leading-relaxed text-slate-500">
+                    Este botón es informativo. La creación del entorno requiere una fase posterior explícita.
+                  </p>
+                </div>
+
+                <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                  <span className="font-semibold text-slate-900">Seguridad: </span>
+                  El registro de decisión habilita la preparación manual, no la instalación. Antes de crear recursos
+                  reales se deben confirmar usuarios, permisos, alcance, acceso Kore y aprobación final.
+                </p>
               </section>
             ) : null}
 
