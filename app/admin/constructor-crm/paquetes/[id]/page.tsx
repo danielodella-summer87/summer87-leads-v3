@@ -236,6 +236,12 @@ export default function PaqueteDraftDetailPage() {
   const [simulateResult, setSimulateResult] = useState<SimulatePreinstallResponse | null>(null);
   const [simulateError, setSimulateError] = useState<string | null>(null);
   const [contractJsonCopied, setContractJsonCopied] = useState(false);
+  const [snapshotSaving, setSnapshotSaving] = useState(false);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [snapshotSuccess, setSnapshotSuccess] = useState<string | null>(null);
+  const [lastSnapshotSaved, setLastSnapshotSaved] = useState<{ id: string; createdAt: string } | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -267,6 +273,9 @@ export default function PaqueteDraftDetailPage() {
     setSimulateResult(null);
     setSimulateError(null);
     setContractJsonCopied(false);
+    setSnapshotError(null);
+    setSnapshotSuccess(null);
+    setLastSnapshotSaved(null);
   }, [id]);
 
   async function copyId() {
@@ -342,6 +351,8 @@ export default function PaqueteDraftDetailPage() {
     setSimulateLoading(true);
     setSimulateError(null);
     setContractJsonCopied(false);
+    setSnapshotError(null);
+    setSnapshotSuccess(null);
     try {
       const res = await fetch(
         `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulate-preinstall`,
@@ -365,6 +376,57 @@ export default function PaqueteDraftDetailPage() {
       setSimulateResult(null);
     } finally {
       setSimulateLoading(false);
+    }
+  }
+
+  async function saveSimulationSnapshot() {
+    if (!id || !simulateResult || snapshotSaving) return;
+    const contract =
+      simulateResult.technicalPreinstallContract ??
+      extractTechnicalPreinstallContract(simulateResult as unknown);
+    if (!contract) return;
+
+    setSnapshotSaving(true);
+    setSnapshotError(null);
+    setSnapshotSuccess(null);
+    try {
+      const payload = {
+        ...simulateResult,
+        technicalPreinstallContract: contract,
+        packageId: simulateResult.packageId || id,
+      };
+      const res = await fetch(
+        `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulation-snapshots`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const raw: unknown = await res.json();
+      const body = raw as { ok?: boolean; code?: string; message?: string; snapshotId?: string; createdAt?: string };
+      if (!res.ok || body.ok !== true) {
+        const code = body.code;
+        let msg = [code, body.message].filter(Boolean).join(" — ") || `Error HTTP ${res.status}`;
+        if (code === "SNAPSHOT_TABLE_NOT_FOUND") {
+          msg =
+            "La tabla de snapshots no existe. Aplicá la migración antes de guardar evidencia.";
+        }
+        setSnapshotError(msg);
+        return;
+      }
+      const sid = body.snapshotId ?? "";
+      const cat = body.createdAt ?? "";
+      setSnapshotSuccess(
+        sid
+          ? `Evidencia guardada. snapshotId: ${sid}${cat ? ` · ${formatDt(cat)}` : ""}`
+          : "Evidencia guardada."
+      );
+      if (sid && cat) setLastSnapshotSaved({ id: sid, createdAt: cat });
+    } catch (e: unknown) {
+      setSnapshotError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setSnapshotSaving(false);
     }
   }
 
@@ -427,6 +489,39 @@ export default function PaqueteDraftDetailPage() {
       extractTechnicalPreinstallContract(simulateResult as unknown)
     );
   }, [simulateResult]);
+
+  useEffect(() => {
+    if (!id || !meta) return;
+    const approved =
+      meta.status === "approved_for_pilot" || data?.humanConfirmationStatus === "approved";
+    if (!approved) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulation-snapshots`,
+          { cache: "no-store", headers: { "Cache-Control": "no-store" } }
+        );
+        const raw: unknown = await res.json();
+        const j = raw as {
+          ok?: boolean;
+          snapshots?: Array<{ id?: string; createdAt?: string }>;
+        };
+        if (cancelled || !res.ok || j.ok !== true || !Array.isArray(j.snapshots)) return;
+        const first = j.snapshots[0];
+        if (first?.id && first?.createdAt) {
+          setLastSnapshotSaved({ id: first.id, createdAt: first.createdAt });
+        }
+      } catch {
+        /* Tabla ausente u otro error: no bloquear la vista. */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, meta, data?.humanConfirmationStatus, meta?.status]);
 
   return (
     <PageContainer>
@@ -880,6 +975,49 @@ export default function PaqueteDraftDetailPage() {
                               )}
                               Copiar contrato JSON
                             </button>
+                          </div>
+                          <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
+                            <p className="text-xs leading-relaxed text-slate-600">
+                              <span className="font-semibold text-slate-800">Importante: </span>
+                              Guardar este snapshot no instala el CRM ni ejecuta acciones externas. Solo
+                              registra evidencia auditable del resultado de simulación ya generado.
+                            </p>
+                            {lastSnapshotSaved ? (
+                              <p className="text-xs text-slate-500">
+                                Último snapshot guardado:{" "}
+                                <span className="font-mono text-slate-800">{lastSnapshotSaved.id}</span>
+                                {" · "}
+                                <span className="text-slate-700">{formatDt(lastSnapshotSaved.createdAt)}</span>
+                              </p>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => void saveSimulationSnapshot()}
+                              disabled={snapshotSaving || !id}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {snapshotSaving ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                                  Guardando evidencia…
+                                </>
+                              ) : (
+                                "Guardar snapshot de evidencia"
+                              )}
+                            </button>
+                            {snapshotError ? (
+                              <p
+                                className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-950"
+                                role="alert"
+                              >
+                                {snapshotError}
+                              </p>
+                            ) : null}
+                            {snapshotSuccess ? (
+                              <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-800">
+                                {snapshotSuccess}
+                              </p>
+                            ) : null}
                           </div>
                           {(() => {
                             const tc = simulationContract;
