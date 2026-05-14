@@ -215,6 +215,28 @@ function consolidatedEvidenceGoRecommendation(go: string | null): string {
   }
 }
 
+function isManualInstallPayloadSectionEmpty(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (typeof v === "string" && !v.trim()) return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
+}
+
+type ManualCheckStatus = "cumplido" | "pendiente" | "bloqueado";
+
+function manualChecklistStatusBadgeClass(s: ManualCheckStatus): string {
+  switch (s) {
+    case "cumplido":
+      return "border border-emerald-200/80 bg-emerald-50/90 text-emerald-900";
+    case "bloqueado":
+      return "border border-rose-200 bg-rose-50 text-rose-900";
+    case "pendiente":
+    default:
+      return "border border-amber-200 bg-amber-50 text-amber-950";
+  }
+}
+
 function strFromUnknown(v: unknown): string {
   if (v === null || v === undefined) return "";
   const s = String(v).trim();
@@ -2003,6 +2025,201 @@ export default function PaqueteDraftDetailPage() {
                 </div>
               ) : null}
             </section>
+
+            {showPostApprovalPilotPrep && meta && data ? (
+            <section
+              className="rounded-xl border border-slate-300 bg-slate-50/50 p-5"
+              aria-labelledby="manual-controlled-install-title"
+            >
+              <h2 id="manual-controlled-install-title" className="text-sm font-semibold text-slate-900">
+                Instalación manual controlada
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                Contrato visual de una futura fase. Solo lectura: no instala CRM, no crea tenant ni usuarios, no
+                escribe en Zeta y no guarda snapshots desde aquí.
+              </p>
+              <p className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                Esta sección define las condiciones para una futura instalación manual controlada. No ejecuta
+                acciones, no crea recursos y no escribe en sistemas externos.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="inline-flex rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                  No iniciada
+                </span>
+                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                  Bloqueada hasta aprobación final
+                </span>
+                {snapshots[0] ? (
+                  <span className="inline-flex rounded-full border border-slate-400 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                    Basada en evidencia guardada
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-5 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Evidencia base (último snapshot)
+                </p>
+                {snapshots[0] ? (
+                  <dl className="mt-2 grid gap-2 text-xs text-slate-800 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-slate-500">Snapshot</dt>
+                      <dd className="font-mono text-[11px]" title={snapshots[0].id}>
+                        {shortSnapshotId(snapshots[0].id)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Fecha</dt>
+                      <dd>{formatDt(snapshots[0].createdAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Versión contrato</dt>
+                      <dd className="font-mono text-[11px]">{snapshots[0].contractVersion || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Readiness score</dt>
+                      <dd className="tabular-nums">
+                        {snapshots[0].readinessScore != null && !Number.isNaN(Number(snapshots[0].readinessScore))
+                          ? String(snapshots[0].readinessScore)
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <dt className="text-slate-500">Go / No-Go</dt>
+                      <dd>
+                        {snapshots[0].finalGoNoGo ? (
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotGoNoGoBadgeClass(snapshots[0].finalGoNoGo)}`}
+                          >
+                            {snapshots[0].finalGoNoGo.replace(/_/g, " ")}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </dd>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <dt className="text-slate-500">Riesgo</dt>
+                      <dd>
+                        {snapshots[0].riskLevel ? (
+                          <span
+                            className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotRiskBadgeClass(snapshots[0].riskLevel)}`}
+                          >
+                            {snapshots[0].riskLevel}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                    No hay evidencia guardada. Primero simulá preinstalación y guardá un snapshot.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Condiciones mínimas para instalación manual
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {(() => {
+                    const latest = snapshots[0];
+                    const go = (latest?.finalGoNoGo ?? "").trim();
+                    const pp = packagePayload;
+                    const cfg = (k: string) => pp[k];
+                    const sec = (snake: string, camel: string): ManualCheckStatus => {
+                      if (!latest) return "pendiente";
+                      if (go === "no_go") return "bloqueado";
+                      const v = cfg(snake) ?? cfg(camel);
+                      return isManualInstallPayloadSectionEmpty(v) ? "pendiente" : "cumplido";
+                    };
+                    const row = (label: string, status: ManualCheckStatus) => (
+                      <li
+                        key={label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${manualChecklistStatusBadgeClass(status)}`}
+                        >
+                          {status === "cumplido" ? "Cumplido" : status === "bloqueado" ? "Bloqueado" : "Pendiente"}
+                        </span>
+                      </li>
+                    );
+                    return (
+                      <>
+                        {row("Draft aprobado para piloto", "cumplido")}
+                        {row("Snapshot técnico guardado", latest ? "cumplido" : "pendiente")}
+                        {row(
+                          "Resumen ejecutivo guardado",
+                          latest?.hasExecutiveSummary ? "cumplido" : "pendiente"
+                        )}
+                        {row(
+                          "Cliente destino resuelto",
+                          strFromUnknown(meta?.targetClientId).length > 0 ? "cumplido" : "pendiente"
+                        )}
+                        {row("Módulos CRM definidos", sec("crm_modules_config", "crmModulesConfig"))}
+                        {row("Pipeline definido", sec("pipeline_config", "pipelineConfig"))}
+                        {row("Campos de leads definidos", sec("lead_fields_config", "leadFieldsConfig"))}
+                        {row("Permisos iniciales definidos", sec("permissions_config", "permissionsConfig"))}
+                        {row("Aprobación humana final documentada", "pendiente")}
+                      </>
+                    );
+                  })()}
+                </ul>
+              </div>
+
+              <div className="mt-5 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Acciones explícitamente bloqueadas hasta confirmación final
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {[
+                    "create_tenant",
+                    "create_users",
+                    "send_invites",
+                    "write_zeta",
+                    "install_crm_automatically",
+                    "publish_production",
+                  ].map((code) => (
+                    <li
+                      key={code}
+                      className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                    >
+                      {code}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                <div>
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-90"
+                  >
+                    Solicitar instalación manual — Próximamente
+                  </button>
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    Botón informativo. Esta fase no ejecuta instalación.
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                <span className="font-semibold text-slate-900">Manual vs automatización futura: </span>
+                Hoy todo es revisión, simulación y evidencia en persona. Una fase posterior podría automatizar
+                verificaciones o tickets, pero la ejecución sobre tenant/Zeta seguiría requiriendo confirmación
+                explícita y controles aparte.
+              </p>
+            </section>
+            ) : null}
 
             <section className="rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="snapshots-history-title">
               <div className="flex flex-wrap items-end justify-between gap-3">
