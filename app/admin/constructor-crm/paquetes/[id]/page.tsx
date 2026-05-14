@@ -279,6 +279,121 @@ function manualChecklistStatusBadgeClass(s: ManualCheckStatus): string {
   }
 }
 
+type ReunionChecklistBadgeKind = "pendiente" | "obligatorio" | "seguridad";
+
+function reunionChecklistBadgeClass(b: ReunionChecklistBadgeKind): string {
+  switch (b) {
+    case "obligatorio":
+      return "border border-amber-200 bg-amber-50 text-amber-950";
+    case "seguridad":
+      return "border border-rose-200/90 bg-rose-50/90 text-rose-900";
+    case "pendiente":
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-700";
+  }
+}
+
+function reunionChecklistBadgeLabel(b: ReunionChecklistBadgeKind): string {
+  switch (b) {
+    case "obligatorio":
+      return "Obligatorio";
+    case "seguridad":
+      return "Seguridad";
+    case "pendiente":
+    default:
+      return "Pendiente de reunión";
+  }
+}
+
+type ReunionChecklistGroupDef = { title: string; items: { text: string; badge: ReunionChecklistBadgeKind }[] };
+
+const PICKUP_REUNION_PREVIA_CHECKLIST: ReunionChecklistGroupDef[] = [
+  {
+    title: "1. Decisiones de negocio",
+    items: [
+      { text: "Confirmar responsable operativo Pickup 4x4", badge: "obligatorio" },
+      { text: "Confirmar objetivo del piloto", badge: "obligatorio" },
+      { text: "Definir alcance del primer CRM", badge: "obligatorio" },
+      { text: "Definir criterio de éxito del piloto", badge: "obligatorio" },
+      { text: "Confirmar fecha tentativa de instalación manual", badge: "pendiente" },
+      { text: "Confirmar quién aprueba el avance", badge: "obligatorio" },
+    ],
+  },
+  {
+    title: "2. Usuarios y permisos",
+    items: [
+      { text: "Listar usuarios reales del piloto", badge: "obligatorio" },
+      { text: "Definir rol de cada usuario", badge: "obligatorio" },
+      { text: "Confirmar responsable comercial", badge: "obligatorio" },
+      { text: "Confirmar usuarios de solo lectura", badge: "pendiente" },
+      { text: "Confirmar si habrá usuario técnico de integración", badge: "pendiente" },
+      { text: "Validar política de acceso inicial", badge: "seguridad" },
+    ],
+  },
+  {
+    title: "3. Kore / área técnica",
+    items: [
+      { text: "Confirmar credenciales o acceso técnico", badge: "obligatorio" },
+      { text: "Confirmar endpoints disponibles", badge: "obligatorio" },
+      { text: "Confirmar campos disponibles", badge: "obligatorio" },
+      { text: "Confirmar modo read-only", badge: "seguridad" },
+      { text: "Confirmar frecuencia de sincronización", badge: "pendiente" },
+      { text: "Confirmar ambiente: sandbox / demo / producción", badge: "obligatorio" },
+      { text: "Confirmar límites de API", badge: "pendiente" },
+      { text: "Confirmar responsable técnico de Kore", badge: "obligatorio" },
+    ],
+  },
+  {
+    title: "4. Bloqueos antes de instalar",
+    items: [
+      { text: "No crear tenant sin aprobación final", badge: "seguridad" },
+      { text: "No crear usuarios sin lista validada", badge: "seguridad" },
+      { text: "No enviar invitaciones antes de validar permisos", badge: "seguridad" },
+      { text: "No escribir en Kore", badge: "seguridad" },
+      { text: "No escribir en Zeta", badge: "seguridad" },
+      { text: "No publicar en producción", badge: "seguridad" },
+      { text: "No activar automatizaciones sensibles", badge: "seguridad" },
+    ],
+  },
+];
+
+function buildPickup4x4MeetingChecklistPlainText(p: {
+  meta: DraftMetadata;
+  latestSnapshot: SimulationSnapshotRow;
+}): string {
+  const { meta, latestSnapshot } = p;
+  const goRaw = (latestSnapshot.finalGoNoGo ?? "").trim();
+  const goLabel = goRaw ? goRaw.replace(/_/g, " ") : "—";
+  const score =
+    latestSnapshot.readinessScore != null && !Number.isNaN(Number(latestSnapshot.readinessScore))
+      ? `${String(latestSnapshot.readinessScore)}/100`
+      : "—/100";
+  const risk = latestSnapshot.riskLevel?.trim() || "—";
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — CHECKLIST DE REUNIÓN PREVIA");
+  lines.push("Pickup 4x4 · Instalación manual controlada");
+  lines.push("");
+  lines.push(`Draft ID: ${meta.id}`);
+  lines.push(`Snapshot base: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`Score: ${score}`);
+  lines.push(`Go / No-Go: ${goLabel}`);
+  lines.push(`Riesgo: ${risk}`);
+  for (const g of PICKUP_REUNION_PREVIA_CHECKLIST) {
+    lines.push("");
+    lines.push(g.title);
+    for (const it of g.items) {
+      lines.push(`- [${reunionChecklistBadgeLabel(it.badge)}] ${it.text}`);
+    }
+  }
+  lines.push("");
+  lines.push(
+    "Esta checklist no ejecuta acciones. Sirve para preparar la decisión manual antes de crear recursos, usuarios o integraciones reales."
+  );
+  return lines.join("\n");
+}
+
 /** Solo lectura: dictamen de readiness para instalación manual (derivado de último snapshot). */
 function manualInstallReadinessDictamen(latest: SimulationSnapshotRow | undefined): {
   estadoLabel: string;
@@ -832,6 +947,7 @@ export default function PaqueteDraftDetailPage() {
   const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
   const [preManualReviewSummaryCopied, setPreManualReviewSummaryCopied] = useState(false);
   const [meetingDocumentCopied, setMeetingDocumentCopied] = useState(false);
+  const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -1243,6 +1359,18 @@ export default function PaqueteDraftDetailPage() {
       /* clipboard no disponible */
     }
   }, [meta, latestSnapshot, data, packagePayload]);
+
+  const copyPickup4x4MeetingChecklist = useCallback(async () => {
+    if (!meta || !latestSnapshot || !navigator.clipboard?.writeText) return;
+    const text = buildPickup4x4MeetingChecklistPlainText({ meta, latestSnapshot });
+    try {
+      await navigator.clipboard.writeText(text);
+      setMeetingChecklistCopied(true);
+      window.setTimeout(() => setMeetingChecklistCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot]);
 
   return (
     <PageContainer>
@@ -2697,6 +2825,51 @@ export default function PaqueteDraftDetailPage() {
                   </div>
                 </div>
 
+                <div className="mt-4" aria-labelledby="checklist-reunion-previa-title">
+                  <h3
+                    id="checklist-reunion-previa-title"
+                    className="text-xs font-semibold text-slate-900"
+                  >
+                    Checklist de reunión previa
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                    Guía para alinear reunión con Pickup 4x4, responsable operativo del cliente, área técnica / Kore y
+                    Summer87. Solo lectura: no guarda respuestas.
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {PICKUP_REUNION_PREVIA_CHECKLIST.map((g) => (
+                      <div
+                        key={g.title}
+                        className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          {g.title}
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {g.items.map((it) => (
+                            <li
+                              key={it.text}
+                              className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <span className="min-w-0 flex-1 text-xs leading-snug text-slate-800">
+                                <span className="text-slate-400" aria-hidden>
+                                  •{" "}
+                                </span>
+                                {it.text}
+                              </span>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${reunionChecklistBadgeClass(it.badge)}`}
+                              >
+                                {reunionChecklistBadgeLabel(it.badge)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div>
                     <button
@@ -2729,6 +2902,21 @@ export default function PaqueteDraftDetailPage() {
                     </button>
                     {meetingDocumentCopied ? (
                       <p className="text-[11px] text-slate-600 sm:text-right">Documento copiado</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void copyPickup4x4MeetingChecklist()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      {meetingChecklistCopied ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Copiar checklist de reunión
+                    </button>
+                    {meetingChecklistCopied ? (
+                      <p className="text-[11px] text-slate-600 sm:text-right">Checklist copiada</p>
                     ) : null}
                     {typeof latestSnapshot.executiveSummaryText === "string" &&
                     latestSnapshot.executiveSummaryText.trim().length > 0 ? (
