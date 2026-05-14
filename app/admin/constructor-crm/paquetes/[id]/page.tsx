@@ -394,6 +394,110 @@ function buildPickup4x4MeetingChecklistPlainText(p: {
   return lines.join("\n");
 }
 
+const PICKUP_REUNION_MINUTA_OBJETIVO =
+  "Validar si Pickup 4x4 está en condiciones de avanzar a una preparación manual controlada del CRM, confirmando usuarios, permisos, acceso Kore, alcance del piloto y criterios de éxito.";
+
+const PICKUP_REUNION_MINUTA_AGENDA: string[] = [
+  "Contexto del proyecto Pickup 4x4",
+  "Estado del paquete CRM preparado por Summer87",
+  "Alcance inicial del piloto",
+  "Usuarios y permisos",
+  "Datos disponibles en Kore",
+  "Restricciones de seguridad: solo lectura / sin escrituras externas",
+  "Próximos pasos y responsables",
+];
+
+const PICKUP_REUNION_MINUTA_PREGUNTAS_PICKUP: string[] = [
+  "¿Quién será el responsable operativo del piloto?",
+  "¿Qué usuarios deberían ingresar al primer CRM?",
+  "¿Qué permisos necesita cada usuario?",
+  "¿Qué proceso comercial debe cubrir primero el CRM?",
+  "¿Qué datos necesitan ver desde Kore?",
+  "¿Qué reportes consideran críticos?",
+  "¿Cuál sería un piloto exitoso en 30 días?",
+];
+
+const PICKUP_REUNION_MINUTA_PREGUNTAS_KORE: string[] = [
+  "¿Qué endpoints están disponibles?",
+  "¿Existe ambiente sandbox o demo?",
+  "¿Qué autenticación requiere la API?",
+  "¿Qué campos de clientes, vehículos, ventas o presupuestos están disponibles?",
+  "¿Hay límites de uso o rate limits?",
+  "¿La integración puede mantenerse estrictamente read-only?",
+  "¿Quién será el contacto técnico?",
+];
+
+const PICKUP_REUNION_MINUTA_DECISIONES: string[] = [
+  "Responsable operativo definido",
+  "Usuarios piloto definidos",
+  "Roles/permisos iniciales definidos",
+  "Alcance piloto confirmado",
+  "Acceso Kore read-only confirmado o pendiente",
+  "Fecha tentativa de preparación manual",
+  "Decisión: avanzar / esperar / ajustar alcance",
+];
+
+const PICKUP_REUNION_MINUTA_CIERRE =
+  "Al finalizar la reunión, Summer87 debería tener condiciones suficientes para preparar la instalación manual controlada o, en caso contrario, una lista clara de faltantes.";
+
+const PICKUP_REUNION_MINUTA_NOTA_SEGURIDAD =
+  "Esta minuta no autoriza instalación. Solo ordena la reunión previa para definir condiciones de una futura preparación manual controlada.";
+
+function buildPickup4x4MeetingMinutaPlainText(p: {
+  meta: DraftMetadata;
+  latestSnapshot: SimulationSnapshotRow;
+}): string {
+  const { meta, latestSnapshot } = p;
+  const goRaw = (latestSnapshot.finalGoNoGo ?? "").trim();
+  const goLabel = goRaw ? goRaw.replace(/_/g, " ") : "—";
+  const score =
+    latestSnapshot.readinessScore != null && !Number.isNaN(Number(latestSnapshot.readinessScore))
+      ? `${String(latestSnapshot.readinessScore)}/100`
+      : "—/100";
+  const risk = latestSnapshot.riskLevel?.trim() || "—";
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — MINUTA COMERCIAL/TÉCNICA DE REUNIÓN");
+  lines.push("Pickup 4x4 · Preparación CRM e integración Kore");
+  lines.push("");
+  lines.push(`Draft ID: ${meta.id}`);
+  lines.push(`Snapshot base: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`Score: ${score}`);
+  lines.push(`Go / No-Go: ${goLabel}`);
+  lines.push(`Riesgo: ${risk}`);
+  lines.push("");
+  lines.push("OBJETIVO DE LA REUNIÓN");
+  lines.push(PICKUP_REUNION_MINUTA_OBJETIVO);
+  lines.push("");
+  lines.push("AGENDA SUGERIDA");
+  for (const a of PICKUP_REUNION_MINUTA_AGENDA) {
+    lines.push(`- ${a}`);
+  }
+  lines.push("");
+  lines.push("PREGUNTAS PARA PICKUP 4X4");
+  for (const q of PICKUP_REUNION_MINUTA_PREGUNTAS_PICKUP) {
+    lines.push(`- ${q}`);
+  }
+  lines.push("");
+  lines.push("PREGUNTAS PARA KORE / ÁREA TÉCNICA");
+  for (const q of PICKUP_REUNION_MINUTA_PREGUNTAS_KORE) {
+    lines.push(`- ${q}`);
+  }
+  lines.push("");
+  lines.push("DECISIONES QUE DEBEN SALIR DE LA REUNIÓN");
+  for (const d of PICKUP_REUNION_MINUTA_DECISIONES) {
+    lines.push(`- ${d}`);
+  }
+  lines.push("");
+  lines.push("CIERRE ESPERADO");
+  lines.push(PICKUP_REUNION_MINUTA_CIERRE);
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD");
+  lines.push(PICKUP_REUNION_MINUTA_NOTA_SEGURIDAD);
+  return lines.join("\n");
+}
+
 /** Solo lectura: dictamen de readiness para instalación manual (derivado de último snapshot). */
 function manualInstallReadinessDictamen(latest: SimulationSnapshotRow | undefined): {
   estadoLabel: string;
@@ -948,6 +1052,7 @@ export default function PaqueteDraftDetailPage() {
   const [preManualReviewSummaryCopied, setPreManualReviewSummaryCopied] = useState(false);
   const [meetingDocumentCopied, setMeetingDocumentCopied] = useState(false);
   const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
+  const [meetingMinutaCopied, setMeetingMinutaCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -1367,6 +1472,18 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setMeetingChecklistCopied(true);
       window.setTimeout(() => setMeetingChecklistCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot]);
+
+  const copyPickup4x4MeetingMinuta = useCallback(async () => {
+    if (!meta || !latestSnapshot || !navigator.clipboard?.writeText) return;
+    const text = buildPickup4x4MeetingMinutaPlainText({ meta, latestSnapshot });
+    try {
+      await navigator.clipboard.writeText(text);
+      setMeetingMinutaCopied(true);
+      window.setTimeout(() => setMeetingMinutaCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -2870,6 +2987,87 @@ export default function PaqueteDraftDetailPage() {
                   </div>
                 </div>
 
+                <div className="mt-4" aria-labelledby="minuta-reunion-comercial-title">
+                  <h3
+                    id="minuta-reunion-comercial-title"
+                    className="text-xs font-semibold text-slate-900"
+                  >
+                    Minuta comercial/técnica para reunión
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                    Conducción sugerida de la reunión con Pickup 4x4 y/o Kore. Solo lectura; no guarda notas en el
+                    sistema.
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        1. Objetivo de la reunión
+                      </p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-800">
+                        {PICKUP_REUNION_MINUTA_OBJETIVO}
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          2. Agenda sugerida
+                        </p>
+                        <ul className="mt-2 list-inside list-disc space-y-1 text-xs leading-snug text-slate-800">
+                          {PICKUP_REUNION_MINUTA_AGENDA.map((a) => (
+                            <li key={a}>{a}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          3. Preguntas para Pickup 4x4
+                        </p>
+                        <ul className="mt-2 space-y-1.5 text-xs leading-snug text-slate-800">
+                          {PICKUP_REUNION_MINUTA_PREGUNTAS_PICKUP.map((q) => (
+                            <li key={q} className="flex gap-1.5">
+                              <span className="shrink-0 text-slate-400" aria-hidden>
+                                •
+                              </span>
+                              <span>{q}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          4. Preguntas para Kore / área técnica
+                        </p>
+                        <ul className="mt-2 space-y-1.5 text-xs leading-snug text-slate-800">
+                          {PICKUP_REUNION_MINUTA_PREGUNTAS_KORE.map((q) => (
+                            <li key={q} className="flex gap-1.5">
+                              <span className="shrink-0 text-slate-400" aria-hidden>
+                                •
+                              </span>
+                              <span>{q}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          5. Decisiones que deben salir de la reunión
+                        </p>
+                        <ul className="mt-2 list-inside list-disc space-y-1 text-xs leading-snug text-slate-800">
+                          {PICKUP_REUNION_MINUTA_DECISIONES.map((d) => (
+                            <li key={d}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        6. Cierre esperado
+                      </p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-800">{PICKUP_REUNION_MINUTA_CIERRE}</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div>
                     <button
@@ -2917,6 +3115,21 @@ export default function PaqueteDraftDetailPage() {
                     </button>
                     {meetingChecklistCopied ? (
                       <p className="text-[11px] text-slate-600 sm:text-right">Checklist copiada</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void copyPickup4x4MeetingMinuta()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      {meetingMinutaCopied ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Copiar minuta de reunión
+                    </button>
+                    {meetingMinutaCopied ? (
+                      <p className="text-[11px] text-slate-600 sm:text-right">Minuta copiada</p>
                     ) : null}
                     {typeof latestSnapshot.executiveSummaryText === "string" &&
                     latestSnapshot.executiveSummaryText.trim().length > 0 ? (
