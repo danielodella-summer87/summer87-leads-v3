@@ -169,6 +169,130 @@ function snapshotRiskBadgeClass(v: string | null): string {
   }
 }
 
+function strFromUnknown(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v).trim();
+  return s;
+}
+
+/** finalGoNoGo desde readiness (camel o snake). */
+function contractFinalGoNoGo(rd: Record<string, unknown> | undefined): string {
+  if (!rd) return "";
+  return strFromUnknown(rd.finalGoNoGo ?? rd.final_go_no_go);
+}
+
+function executiveDictamenText(go: string): string {
+  switch (go) {
+    case "no_go":
+      return "No avanzar. El paquete no está listo para instalación manual.";
+    case "pending_inputs":
+      return "Pendiente de insumos. El paquete fue aprobado, pero todavía requiere completar configuración antes de avanzar.";
+    case "ready_for_manual_install":
+      return "Listo para revisión final. Puede considerarse para instalación manual controlada, previa aprobación humana final.";
+    default:
+      return go ? `Estado no estándar (${go}). Revisar contrato técnico.` : "No informado.";
+  }
+}
+
+function executiveTrafficLightClasses(go: string): { track: string; label: string } {
+  switch (go) {
+    case "no_go":
+      return {
+        track: "bg-rose-100 ring-1 ring-rose-200/80",
+        label: "Semáforo: rojo (no avanzar)",
+      };
+    case "pending_inputs":
+      return {
+        track: "bg-amber-100 ring-1 ring-amber-200/80",
+        label: "Semáforo: ámbar (pendiente de insumos)",
+      };
+    case "ready_for_manual_install":
+      return {
+        track: "bg-emerald-50 ring-1 ring-emerald-200/70",
+        label: "Semáforo: verde discreto (listo para revisión final)",
+      };
+    default:
+      return {
+        track: "bg-slate-100 ring-1 ring-slate-200",
+        label: "Semáforo: no informado",
+      };
+  }
+}
+
+function readinessScoreFromContract(rd: Record<string, unknown> | undefined): number | null {
+  if (!rd) return null;
+  const raw = rd.readinessScore ?? rd.readiness_score;
+  if (raw === null || raw === undefined) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(Math.max(0, Math.min(100, n)));
+}
+
+function readinessRiskFromContract(rd: Record<string, unknown> | undefined): string {
+  if (!rd) return "";
+  return strFromUnknown(rd.riskLevel ?? rd.risk_level);
+}
+
+function scorePreparationLabel(score: number | null): string {
+  if (score === null) return "No informado";
+  if (score <= 39) return "preparación baja";
+  if (score <= 69) return "preparación parcial";
+  if (score <= 89) return "preparación avanzada";
+  return "preparación alta";
+}
+
+function executiveRiskExplanation(level: string): string {
+  switch (level) {
+    case "low":
+      return "Riesgo operativo bajo, sujeto a aprobación final.";
+    case "medium":
+      return "Riesgo operativo medio: hay faltantes o validaciones pendientes.";
+    case "high":
+      return "Riesgo operativo alto: no conviene avanzar sin correcciones.";
+    default:
+      return level ? "Riesgo no estándar; revisar contrato." : "No informado.";
+  }
+}
+
+function tenantExecutiveCopy(status: string): string {
+  switch (status) {
+    case "not_resolved":
+      return "Cliente/tenant no resuelto.";
+    case "metadata_only":
+      return "Cliente registrado solo como metadata de draft.";
+    case "resolved":
+      return "Cliente/tenant resuelto.";
+    default:
+      return status ? `Estado: ${status}` : "No informado.";
+  }
+}
+
+function crmSectionStatusBadgeClass(st: string): string {
+  switch (st) {
+    case "missing":
+      return "border border-rose-200/70 bg-rose-50 text-rose-900";
+    case "partial":
+      return "border border-amber-200/70 bg-amber-50 text-amber-950";
+    case "ready":
+      return "border border-slate-200 bg-slate-100 text-slate-800";
+    default:
+      return "border border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
+function executiveNextStep(go: string): string {
+  switch (go) {
+    case "no_go":
+      return "Corregir faltantes críticos antes de generar un nuevo snapshot.";
+    case "pending_inputs":
+      return "Completar configuración mínima y volver a simular antes de solicitar instalación.";
+    case "ready_for_manual_install":
+      return "Solicitar aprobación humana final antes de cualquier ejecución.";
+    default:
+      return "Revisar el contrato técnico y coordinar el siguiente paso con el equipo responsable.";
+  }
+}
+
 const PAYLOAD_SECTION_KEYS: { key: string; label: string }[] = [
   { key: "installation_manifest", label: "Manifest" },
   { key: "client_identity", label: "Identidad cliente" },
@@ -1115,6 +1239,34 @@ export default function PaqueteDraftDetailPage() {
                             const bpa = Array.isArray(tc.blockedProductionActions)
                               ? (tc.blockedProductionActions as string[])
                               : [];
+                            const crmRaw = tc.crmConfiguration;
+                            const crm =
+                              crmRaw && typeof crmRaw === "object" && !Array.isArray(crmRaw)
+                                ? (crmRaw as Record<string, unknown>)
+                                : {};
+                            const humanApprovals = Array.isArray(tc.requiredHumanApprovals)
+                              ? (tc.requiredHumanApprovals as Array<Record<string, unknown>>)
+                              : [];
+                            const finalGoExec = contractFinalGoNoGo(rd);
+                            const execScore = readinessScoreFromContract(rd);
+                            const execRisk =
+                              readinessRiskFromContract(rd) ||
+                              String(simulateResult?.riskLevel ?? "").trim();
+                            const traffic = executiveTrafficLightClasses(finalGoExec);
+                            const crmPick = (camel: string, snake: string) =>
+                              String(crm[camel] ?? crm[snake] ?? "").trim() || "—";
+                            const crmRows: { camel: string; snake: string; label: string }[] = [
+                              { camel: "modulesStatus", snake: "modules_status", label: "Módulos" },
+                              { camel: "pipelineStatus", snake: "pipeline_status", label: "Pipeline" },
+                              { camel: "leadFieldsStatus", snake: "lead_fields_status", label: "Campos de leads" },
+                              { camel: "permissionsStatus", snake: "permissions_status", label: "Permisos" },
+                              { camel: "reportsStatus", snake: "reports_status", label: "Reportes" },
+                              { camel: "integrationsStatus", snake: "integrations_status", label: "Integraciones" },
+                            ];
+                            const tenantSt = strFromUnknown(tr?.status);
+                            const zpMode = strFromUnknown(zp?.mode);
+                            const zpWrite = zp?.writeAllowed ?? zp?.write_allowed;
+                            const zpReason = strFromUnknown(zp?.reason);
                             const audit = Array.isArray(tc.auditNotes) ? (tc.auditNotes as string[]) : [];
                             return (
                               <>
@@ -1196,6 +1348,160 @@ export default function PaqueteDraftDetailPage() {
                                       <li key={n}>{n}</li>
                                     ))}
                                   </ul>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                  <h4 className="text-sm font-semibold text-slate-900">
+                                    Lectura ejecutiva del contrato
+                                  </h4>
+                                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    Dictamen ejecutivo
+                                  </p>
+                                  <p className="mt-1 text-sm leading-relaxed text-slate-800">
+                                    {executiveDictamenText(finalGoExec)}
+                                  </p>
+                                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                                    <div
+                                      className={`h-2.5 w-20 shrink-0 rounded-full ${traffic.track}`}
+                                      title={traffic.label}
+                                      aria-label={traffic.label}
+                                    />
+                                    <span className="text-xs text-slate-600">{traffic.label}</span>
+                                  </div>
+                                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Score de preparación
+                                      </p>
+                                      <p className="mt-1 text-sm font-semibold tabular-nums text-slate-900">
+                                        {execScore !== null ? `${execScore}/100` : "—"}
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-slate-600">
+                                        {scorePreparationLabel(execScore)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Riesgo
+                                      </p>
+                                      <p className="mt-1 text-sm font-medium uppercase tracking-wide text-slate-800">
+                                        {execRisk || "—"}
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-slate-600">
+                                        {executiveRiskExplanation(execRisk)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-4">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Estado del tenant
+                                    </p>
+                                    <p className="mt-1 text-sm text-slate-800">
+                                      {tenantExecutiveCopy(tenantSt)}
+                                    </p>
+                                  </div>
+                                  <div className="mt-4">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Configuración CRM (resumen)
+                                    </p>
+                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                      {crmRows.map(({ camel, snake, label }) => {
+                                        const st = crmPick(camel, snake);
+                                        return (
+                                          <div
+                                            key={camel}
+                                            className="flex items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50/80 px-2 py-1.5"
+                                          >
+                                            <dt className="text-xs text-slate-600">{label}</dt>
+                                            <dd>
+                                              <span
+                                                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${crmSectionStatusBadgeClass(st)}`}
+                                              >
+                                                {st}
+                                              </span>
+                                            </dd>
+                                          </div>
+                                        );
+                                      })}
+                                    </dl>
+                                  </div>
+                                  <div className="mt-4">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Aprobaciones humanas pendientes
+                                    </p>
+                                    {humanApprovals.length === 0 ? (
+                                      <p className="mt-1 text-xs text-slate-500">No informado.</p>
+                                    ) : (
+                                      <ul className="mt-2 space-y-2">
+                                        {humanApprovals.map((a, idx) => {
+                                          const lab = strFromUnknown(a.label ?? a.Label) || "—";
+                                          const req = a.required ?? a.Required;
+                                          const reqLabel =
+                                            req === true ? "Sí" : req === false ? "No" : "—";
+                                          const reason = strFromUnknown(a.reason ?? a.Reason) || "—";
+                                          const k = strFromUnknown(a.key ?? a.Key) || `item-${idx}`;
+                                          return (
+                                            <li
+                                              key={`${k}-${idx}`}
+                                              className="rounded-md border border-slate-100 bg-slate-50/80 px-2 py-1.5 text-xs text-slate-800"
+                                            >
+                                              <span className="font-medium text-slate-900">{lab}</span>
+                                              <span className="text-slate-500"> · Requerida: {reqLabel}</span>
+                                              <p className="mt-0.5 text-slate-600">{reason}</p>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    )}
+                                  </div>
+                                  <div className="mt-4 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Política Zeta
+                                    </p>
+                                    <p className="mt-1 text-xs leading-relaxed text-slate-800">
+                                      Zeta permanece en modo solo lectura. Esta simulación no escribe en Zeta.
+                                    </p>
+                                    <p className="mt-2 text-xs text-slate-700">
+                                      <span className="text-slate-500">Modo:</span>{" "}
+                                      <span className="font-mono">{zpMode || "—"}</span>
+                                      {" · "}
+                                      <span className="text-slate-500">writeAllowed:</span>{" "}
+                                      <span className="font-mono">
+                                        {zpWrite === undefined || zpWrite === null
+                                          ? "—"
+                                          : String(zpWrite)}
+                                      </span>
+                                    </p>
+                                    {zpReason ? (
+                                      <p className="mt-1 text-xs text-slate-600">{zpReason}</p>
+                                    ) : null}
+                                  </div>
+                                  <div className="mt-4">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Acciones bloqueadas críticas
+                                    </p>
+                                    {bpa.length === 0 ? (
+                                      <p className="mt-1 text-xs text-slate-500">—</p>
+                                    ) : (
+                                      <ul className="mt-2 flex flex-wrap gap-1.5">
+                                        {bpa.map((code) => (
+                                          <li
+                                            key={code}
+                                            className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-800"
+                                          >
+                                            {code}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                  <div className="mt-4 border-t border-slate-100 pt-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      Recomendación siguiente
+                                    </p>
+                                    <p className="mt-1 text-sm text-slate-800">
+                                      {executiveNextStep(finalGoExec)}
+                                    </p>
+                                  </div>
                                 </div>
                                 <div>
                                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
