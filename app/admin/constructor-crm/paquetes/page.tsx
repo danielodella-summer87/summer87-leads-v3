@@ -35,6 +35,17 @@ type DraftListItem = {
 
 type FilterTab = "all" | "pending" | "approved" | "rejected" | "expired";
 
+type EvidenceFilterTab =
+  | "all"
+  | "with"
+  | "without"
+  | "pending_inputs"
+  | "no_go"
+  | "ready_manual"
+  | "risk_low"
+  | "risk_medium"
+  | "risk_high";
+
 function formatDt(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -98,12 +109,63 @@ function filterRow(tab: FilterTab, row: DraftListItem): boolean {
   }
 }
 
+function evidenceSummaryForRow(row: DraftListItem): EvidenceSummary {
+  return row.evidenceSummary ?? defaultEvidenceSummary();
+}
+
+/** Filtro client-side por evidencia; se combina con el filtro de estado. */
+function filterEvidenceRow(tab: EvidenceFilterTab, row: DraftListItem): boolean {
+  const es = evidenceSummaryForRow(row);
+  switch (tab) {
+    case "all":
+      return true;
+    case "with":
+      return es.hasEvidence === true || es.snapshotCount > 0;
+    case "without":
+      return !es.hasEvidence || es.snapshotCount === 0;
+    case "pending_inputs":
+      return es.latestFinalGoNoGo === "pending_inputs";
+    case "no_go":
+      return es.latestFinalGoNoGo === "no_go";
+    case "ready_manual":
+      return es.latestFinalGoNoGo === "ready_for_manual_install";
+    case "risk_low":
+      return es.latestRiskLevel === "low";
+    case "risk_medium":
+      return es.latestRiskLevel === "medium";
+    case "risk_high":
+      return es.latestRiskLevel === "high";
+    default:
+      return true;
+  }
+}
+
+function passesCombinedFilters(
+  row: DraftListItem,
+  stateTab: FilterTab,
+  evidenceTab: EvidenceFilterTab
+): boolean {
+  return filterRow(stateTab, row) && filterEvidenceRow(evidenceTab, row);
+}
+
 const TAB_LABELS: { id: FilterTab; label: string }[] = [
   { id: "all", label: "Todos" },
   { id: "pending", label: "Pendientes" },
   { id: "approved", label: "Aprobados" },
   { id: "rejected", label: "Rechazados" },
   { id: "expired", label: "Expirados" },
+];
+
+const EVIDENCE_TAB_LABELS: { id: EvidenceFilterTab; label: string }[] = [
+  { id: "all", label: "Toda evidencia" },
+  { id: "with", label: "Con evidencia" },
+  { id: "without", label: "Sin evidencia" },
+  { id: "pending_inputs", label: "Pending inputs" },
+  { id: "no_go", label: "No-go" },
+  { id: "ready_manual", label: "Ready manual" },
+  { id: "risk_low", label: "Riesgo bajo" },
+  { id: "risk_medium", label: "Riesgo medio" },
+  { id: "risk_high", label: "Riesgo alto" },
 ];
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -194,6 +256,7 @@ export default function PaquetesDraftsListPage() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<DraftListItem[]>([]);
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilterTab>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [evidenceSummaryUnavailable, setEvidenceSummaryUnavailable] = useState(false);
   const [evidenceSummaryMessage, setEvidenceSummaryMessage] = useState<string | null>(null);
@@ -269,10 +332,18 @@ export default function PaquetesDraftsListPage() {
     const approved = items.filter((r) => isApprovedRow(r)).length;
     const rejected = items.filter((r) => isRejectedRow(r)).length;
     const expired = items.filter((r) => isExpiredAt(r.expiresAt)).length;
-    return { total, pending, approved, rejected, expired };
+    const withEvidence = items.filter((r) => {
+      const es = evidenceSummaryForRow(r);
+      return es.hasEvidence === true || es.snapshotCount > 0;
+    }).length;
+    const withoutEvidence = total - withEvidence;
+    return { total, pending, approved, rejected, expired, withEvidence, withoutEvidence };
   }, [items]);
 
-  const filteredItems = useMemo(() => items.filter((row) => filterRow(filter, row)), [items, filter]);
+  const filteredItems = useMemo(
+    () => items.filter((row) => passesCombinedFilters(row, filter, evidenceFilter)),
+    [items, filter, evidenceFilter]
+  );
 
   async function copyFullId(uuid: string) {
     if (!uuid || !navigator.clipboard?.writeText) return;
@@ -309,7 +380,7 @@ export default function PaquetesDraftsListPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-5">
+        <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-7">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.total}</p>
@@ -330,24 +401,64 @@ export default function PaquetesDraftsListPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Expirados</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.expired}</p>
           </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Con evidencia</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.withEvidence}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Sin evidencia</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-600">{stats.withoutEvidence}</p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {TAB_LABELS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setFilter(t.id)}
-              className={cx(
-                "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                filter === t.id
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Estado</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TAB_LABELS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setFilter(t.id)}
+                  className={cx(
+                    "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                    filter === t.id
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Evidencia</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {EVIDENCE_TAB_LABELS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setEvidenceFilter(t.id)}
+                  className={cx(
+                    "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                    evidenceFilter === t.id
+                      ? "border-slate-800 bg-slate-800 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">
+            Filtros combinados:{" "}
+            <span className="font-medium text-slate-700">
+              {TAB_LABELS.find((x) => x.id === filter)?.label} ·{" "}
+              {EVIDENCE_TAB_LABELS.find((x) => x.id === evidenceFilter)?.label}
+            </span>
+          </p>
         </div>
 
         {error ? (
@@ -380,7 +491,9 @@ export default function PaquetesDraftsListPage() {
           ) : items.length === 0 ? (
             <p className="p-6 text-sm text-slate-500">No hay borradores registrados.</p>
           ) : filteredItems.length === 0 ? (
-            <p className="p-6 text-sm text-slate-500">No hay borradores en este filtro.</p>
+            <p className="p-6 text-sm text-slate-500">
+              No hay borradores para esta combinación de filtros.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1280px] text-left text-sm">
