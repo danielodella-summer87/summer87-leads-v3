@@ -675,6 +675,41 @@ const PILOT_ENV_OPERATIVE_DEFERRED_COPY_LINES: string[] = [
   "Roles por usuario operativo y permisos complejos como requisito inicial: no aplica en esta etapa.",
 ];
 
+const PICKUP_FINAL_CASE_SYNTHESIS_PARAGRAPH =
+  "Pickup 4x4 cuenta con un paquete CRM preparado, aprobado, simulado y respaldado con evidencia técnica. El caso está listo para revisión manual y planificación controlada, pero no ejecuta instalación ni crea recursos.";
+
+const PICKUP_FINAL_CASE_NEXT_STEP_PARAGRAPH =
+  "Realizar revisión final con propietarios de Pickup 4x4 y confirmar alcance, canal de coordinación, Kore read-only y criterio de éxito antes de diseñar cualquier SQL o crear recursos.";
+
+const PICKUP_FINAL_CASE_SECURITY_NOTE =
+  "Este resumen no instala CRM, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta.";
+
+const PICKUP_FINAL_CASE_MEETING_PENDING_NOTE =
+  "Falta decisión de reunión para cerrar el resumen final.";
+
+const PICKUP_FINAL_CASE_PREPARED_BULLETS: string[] = [
+  "Modelo CRM inicial",
+  "Módulos",
+  "Pipeline",
+  "Campos comerciales",
+  "Reportes iniciales",
+  "Kore read-only definido",
+  "Evidencia técnica",
+  "Decisión de avance manual",
+  "Plan técnico futuro",
+];
+
+const PICKUP_FINAL_CASE_BLOCKED_BULLETS: string[] = [
+  "Crear tenant",
+  "Crear usuarios",
+  "Enviar invitaciones",
+  "Escribir en Kore",
+  "Escribir en Zeta",
+  "Publicar producción",
+  "Ejecutar SQL",
+  "Instalar automáticamente",
+];
+
 type PilotPlanDataRow = { label: string; status: ManualCheckStatus };
 
 function computePilotEnvironmentPlanDataRows(p: {
@@ -2583,6 +2618,67 @@ function buildPickup4x4MeetingDocumentPlainText(p: {
   return lines.join("\n");
 }
 
+/** Texto plano para “Resumen ejecutivo final del caso” (solo lectura; no persiste). */
+function buildFinalCaseExecutiveSummaryPlainText(params: {
+  hasAdvanceMeetingDecision: boolean;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem | null;
+}): string {
+  const { hasAdvanceMeetingDecision, latestAdvanceMeetingDecision } = params;
+  const lines: string[] = [];
+  lines.push("Resumen ejecutivo final del caso");
+  lines.push("");
+  lines.push("Estado del caso");
+  if (hasAdvanceMeetingDecision && latestAdvanceMeetingDecision) {
+    lines.push("- Caso preparado");
+    lines.push("- Ready manual");
+    lines.push("- Ejecución bloqueada");
+    lines.push("- Primera etapa restringida");
+    lines.push(
+      `- Decisión reunión (avance manual): ${latestAdvanceMeetingDecision.decisionLabel} · ${formatDt(latestAdvanceMeetingDecision.createdAt)}`
+    );
+  } else {
+    lines.push("- Ready manual");
+    lines.push("- Ejecución bloqueada");
+    lines.push("- Primera etapa restringida");
+    lines.push(`- ${PICKUP_FINAL_CASE_MEETING_PENDING_NOTE}`);
+  }
+  lines.push("");
+  lines.push("Síntesis");
+  if (!hasAdvanceMeetingDecision) {
+    lines.push(PICKUP_FINAL_CASE_MEETING_PENDING_NOTE);
+    lines.push("");
+  }
+  lines.push(PICKUP_FINAL_CASE_SYNTHESIS_PARAGRAPH);
+  lines.push("");
+  lines.push("Qué se preparó");
+  for (const item of PICKUP_FINAL_CASE_PREPARED_BULLETS) {
+    if (item === "Decisión de avance manual" && !hasAdvanceMeetingDecision) {
+      lines.push(`- ${item} (pendiente de registrar en reunión)`);
+    } else {
+      lines.push(`- ${item}`);
+    }
+  }
+  lines.push("");
+  lines.push("Qué está listo");
+  lines.push(
+    hasAdvanceMeetingDecision
+      ? "Paquete CRM documentado, evidencia con ready_for_manual_install y decisión de reunión de avance manual registrada."
+      : "Paquete CRM documentado y evidencia con ready_for_manual_install; falta registrar la decisión de reunión de avance manual para cerrar el cierre formal."
+  );
+  lines.push("");
+  lines.push("Qué queda bloqueado");
+  for (const item of PICKUP_FINAL_CASE_BLOCKED_BULLETS) {
+    lines.push(`- ${item}`);
+  }
+  lines.push("");
+  lines.push("Próximo paso recomendado");
+  lines.push(PICKUP_FINAL_CASE_NEXT_STEP_PARAGRAPH);
+  lines.push("");
+  lines.push("Nota de seguridad");
+  lines.push(PICKUP_FINAL_CASE_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
 function crmSummaryPlainLine(crm: Record<string, unknown>): string {
   const pairs: [string, string][] = [
     ["Módulos", "modulesStatus"],
@@ -2862,6 +2958,7 @@ export default function PaqueteDraftDetailPage() {
   const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
   const [snapshotSummaryCopiedId, setSnapshotSummaryCopiedId] = useState<string | null>(null);
   const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
+  const [finalCaseExecutiveCopied, setFinalCaseExecutiveCopied] = useState(false);
   const [preManualReviewSummaryCopied, setPreManualReviewSummaryCopied] = useState(false);
   const [meetingDocumentCopied, setMeetingDocumentCopied] = useState(false);
   const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
@@ -2936,6 +3033,7 @@ export default function PaqueteDraftDetailPage() {
     setSnapshotsLoading(false);
     setSnapshotSummaryCopiedId(null);
     setConsolidatedSummaryCopied(false);
+    setFinalCaseExecutiveCopied(false);
   }, [id]);
 
   const loadSimulationSnapshots = useCallback(async () => {
@@ -3343,6 +3441,21 @@ export default function PaqueteDraftDetailPage() {
       /* clipboard no disponible */
     }
   }, []);
+
+  const copyFinalCaseExecutiveSummary = useCallback(async () => {
+    if (!navigator.clipboard?.writeText) return;
+    const text = buildFinalCaseExecutiveSummaryPlainText({
+      hasAdvanceMeetingDecision: latestAdvanceMeetingDecision !== null,
+      latestAdvanceMeetingDecision,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setFinalCaseExecutiveCopied(true);
+      window.setTimeout(() => setFinalCaseExecutiveCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [latestAdvanceMeetingDecision]);
 
   const copyPilotEnvCreationPlan = useCallback(async () => {
     if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
@@ -4567,6 +4680,120 @@ export default function PaqueteDraftDetailPage() {
                 </div>
               ) : null}
             </section>
+
+            {showExecutivePreManualReview && meta && data && latestSnapshot ? (
+              <section
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                aria-labelledby="final-case-executive-summary-title"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h2
+                      id="final-case-executive-summary-title"
+                      className="text-sm font-semibold text-slate-900"
+                    >
+                      Resumen ejecutivo final del caso
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Solo lectura. No guarda cambios; copia texto plano para uso externo.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void copyFinalCaseExecutiveSummary()}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                  >
+                    <Copy className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                    Copiar resumen ejecutivo final
+                  </button>
+                </div>
+
+                {finalCaseExecutiveCopied ? (
+                  <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Resumen final copiado
+                  </p>
+                ) : null}
+
+                {!latestAdvanceMeetingDecision ? (
+                  <div
+                    className="mt-3 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950"
+                    role="status"
+                  >
+                    {PICKUP_FINAL_CASE_MEETING_PENDING_NOTE}
+                  </div>
+                ) : null}
+
+                <div className="mt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado del caso
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {latestAdvanceMeetingDecision ? (
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                        Caso preparado
+                      </span>
+                    ) : null}
+                    <span className="inline-flex rounded-full border border-amber-200/90 bg-amber-50/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                      Ready manual
+                    </span>
+                    <span className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                      Ejecución bloqueada
+                    </span>
+                    <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      Primera etapa restringida
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Síntesis</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-700">
+                    {PICKUP_FINAL_CASE_SYNTHESIS_PARAGRAPH}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Qué está preparado
+                    </p>
+                    <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] leading-snug text-slate-700">
+                      {PICKUP_FINAL_CASE_PREPARED_BULLETS.map((item) => (
+                        <li key={item} className="marker:text-slate-300">
+                          {item === "Decisión de avance manual" && !latestAdvanceMeetingDecision
+                            ? `${item} (pendiente en reunión)`
+                            : item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Qué sigue bloqueado
+                    </p>
+                    <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] leading-snug text-slate-700">
+                      {PICKUP_FINAL_CASE_BLOCKED_BULLETS.map((item) => (
+                        <li key={item} className="marker:text-slate-300">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Próximo paso recomendado
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-800">
+                    {PICKUP_FINAL_CASE_NEXT_STEP_PARAGRAPH}
+                  </p>
+                </div>
+
+                <p className="mt-3 text-[10px] leading-relaxed text-slate-500">{PICKUP_FINAL_CASE_SECURITY_NOTE}</p>
+              </section>
+            ) : null}
 
             {showPostApprovalPilotPrep && meta && data ? (
               <CollapsibleSection
