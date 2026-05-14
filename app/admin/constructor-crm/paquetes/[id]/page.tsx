@@ -301,6 +301,32 @@ function prepReadinessBadgeClass(s: ManualCheckStatus): string {
   return "border border-amber-200 bg-amber-50 text-amber-950";
 }
 
+type FutureExecutableUnlockBadge = "pendiente" | "antecedente" | "requerido";
+
+function futureUnlockBadgeClass(b: FutureExecutableUnlockBadge): string {
+  switch (b) {
+    case "antecedente":
+      return "border border-slate-300 bg-slate-100 text-slate-800";
+    case "requerido":
+      return "border border-violet-200 bg-violet-50/90 text-violet-950";
+    case "pendiente":
+    default:
+      return "border border-amber-200 bg-amber-50 text-amber-950";
+  }
+}
+
+function futureUnlockBadgeLabel(b: FutureExecutableUnlockBadge): string {
+  switch (b) {
+    case "antecedente":
+      return "Con antecedente";
+    case "requerido":
+      return "Requerido";
+    case "pendiente":
+    default:
+      return "Pendiente";
+  }
+}
+
 type ReunionChecklistBadgeKind = "pendiente" | "obligatorio" | "seguridad";
 
 function reunionChecklistBadgeClass(b: ReunionChecklistBadgeKind): string {
@@ -781,6 +807,220 @@ function buildPilotEnvCreationPlanPlainText(p: {
   lines.push("");
   lines.push("NOTA DE SEGURIDAD");
   lines.push(PILOT_ENV_CREATION_PLAN_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
+const FUTURE_EXECUTABLE_PLAN_INTRO =
+  "Este bloque describe qué acciones técnicas podrían ejecutarse en una fase posterior para preparar el entorno piloto. Actualmente todas las acciones están bloqueadas y no se ejecutan desde esta pantalla.";
+
+const FUTURE_EXECUTABLE_PLAN_SEQUENCE_STEPS: string[] = [
+  "Validar aprobación final.",
+  "Crear entorno / tenant piloto.",
+  "Crear configuración base del CRM.",
+  "Aplicar módulos CRM del paquete.",
+  "Aplicar pipeline comercial.",
+  "Aplicar campos de clientes, vehículos y oportunidades.",
+  "Configurar reportes iniciales.",
+  "Preparar conector Kore read-only.",
+  "Validar datos de prueba o lectura inicial.",
+  "Registrar auditoría de preparación.",
+  "Coordinar acceso restringido con propietarios + Daniel / Summer87.",
+  "Recién al final: definir usuarios operativos.",
+  "Recién al final: definir permisos individuales.",
+  "Recién al final: enviar invitaciones controladas.",
+];
+
+const FUTURE_EXECUTABLE_TECHNICAL_ACTIONS: {
+  key: string;
+  label: string;
+  estado: "Bloqueado" | "Postergado";
+  motivo: string;
+}[] = [
+  {
+    key: "create_pilot_environment",
+    label: "Crear entorno piloto",
+    estado: "Bloqueado",
+    motivo: "Requiere aprobación final",
+  },
+  {
+    key: "apply_crm_base_config",
+    label: "Aplicar configuración base CRM",
+    estado: "Bloqueado",
+    motivo: "Requiere entorno piloto creado",
+  },
+  {
+    key: "apply_pipeline_config",
+    label: "Aplicar pipeline comercial",
+    estado: "Bloqueado",
+    motivo: "Requiere configuración base validada",
+  },
+  {
+    key: "apply_lead_fields_config",
+    label: "Aplicar campos comerciales",
+    estado: "Bloqueado",
+    motivo: "Requiere campos mínimos confirmados",
+  },
+  {
+    key: "setup_kore_readonly_connector",
+    label: "Preparar conector Kore read-only",
+    estado: "Bloqueado",
+    motivo: "Requiere documentación/API Kore",
+  },
+  {
+    key: "register_installation_audit",
+    label: "Registrar auditoría de instalación",
+    estado: "Bloqueado",
+    motivo: "Requiere ejecución real en fase posterior",
+  },
+  {
+    key: "define_operational_users_later",
+    label: "Definir usuarios operativos al final",
+    estado: "Postergado",
+    motivo: "Usuarios operativos quedan para una fase posterior",
+  },
+  {
+    key: "send_invites_later",
+    label: "Enviar invitaciones controladas",
+    estado: "Postergado",
+    motivo: "Solo después de validar estructura y permisos",
+  },
+];
+
+const FUTURE_EXECUTABLE_BLOCKED_CODES: string[] = [
+  "create_tenant",
+  "create_users",
+  "send_invites",
+  "write_kore",
+  "write_zeta",
+  "publish_production",
+  "install_crm_automatically",
+  "enable_sensitive_automations",
+  "expose_constructor_to_client",
+];
+
+const FUTURE_EXECUTABLE_BARRIER_TITLE = "Barrera de seguridad activa";
+
+const FUTURE_EXECUTABLE_BARRIER_TEXT =
+  "Aunque el plan figure como listo para describirse, ninguna acción técnica se ejecuta desde esta pantalla. La creación de entorno, usuarios, invitaciones, escritura externa o instalación automática siguen bloqueadas.";
+
+const FUTURE_EXECUTABLE_PLAN_FINAL_SECURITY =
+  "Este plan ejecutable futuro no crea recursos, no instala CRM, no crea usuarios y no escribe en Kore ni en Zeta. Solo documenta qué podría ejecutarse en una fase posterior con aprobación final.";
+
+function computeFutureExecutableUnlockRows(p: {
+  packagePayload: Record<string, unknown>;
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+}): { label: string; badge: FutureExecutableUnlockBadge }[] {
+  const { packagePayload: pp, meta, humanConfirmationStatus: humanSt, latestAdvanceMeetingDecision: adv } = p;
+  const modulesOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "crm_modules_config", "crmModulesConfig")
+  );
+  const pipelineOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+  const fieldsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "lead_fields_config", "leadFieldsConfig"));
+  const critOk =
+    typeof adv.decisionReason === "string" && adv.decisionReason.trim().length >= 20;
+  const summer87PilotOk = meta.status === "approved_for_pilot";
+  const pickupHumanOk = humanSt === "approved";
+  const koreOk = isKoreReadOnlyIntegration(pp);
+  const docOk = integrationsConfigHasEntries(pp);
+  const baseValidated = modulesOk && pipelineOk && fieldsOk;
+  return [
+    {
+      label: "Aprobación final Summer87.",
+      badge: summer87PilotOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Aprobación final propietarios Pickup 4x4.",
+      badge: pickupHumanOk ? "antecedente" : "pendiente",
+    },
+    { label: "Alcance piloto cerrado.", badge: modulesOk && pipelineOk ? "antecedente" : "pendiente" },
+    { label: "Configuración base validada.", badge: baseValidated ? "antecedente" : "pendiente" },
+    { label: "Kore read-only confirmado.", badge: koreOk ? "antecedente" : "pendiente" },
+    { label: "Documentación/API Kore disponible.", badge: docOk ? "antecedente" : "pendiente" },
+    { label: "Criterio de éxito definido.", badge: critOk ? "antecedente" : "pendiente" },
+    { label: "Decisión explícita de crear entorno piloto.", badge: "requerido" },
+    {
+      label: "Confirmación de que sigue siendo primera etapa restringida.",
+      badge: "requerido",
+    },
+    {
+      label: "Confirmación de que usuarios operativos quedan para fase posterior.",
+      badge: "requerido",
+    },
+  ];
+}
+
+function buildFutureExecutablePlanPlainText(p: {
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, humanConfirmationStatus, latestSnapshot, latestAdvanceMeetingDecision, packagePayload } = p;
+  const goRaw = (latestSnapshot.finalGoNoGo ?? "").trim();
+  const goLabel = goRaw ? goRaw.replace(/_/g, " ") : "—";
+  const score =
+    latestSnapshot.readinessScore != null && !Number.isNaN(Number(latestSnapshot.readinessScore))
+      ? `${String(latestSnapshot.readinessScore)}/100`
+      : "—/100";
+  const risk = latestSnapshot.riskLevel?.trim() || "—";
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const unlockRows = computeFutureExecutableUnlockRows({
+    packagePayload,
+    meta,
+    humanConfirmationStatus,
+    latestAdvanceMeetingDecision,
+  });
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — PLAN EJECUTABLE FUTURO (Pickup 4x4)");
+  lines.push("Documento informativo. Ninguna acción se ejecuta desde Constructor CRM.");
+  lines.push("");
+  lines.push("ESTADO DEL PLAN EJECUTABLE");
+  for (const b of ["Futuro", "Bloqueado", "No ejecutado", "Requiere fase posterior", "Requiere aprobación final"]) {
+    lines.push(`- ${b}`);
+  }
+  lines.push("");
+  lines.push("ESTADO ACTUAL (referencia)");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Estado draft: ${meta.status}`);
+  lines.push(`- Confirmación humana: ${humanConfirmationStatus}`);
+  lines.push(`- Snapshot: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Score: ${score}`);
+  lines.push(`- Go / No-Go: ${goLabel}`);
+  lines.push(`- Riesgo: ${risk}`);
+  lines.push(`- Decisión reunión: ${latestAdvanceMeetingDecision.decisionLabel}`);
+  lines.push("");
+  lines.push("TEXTO INTRODUCTORIO");
+  lines.push(FUTURE_EXECUTABLE_PLAN_INTRO);
+  lines.push("");
+  lines.push("SECUENCIA FUTURA DE EJECUCIÓN (cada paso: Futuro · Bloqueado · No ejecutado)");
+  FUTURE_EXECUTABLE_PLAN_SEQUENCE_STEPS.forEach((step, i) => {
+    lines.push(`${i + 1}. ${step} [Futuro · Bloqueado · No ejecutado]`);
+  });
+  lines.push("");
+  lines.push("ACCIONES TÉCNICAS FUTURAS");
+  for (const a of FUTURE_EXECUTABLE_TECHNICAL_ACTIONS) {
+    lines.push(`- ${a.key} — ${a.label} — ${a.estado} — ${a.motivo}`);
+  }
+  lines.push("");
+  lines.push("REQUISITOS PARA DESBLOQUEAR EN EL FUTURO");
+  for (const r of unlockRows) {
+    lines.push(`- [${futureUnlockBadgeLabel(r.badge)}] ${r.label}`);
+  }
+  lines.push("");
+  lines.push(FUTURE_EXECUTABLE_BARRIER_TITLE.toUpperCase());
+  lines.push(FUTURE_EXECUTABLE_BARRIER_TEXT);
+  lines.push("");
+  lines.push("ACCIONES EXPLÍCITAMENTE BLOQUEADAS");
+  for (const c of FUTURE_EXECUTABLE_BLOCKED_CODES) {
+    lines.push(`- ${c}`);
+  }
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD FINAL");
+  lines.push(FUTURE_EXECUTABLE_PLAN_FINAL_SECURITY);
   return lines.join("\n");
 }
 
@@ -1356,6 +1596,7 @@ export default function PaqueteDraftDetailPage() {
   const [meetingMinutaCopied, setMeetingMinutaCopied] = useState(false);
   const [pickupCommercialMessageCopied, setPickupCommercialMessageCopied] = useState(false);
   const [pilotEnvPlanCopied, setPilotEnvPlanCopied] = useState(false);
+  const [futureExecutablePlanCopied, setFutureExecutablePlanCopied] = useState(false);
   const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
   const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
   const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
@@ -1840,6 +2081,24 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setPilotEnvPlanCopied(true);
       window.setTimeout(() => setPilotEnvPlanCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, latestAdvanceMeetingDecision, packagePayload]);
+
+  const copyFutureExecutablePlan = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
+    const text = buildFutureExecutablePlanPlainText({
+      meta,
+      humanConfirmationStatus: data.humanConfirmationStatus,
+      latestSnapshot,
+      latestAdvanceMeetingDecision,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setFutureExecutablePlanCopied(true);
+      window.setTimeout(() => setFutureExecutablePlanCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -4251,6 +4510,189 @@ export default function PaqueteDraftDetailPage() {
                 <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   {PILOT_ENV_CREATION_PLAN_SECURITY_NOTE}
+                </p>
+              </section>
+            ) : null}
+
+            {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
+              <section
+                className="rounded-xl border border-slate-400/50 bg-slate-100/40 p-5"
+                aria-labelledby="future-executable-plan-title"
+              >
+                <h2 id="future-executable-plan-title" className="text-sm font-semibold text-slate-900">
+                  Plan ejecutable futuro
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  Acciones técnicas prospectivas, todas bloqueadas en esta pantalla. Primera etapa restringida a
+                  propietarios + Daniel / Summer87; sin ejecución real.
+                </p>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado del plan ejecutable
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {["Futuro", "Bloqueado", "No ejecutado", "Requiere fase posterior", "Requiere aprobación final"].map(
+                      (label) => (
+                        <li
+                          key={label}
+                          className="inline-flex rounded-full border border-slate-400/60 bg-slate-200/50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-800"
+                        >
+                          {label}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Introducción
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-800">{FUTURE_EXECUTABLE_PLAN_INTRO}</p>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Secuencia futura de ejecución
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Cada paso: prospectivo, bloqueado y no ejecutado desde aquí.
+                  </p>
+                  <ol className="mt-2 list-decimal space-y-2 pl-4 text-xs leading-relaxed text-slate-800">
+                    {FUTURE_EXECUTABLE_PLAN_SEQUENCE_STEPS.map((step) => (
+                      <li key={step} className="pl-0.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <span>{step}</span>
+                          <span className="flex shrink-0 flex-wrap gap-1">
+                            <span className="rounded-full border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-700">
+                              Futuro
+                            </span>
+                            <span className="rounded-full border border-slate-500/30 bg-slate-200/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-800">
+                              Bloqueado
+                            </span>
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-950">
+                              No ejecutado
+                            </span>
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Acciones técnicas futuras
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {FUTURE_EXECUTABLE_TECHNICAL_ACTIONS.map((a) => (
+                      <li
+                        key={a.key}
+                        className="rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-mono text-[10px] text-slate-600">{a.key}</span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                              a.estado === "Postergado"
+                                ? "border border-slate-400 bg-slate-200/70 text-slate-800"
+                                : "border border-slate-500/35 bg-slate-200/80 text-slate-800"
+                            }`}
+                          >
+                            {a.estado}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs font-medium text-slate-900">{a.label}</p>
+                        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">{a.motivo}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Requisitos para desbloquear en el futuro
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {computeFutureExecutableUnlockRows({
+                      packagePayload,
+                      meta,
+                      humanConfirmationStatus: data.humanConfirmationStatus,
+                      latestAdvanceMeetingDecision,
+                    }).map((row) => (
+                      <li
+                        key={row.label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{row.label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${futureUnlockBadgeClass(row.badge)}`}
+                        >
+                          {futureUnlockBadgeLabel(row.badge)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-400/40 bg-slate-200/30 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-slate-900">{FUTURE_EXECUTABLE_BARRIER_TITLE}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-800">{FUTURE_EXECUTABLE_BARRIER_TEXT}</p>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Acciones explícitamente bloqueadas
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {FUTURE_EXECUTABLE_BLOCKED_CODES.map((code) => (
+                      <li
+                        key={code}
+                        className="rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                      >
+                        {code}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 opacity-95"
+                    >
+                      Ejecutar plan piloto — Bloqueado
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyFutureExecutablePlan()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      {futureExecutablePlanCopied ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Copiar plan ejecutable futuro
+                    </button>
+                  </div>
+                  <div className="flex max-w-md flex-col gap-1">
+                    <p className="text-[11px] leading-relaxed text-slate-500">
+                      Este botón es informativo. La ejecución real requiere una fase posterior explícita.
+                    </p>
+                    {futureExecutablePlanCopied ? (
+                      <p className="text-[11px] font-medium text-slate-700">Plan ejecutable copiado</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                  <span className="font-semibold text-slate-900">Seguridad: </span>
+                  {FUTURE_EXECUTABLE_PLAN_FINAL_SECURITY}
                 </p>
               </section>
             ) : null}
