@@ -200,6 +200,21 @@ function snapshotRiskBadgeClass(v: string | null): string {
   }
 }
 
+/** Recomendación ejecutiva según el último Go/No-Go persistido en evidencia. */
+function consolidatedEvidenceGoRecommendation(go: string | null): string {
+  const v = (go ?? "").trim();
+  switch (v) {
+    case "pending_inputs":
+      return "Completar configuración mínima y volver a simular antes de instalar.";
+    case "no_go":
+      return "No avanzar. Corregir faltantes críticos antes de continuar.";
+    case "ready_for_manual_install":
+      return "Solicitar aprobación humana final antes de cualquier ejecución.";
+    default:
+      return "Sin recomendación disponible.";
+  }
+}
+
 function strFromUnknown(v: unknown): string {
   if (v === null || v === undefined) return "";
   const s = String(v).trim();
@@ -584,6 +599,7 @@ export default function PaqueteDraftDetailPage() {
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
   const [snapshotSummaryCopiedId, setSnapshotSummaryCopiedId] = useState<string | null>(null);
+  const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -622,6 +638,7 @@ export default function PaqueteDraftDetailPage() {
     setSnapshotsError(null);
     setSnapshotsLoading(false);
     setSnapshotSummaryCopiedId(null);
+    setConsolidatedSummaryCopied(false);
   }, [id]);
 
   const loadSimulationSnapshots = useCallback(async () => {
@@ -699,6 +716,17 @@ export default function PaqueteDraftDetailPage() {
       window.setTimeout(() => {
         setSnapshotSummaryCopiedId((cur) => (cur === snapshotId ? null : cur));
       }, 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, []);
+
+  const copyConsolidatedExecutiveSummary = useCallback(async (text: string) => {
+    if (!text || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setConsolidatedSummaryCopied(true);
+      window.setTimeout(() => setConsolidatedSummaryCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -1773,6 +1801,195 @@ export default function PaqueteDraftDetailPage() {
                 ) : null}
               </>
             ) : null}
+
+            <section
+              className="rounded-xl border border-slate-200 bg-white p-5"
+              aria-labelledby="consolidated-evidence-title"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 id="consolidated-evidence-title" className="text-sm font-semibold text-slate-900">
+                    Evidencia consolidada del draft
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Último snapshot guardado (orden reciente). Solo lectura; no guarda evidencia nueva.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {snapshots[0]?.executiveSummaryText ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copyConsolidatedExecutiveSummary(snapshots[0]!.executiveSummaryText!)
+                      }
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      <Copy className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                      Copiar resumen consolidado
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void loadSimulationSnapshots()}
+                    disabled={snapshotsLoading || !id}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {snapshotsLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                        Actualizando…
+                      </>
+                    ) : (
+                      "Actualizar evidencia"
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {snapshotsError ? (
+                <div
+                  className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                  role="status"
+                >
+                  {snapshotsError}
+                </div>
+              ) : null}
+
+              {consolidatedSummaryCopied ? (
+                <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                  <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Resumen consolidado copiado
+                </p>
+              ) : null}
+
+              {snapshotsLoading && snapshots.length === 0 && !snapshotsError ? (
+                <p className="mt-4 text-sm text-slate-500">Cargando evidencia…</p>
+              ) : null}
+
+              {!snapshotsLoading && !snapshotsError && snapshots.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-600">
+                  Todavía no hay evidencia guardada para este borrador.
+                </p>
+              ) : null}
+
+              {snapshots[0] ? (
+                <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                  {(() => {
+                    const latest = snapshots[0]!;
+                    const scoreLabel =
+                      latest.readinessScore != null && !Number.isNaN(Number(latest.readinessScore))
+                        ? String(latest.readinessScore)
+                        : "—";
+                    const go = latest.finalGoNoGo?.trim() ? latest.finalGoNoGo : null;
+                    const risk = latest.riskLevel?.trim() ? latest.riskLevel : null;
+                    const createdBy = latest.createdBy?.trim() ? latest.createdBy : "—";
+                    const contractVer = latest.contractVersion?.trim() ? latest.contractVersion : "—";
+                    const preview =
+                      typeof latest.executiveSummaryPreview === "string" &&
+                      latest.executiveSummaryPreview.trim()
+                        ? latest.executiveSummaryPreview.trim()
+                        : null;
+                    return (
+                      <>
+                        <dl className="grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Snapshot
+                            </dt>
+                            <dd className="mt-0.5 font-mono text-xs text-slate-900" title={latest.id || undefined}>
+                              {latest.id ? shortSnapshotId(latest.id) : "—"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Fecha
+                            </dt>
+                            <dd className="mt-0.5 text-xs text-slate-800">
+                              {latest.createdAt ? formatDt(latest.createdAt) : "—"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Versión contrato
+                            </dt>
+                            <dd className="mt-0.5 font-mono text-xs text-slate-800">{contractVer}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Readiness score
+                            </dt>
+                            <dd className="mt-0.5 tabular-nums text-slate-900">{scoreLabel}</dd>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Go / No-Go
+                            </dt>
+                            <dd className="mt-0.5">
+                              {go ? (
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotGoNoGoBadgeClass(go)}`}
+                                >
+                                  {go.replace(/_/g, " ")}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500">—</span>
+                              )}
+                            </dd>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Riesgo
+                            </dt>
+                            <dd className="mt-0.5">
+                              {risk ? (
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotRiskBadgeClass(risk)}`}
+                                >
+                                  {risk}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500">—</span>
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Prep. piloto
+                            </dt>
+                            <dd className="mt-0.5 text-xs text-slate-800">
+                              {latest.canProceedToPilotPreparation ? "Sí" : "No"}
+                            </dd>
+                          </div>
+                          <div className="sm:col-span-2 lg:col-span-2">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Creado por
+                            </dt>
+                            <dd className="mt-0.5 break-all font-mono text-xs text-slate-700">{createdBy}</dd>
+                          </div>
+                        </dl>
+                        <div className="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Resumen ejecutivo en evidencia
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-slate-800">
+                            {latest.hasExecutiveSummary
+                              ? "Resumen ejecutivo guardado"
+                              : "Sin resumen ejecutivo guardado"}
+                          </p>
+                          {preview ? (
+                            <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-slate-600">{preview}</p>
+                          ) : null}
+                        </div>
+                        <p className="text-xs leading-relaxed text-slate-700">
+                          <span className="font-semibold text-slate-800">Recomendación: </span>
+                          {consolidatedEvidenceGoRecommendation(go)}
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : null}
+            </section>
 
             <section className="rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="snapshots-history-title">
               <div className="flex flex-wrap items-end justify-between gap-3">
