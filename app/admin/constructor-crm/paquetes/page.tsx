@@ -239,12 +239,6 @@ function parseEvidenceSummary(raw: unknown): EvidenceSummary {
   };
 }
 
-function evidenceCountLabel(n: number): string {
-  if (n <= 0) return "Sin evidencia";
-  if (n === 1) return "1 snapshot";
-  return `${n} snapshots`;
-}
-
 function goNoGoBadgeClass(v: string | null): string {
   switch (v) {
     case "no_go":
@@ -271,46 +265,83 @@ function riskListBadgeClass(v: string | null): string {
   }
 }
 
-/** Badge ejecutivo derivado del último snapshot (resumen ya agregado en el listado). */
-function consolidatedEvidenceRowBadge(es: EvidenceSummary): {
-  label: string;
-  helper: string;
-  pillClass: string;
-} {
-  if (es.snapshotCount === 0) {
+function hasTechnicalEvidence(es: EvidenceSummary): boolean {
+  return es.hasEvidence === true || es.snapshotCount > 0;
+}
+
+function hasExecutiveSummaryStored(es: EvidenceSummary): boolean {
+  const t =
+    typeof es.latestExecutiveSummaryText === "string" ? es.latestExecutiveSummaryText.trim() : "";
+  return es.latestHasExecutiveSummary || Boolean(t);
+}
+
+/** Estado ejecutivo compacto para el listado (solo lectura; sin decisiones de reunión extra). */
+function listRowExecutiveState(es: EvidenceSummary): { label: string; helper: string; pillClass: string } {
+  const hasSnap = hasTechnicalEvidence(es);
+  const go = (es.latestFinalGoNoGo ?? "").trim();
+  const hasSum = hasExecutiveSummaryStored(es);
+
+  if (!hasSnap) {
     return {
       label: "Sin evidencia",
-      helper: "Todavía no hay snapshots guardados.",
+      helper: "Todavía no hay snapshot técnico.",
       pillClass: "border border-slate-200 bg-slate-100 text-slate-700",
     };
   }
-  const go = (es.latestFinalGoNoGo ?? "").trim();
-  switch (go) {
-    case "pending_inputs":
-      return {
-        label: "Pendiente de insumos",
-        helper: "Requiere completar configuración antes de avanzar.",
-        pillClass: "border border-amber-200 bg-amber-50 text-amber-950",
-      };
-    case "no_go":
-      return {
-        label: "No avanzar",
-        helper: "No conviene avanzar sin correcciones.",
-        pillClass: "border border-rose-200 bg-rose-50 text-rose-900",
-      };
-    case "ready_for_manual_install":
-      return {
-        label: "Lista para revisión manual",
-        helper: "Requiere aprobación humana final antes de ejecutar.",
-        pillClass: "border border-emerald-200/80 bg-emerald-50/90 text-emerald-900",
-      };
-    default:
-      return {
-        label: "Evidencia incompleta",
-        helper: "Snapshot guardado sin dictamen final.",
-        pillClass: "border border-slate-200 bg-slate-100 text-slate-600",
-      };
+
+  if (go === "pending_inputs") {
+    return {
+      label: "Pendiente de insumos",
+      helper: "Requiere completar configuración antes de avanzar.",
+      pillClass: "border border-amber-200 bg-amber-50 text-amber-950",
+    };
   }
+
+  if (go === "ready_for_manual_install") {
+    return {
+      label: "Ready manual",
+      helper:
+        "Preparado para revisión manual, ejecución real bloqueada. Ejecución bloqueada hasta fase posterior.",
+      pillClass: "border border-emerald-200/70 bg-emerald-50/90 text-emerald-900",
+    };
+  }
+
+  if (go === "no_go") {
+    return {
+      label: "No-go",
+      helper: "No avanzar sin corrección.",
+      pillClass: "border border-rose-200 bg-rose-50 text-rose-900",
+    };
+  }
+
+  if (!hasSum) {
+    return {
+      label: "Evidencia técnica",
+      helper: "Falta resumen ejecutivo o evidencia completa.",
+      pillClass: "border border-slate-200 bg-slate-100 text-slate-600",
+    };
+  }
+
+  return {
+    label: "Resumen guardado",
+    helper: "Evidencia técnica con resumen ejecutivo persistido.",
+    pillClass: "border border-slate-300 bg-slate-50 text-slate-800",
+  };
+}
+
+function goNoGoChipValue(go: string | null): string {
+  const g = (go ?? "").trim();
+  if (!g) return "—";
+  if (g === "pending_inputs") return "insumos";
+  if (g === "ready_for_manual_install") return "manual";
+  if (g === "no_go") return "no-go";
+  return g.replace(/_/g, " ");
+}
+
+function riskChipValue(rl: string | null): string {
+  const r = (rl ?? "").trim();
+  if (!r) return "—";
+  return r;
 }
 
 /** Texto alineado al badge para la línea de filtros combinados (sin cambiar la lógica de filtro). */
@@ -767,9 +798,10 @@ export default function PaquetesDraftsListPage() {
                 ))}
               </div>
               <p className="mt-2 text-[10px] leading-relaxed text-slate-500 tabular-nums">
-                Pend. insumos: {listExecutiveRollup.pendingInputs} · No-go: {listExecutiveRollup.noGo} · Ready
-                manual: {listExecutiveRollup.readyManual} · Riesgo med./alto: {listExecutiveRollup.riskMedHigh} ·
-                Aprob. sin evidencia: {listExecutiveRollup.approvedWithoutEvidence}
+                Ready manual: {listExecutiveRollup.readyManual} · Pendientes de insumos:{" "}
+                {listExecutiveRollup.pendingInputs} · Sin evidencia: {listExecutiveRollup.withoutEvidence} · No-go:{" "}
+                {listExecutiveRollup.noGo} · Riesgo med./alto: {listExecutiveRollup.riskMedHigh} · Aprob. sin
+                evidencia: {listExecutiveRollup.approvedWithoutEvidence}
               </p>
               <p className="mt-4 text-sm font-medium leading-snug text-slate-900">
                 {listExecutiveRollup.dictamen}
@@ -852,7 +884,9 @@ export default function PaquetesDraftsListPage() {
                       ev.latestReadinessScore !== null && ev.latestReadinessScore !== undefined
                         ? `${ev.latestReadinessScore}/100`
                         : "—";
-                    const consolidated = consolidatedEvidenceRowBadge(ev);
+                    const execState = listRowExecutiveState(ev);
+                    const hasSnap = hasTechnicalEvidence(ev);
+                    const hasSum = hasExecutiveSummaryStored(ev);
 
                     return (
                       <tr key={row.id} className="align-top hover:bg-slate-50/80">
@@ -896,22 +930,58 @@ export default function PaquetesDraftsListPage() {
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-700">{row.packageVersion}</td>
                         <td className="px-3 py-2.5">
-                          <div className="flex max-w-[220px] flex-col gap-1.5 text-[11px] leading-snug text-slate-700">
+                          <div className="flex max-w-[240px] flex-col gap-1.5 text-[11px] leading-snug text-slate-700">
                             <div>
                               <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                                Evidencia consolidada
+                                Estado ejecutivo
                               </p>
                               <span
                                 className={cx(
                                   "mt-0.5 inline-flex max-w-full rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight",
-                                  consolidated.pillClass
+                                  execState.pillClass
                                 )}
                               >
-                                {consolidated.label}
+                                {execState.label}
                               </span>
-                              <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                                {consolidated.helper}
+                              <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">
+                                {execState.helper}
                               </p>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <span
+                                title={
+                                  hasSnap
+                                    ? `${ev.snapshotCount} snapshot${ev.snapshotCount === 1 ? "" : "s"}`
+                                    : "Sin snapshots"
+                                }
+                                className="inline-flex rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-700"
+                              >
+                                Snap: {hasSnap ? "sí" : "no"}
+                              </span>
+                              <span className="inline-flex rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-700">
+                                Res: {hasSum ? "sí" : "no"}
+                              </span>
+                              <span
+                                className={cx(
+                                  "inline-flex max-w-[5.5rem] truncate rounded border px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                                  ev.latestFinalGoNoGo
+                                    ? goNoGoBadgeClass(ev.latestFinalGoNoGo)
+                                    : "border-slate-200 bg-slate-50 text-slate-500"
+                                )}
+                                title={ev.latestFinalGoNoGo ?? ""}
+                              >
+                                Go: {goNoGoChipValue(ev.latestFinalGoNoGo)}
+                              </span>
+                              <span
+                                className={cx(
+                                  "inline-flex max-w-[4.5rem] truncate rounded border px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                                  ev.latestRiskLevel
+                                    ? riskListBadgeClass(ev.latestRiskLevel)
+                                    : "border-slate-200 bg-slate-50 text-slate-500"
+                                )}
+                              >
+                                Riesgo: {riskChipValue(ev.latestRiskLevel)}
+                              </span>
                             </div>
                             <div className="border-t border-slate-100 pt-1.5">
                               {execSummaryText ? (
@@ -936,46 +1006,15 @@ export default function PaquetesDraftsListPage() {
                                     ) : null}
                                   </div>
                                 </div>
-                              ) : ev.snapshotCount > 0 || ev.hasEvidence ? (
+                              ) : hasSnap ? (
                                 <p className="text-[10px] text-slate-500">Evidencia sin resumen ejecutivo</p>
                               ) : (
                                 <p className="text-[10px] text-slate-500">Sin resumen ejecutivo</p>
                               )}
                             </div>
-                            <span className="font-medium text-slate-800">{evidenceCountLabel(ev.snapshotCount)}</span>
                             <span>
                               <span className="text-slate-500">Score:</span>{" "}
                               <span className="font-mono tabular-nums text-slate-900">{scoreLabel}</span>
-                            </span>
-                            <span className="flex flex-wrap items-center gap-1">
-                              <span className="text-slate-500">Go/No-Go:</span>
-                              {ev.latestFinalGoNoGo ? (
-                                <span
-                                  className={cx(
-                                    "inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
-                                    goNoGoBadgeClass(ev.latestFinalGoNoGo)
-                                  )}
-                                >
-                                  {ev.latestFinalGoNoGo.replace(/_/g, " ")}
-                                </span>
-                              ) : (
-                                <span className="text-slate-500">—</span>
-                              )}
-                            </span>
-                            <span className="flex flex-wrap items-center gap-1">
-                              <span className="text-slate-500">Riesgo:</span>
-                              {ev.latestRiskLevel ? (
-                                <span
-                                  className={cx(
-                                    "inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
-                                    riskListBadgeClass(ev.latestRiskLevel)
-                                  )}
-                                >
-                                  {ev.latestRiskLevel}
-                                </span>
-                              ) : (
-                                <span className="text-slate-500">—</span>
-                              )}
                             </span>
                           </div>
                         </td>
