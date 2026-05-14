@@ -338,6 +338,143 @@ function formatDt(iso: string | null): string {
   }
 }
 
+function crmSummaryPlainLine(crm: Record<string, unknown>): string {
+  const pairs: [string, string][] = [
+    ["Módulos", "modulesStatus"],
+    ["Pipeline", "pipelineStatus"],
+    ["Campos de leads", "leadFieldsStatus"],
+    ["Permisos", "permissionsStatus"],
+    ["Reportes", "reportsStatus"],
+    ["Integraciones", "integrationsStatus"],
+  ];
+  const parts: string[] = [];
+  for (const [label, k] of pairs) {
+    const v = strFromUnknown(crm[k]);
+    if (v) parts.push(`${label}: ${v}`);
+  }
+  return parts.length ? parts.join("; ") : "No informado";
+}
+
+function userProvisioningSummaryPlain(tc: Record<string, unknown>): string {
+  const upp = tc.userProvisioningPlanPreview;
+  if (!upp || typeof upp !== "object" || Array.isArray(upp)) return "No informado.";
+  const u = upp as Record<string, unknown>;
+  const status = strFromUnknown(u.status);
+  const notes = Array.isArray(u.notes)
+    ? (u.notes as unknown[]).map((x) => String(x)).filter(Boolean).join(" ")
+    : "";
+  const detected = u.initialUsersDetected ?? u.initial_users_detected;
+  const bits: string[] = [];
+  if (status) bits.push(`Estado: ${status}`);
+  if (notes) bits.push(`Notas: ${notes}`);
+  if (detected !== undefined && detected !== null) bits.push(`Usuarios detectados: ${String(detected)}`);
+  return bits.length ? bits.join(" · ") : "No informado.";
+}
+
+type ExecutiveSummaryInput = {
+  draftId: string;
+  meta: DraftMetadata | undefined;
+  humanConfirmationStatus: string;
+  simulateResult: SimulatePreinstallResponse;
+  contract: Record<string, unknown>;
+};
+
+function buildExecutiveSummaryPlainText(p: ExecutiveSummaryInput): string {
+  const { draftId, meta, humanConfirmationStatus, simulateResult, contract: tc } = p;
+  const rd = tc.readiness as Record<string, unknown> | undefined;
+  const finalGo = contractFinalGoNoGo(rd);
+  const execScore = readinessScoreFromContract(rd);
+  const execRisk =
+    readinessRiskFromContract(rd) || String(simulateResult.riskLevel ?? "").trim() || "No informado";
+  const simDateRaw = strFromUnknown(tc.generatedAt);
+  const simDate = simDateRaw || null;
+  const tr = tc.tenantResolution as Record<string, unknown> | undefined;
+  const zp = tc.zetaPolicy as Record<string, unknown> | undefined;
+  const crm =
+    tc.crmConfiguration && typeof tc.crmConfiguration === "object" && !Array.isArray(tc.crmConfiguration)
+      ? (tc.crmConfiguration as Record<string, unknown>)
+      : {};
+  const bpaContract = Array.isArray(tc.blockedProductionActions)
+    ? (tc.blockedProductionActions as string[])
+    : [];
+  const blockedList =
+    bpaContract.length > 0 ? bpaContract : [...simulateResult.blockedActions];
+  const approvals = Array.isArray(tc.requiredHumanApprovals)
+    ? (tc.requiredHumanApprovals as Array<Record<string, unknown>>)
+    : [];
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — RESUMEN EJECUTIVO DE PREINSTALACIÓN");
+  lines.push("");
+  lines.push("Draft:");
+  lines.push(`- Package ID: ${strFromUnknown(simulateResult.packageId) || draftId || "No informado"}`);
+  lines.push(`- Estado draft: ${meta?.status ?? "No informado"}`);
+  lines.push(`- Estado humano: ${humanConfirmationStatus || "No informado"}`);
+  lines.push(`- Package version: ${meta?.packageVersion ?? "No informado"}`);
+  lines.push(`- Fecha de simulación: ${formatDt(simDate)}`);
+  lines.push("");
+  lines.push("Dictamen:");
+  lines.push(`- Go / No-Go: ${finalGo || "No informado"}`);
+  lines.push(
+    `- Score de preparación: ${execScore !== null ? `${execScore}/100` : "No informado"}`
+  );
+  lines.push(`- Riesgo: ${execRisk || "No informado"}`);
+  lines.push(`- Dictamen ejecutivo: ${executiveDictamenText(finalGo)}`);
+  lines.push("");
+  lines.push("Lectura operativa:");
+  lines.push(`- Tenant / cliente: ${tenantExecutiveCopy(strFromUnknown(tr?.status))}`);
+  lines.push(`- Configuración CRM: ${crmSummaryPlainLine(crm)}`);
+  lines.push(`- Usuarios iniciales: ${userProvisioningSummaryPlain(tc)}`);
+  const zpMode = strFromUnknown(zp?.mode);
+  lines.push(
+    `- Zeta: read_only / no escritura${zpMode ? ` (modo contrato: ${zpMode})` : ""}`
+  );
+  lines.push(
+    `- Puede avanzar a preparación piloto: ${simulateResult.canProceedToPilotPreparation ? "Sí" : "No"}`
+  );
+  lines.push("");
+  lines.push("Faltantes principales:");
+  if (simulateResult.missingInputs.length === 0) {
+    lines.push("- No informado");
+  } else {
+    for (const item of simulateResult.missingInputs) {
+      lines.push(`- ${item}`);
+    }
+  }
+  lines.push("");
+  lines.push("Aprobaciones requeridas:");
+  if (approvals.length === 0) {
+    lines.push("- No informado");
+  } else {
+    for (const a of approvals) {
+      const lab = strFromUnknown(a.label ?? a.Label) || "—";
+      const req = a.required ?? a.Required;
+      const reqTxt = req === true ? "sí" : req === false ? "no" : "—";
+      const reason = strFromUnknown(a.reason ?? a.Reason) || "—";
+      lines.push(`- ${lab} (requerida: ${reqTxt}) — ${reason}`);
+    }
+  }
+  lines.push("");
+  lines.push("Acciones bloqueadas:");
+  if (blockedList.length === 0) {
+    lines.push("- No informado");
+  } else {
+    for (const code of blockedList) {
+      lines.push(`- ${code}`);
+    }
+  }
+  lines.push("");
+  lines.push("Recomendación:");
+  const rec = simulateResult.nextRecommendedAction?.trim();
+  lines.push(`- ${rec && rec.length > 0 ? rec : executiveNextStep(finalGo)}`);
+  lines.push("");
+  lines.push("Nota de seguridad:");
+  lines.push(
+    "Este resumen proviene de una simulación. No instala CRM, no crea tenant, no crea usuarios y no escribe en Zeta."
+  );
+  return lines.join("\n");
+}
+
 function isDraftHumanActionable(meta: DraftMetadata, humanConfirmationStatus: string): boolean {
   const st = meta.status;
   return (
@@ -408,6 +545,7 @@ export default function PaqueteDraftDetailPage() {
   const [simulateResult, setSimulateResult] = useState<SimulatePreinstallResponse | null>(null);
   const [simulateError, setSimulateError] = useState<string | null>(null);
   const [contractJsonCopied, setContractJsonCopied] = useState(false);
+  const [executiveSummaryCopied, setExecutiveSummaryCopied] = useState(false);
   const [snapshotSaving, setSnapshotSaving] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotSuccess, setSnapshotSuccess] = useState<string | null>(null);
@@ -445,6 +583,7 @@ export default function PaqueteDraftDetailPage() {
     setSimulateResult(null);
     setSimulateError(null);
     setContractJsonCopied(false);
+    setExecutiveSummaryCopied(false);
     setSnapshotError(null);
     setSnapshotSuccess(null);
     setSnapshots([]);
@@ -593,6 +732,7 @@ export default function PaqueteDraftDetailPage() {
     setSimulateLoading(true);
     setSimulateError(null);
     setContractJsonCopied(false);
+    setExecutiveSummaryCopied(false);
     setSnapshotError(null);
     setSnapshotSuccess(null);
     try {
@@ -1161,31 +1301,75 @@ export default function PaqueteDraftDetailPage() {
                       <h3 className="text-sm font-semibold text-slate-900">Contrato técnico de preinstalación</h3>
                       {simulationContract ? (
                         <div className="mt-3 space-y-4">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                             <p className="text-xs text-slate-500">
                               Solo lectura. No ejecuta instalación ni escribe en sistemas externos.
                             </p>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void (async () => {
-                                  if (!simulationContract || !navigator.clipboard?.writeText) return;
-                                  await navigator.clipboard.writeText(
-                                    JSON.stringify(simulationContract, null, 2)
-                                  );
-                                  setContractJsonCopied(true);
-                                  window.setTimeout(() => setContractJsonCopied(false), 2000);
-                                })();
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              {contractJsonCopied ? (
-                                <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                            <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void (async () => {
+                                      if (!simulationContract || !navigator.clipboard?.writeText) return;
+                                      await navigator.clipboard.writeText(
+                                        JSON.stringify(simulationContract, null, 2)
+                                      );
+                                      setContractJsonCopied(true);
+                                      window.setTimeout(() => setContractJsonCopied(false), 2000);
+                                    })();
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                >
+                                  {contractJsonCopied ? (
+                                    <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                                  ) : (
+                                    <Copy className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                                  )}
+                                  Copiar contrato JSON
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void (async () => {
+                                      if (
+                                        !simulationContract ||
+                                        !simulateResult ||
+                                        !navigator.clipboard?.writeText
+                                      )
+                                        return;
+                                      const text = buildExecutiveSummaryPlainText({
+                                        draftId: id,
+                                        meta: meta ?? undefined,
+                                        humanConfirmationStatus: data?.humanConfirmationStatus ?? "",
+                                        simulateResult,
+                                        contract: simulationContract,
+                                      });
+                                      await navigator.clipboard.writeText(text);
+                                      setExecutiveSummaryCopied(true);
+                                      window.setTimeout(() => setExecutiveSummaryCopied(false), 2500);
+                                    })();
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                >
+                                  {executiveSummaryCopied ? (
+                                    <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                                  ) : (
+                                    <Copy className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                                  )}
+                                  Copiar resumen ejecutivo
+                                </button>
+                              </div>
+                              {executiveSummaryCopied ? (
+                                <p className="text-[11px] font-medium text-slate-700" role="status">
+                                  Resumen copiado
+                                </p>
                               ) : (
-                                <Copy className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                                <p className="max-w-sm text-[11px] text-slate-500">
+                                  Texto plano para compartir internamente. No ejecuta acciones.
+                                </p>
                               )}
-                              Copiar contrato JSON
-                            </button>
+                            </div>
                           </div>
                           <div className="space-y-3 rounded-lg border border-slate-200 bg-white px-3 py-3">
                             <p className="text-xs leading-relaxed text-slate-600">
