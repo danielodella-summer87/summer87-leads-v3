@@ -898,6 +898,8 @@ const FUTURE_EXECUTABLE_BLOCKED_CODES: string[] = [
   "expose_constructor_to_client",
 ];
 
+const REAL_CONFIG_BLUEPRINT_BLOCKED_CODES: string[] = [...FUTURE_EXECUTABLE_BLOCKED_CODES, "apply_real_config"];
+
 const FUTURE_EXECUTABLE_BARRIER_TITLE = "Barrera de seguridad activa";
 
 const FUTURE_EXECUTABLE_BARRIER_TEXT =
@@ -1151,6 +1153,179 @@ const PILOT_TECH_DESIGN_RISKS: string[] = [
 const PILOT_TECH_DESIGN_SECURITY_NOTE =
   "Este diseño técnico no crea recursos, no instala CRM, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta. Solo documenta la arquitectura propuesta para una futura fase de preparación controlada.";
 
+const REAL_CONFIG_BLUEPRINT_PURPOSE =
+  "Este blueprint traduce el diseño técnico en configuraciones futuras que podrían prepararse cuando exista aprobación final. No crea registros, no aplica SQL y no modifica datos. Solo documenta la estructura lógica esperada.";
+
+const REAL_CONFIG_BLUEPRINT_DEPENDENCY_ORDER: string[] = [
+  "pilot_client_config",
+  "crm_modules_config",
+  "pipeline_config",
+  "lead_fields_config",
+  "reports_config",
+  "kore_readonly_connector_config",
+  "audit_log_config",
+  "restricted_access_policy",
+  "future_user_access_policy",
+];
+
+const REAL_CONFIG_BLUEPRINT_DEPENDENCY_NOTE =
+  "Este orden es documental. No se ejecuta desde esta pantalla.";
+
+const REAL_CONFIG_BLUEPRINT_NOT_EXEC_TITLE = "Blueprint no es ejecución";
+
+const REAL_CONFIG_BLUEPRINT_NOT_EXEC_TEXT =
+  "El blueprint describe qué configuraciones podrían prepararse más adelante. No crea registros reales, no inserta filas, no modifica tablas y no habilita entorno operativo.";
+
+const REAL_CONFIG_BLUEPRINT_RISKS: string[] = [
+  "Convertir blueprint en ejecución sin aprobación final.",
+  "Aplicar configuraciones sin validar alcance.",
+  "Diseñar campos basados en datos Kore no confirmados.",
+  "Habilitar reportes antes de validar fuentes.",
+  "Confundir acceso restringido con usuarios operativos.",
+  "Dejar auditoría incompleta.",
+  "Asumir que read-only está confirmado sin documentación técnica.",
+];
+
+const REAL_CONFIG_BLUEPRINT_SECURITY_NOTE =
+  "Este blueprint no crea recursos, no aplica SQL, no instala CRM, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta. Solo documenta configuraciones futuras para una fase posterior con aprobación final.";
+
+type RealConfigBlueprintFutureEntry = {
+  letter: string;
+  title: string;
+  logicalKey: string;
+  purpose: string;
+  futureFields: string[];
+  source: string;
+  statusLabel: string;
+};
+
+const REAL_CONFIG_BLUEPRINT_FUTURE_ENTRIES: RealConfigBlueprintFutureEntry[] = [
+  {
+    letter: "A",
+    title: "Configuración de cliente piloto",
+    logicalKey: "pilot_client_config",
+    purpose: "Representar Pickup 4x4 como cliente piloto restringido.",
+    futureFields: [
+      "client_name",
+      "business_type",
+      "country",
+      "pilot_scope",
+      "restricted_stage",
+      "external_system",
+      "integration_mode",
+    ],
+    source: "package_payload.client_identity + decisión de reunión.",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "B",
+    title: "Configuración de módulos CRM",
+    logicalKey: "crm_modules_config",
+    purpose: "Definir módulos habilitados para el piloto.",
+    futureFields: ["module_key", "module_label", "enabled", "order", "scope_notes"],
+    source: "package_payload.crm_modules_config",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "C",
+    title: "Configuración de pipeline",
+    logicalKey: "pipeline_config",
+    purpose: "Definir etapas comerciales iniciales.",
+    futureFields: ["stage_key", "stage_label", "stage_order", "is_terminal", "stage_notes"],
+    source: "package_payload.pipeline_config",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "D",
+    title: "Configuración de campos comerciales",
+    logicalKey: "lead_fields_config",
+    purpose: "Definir grupos y campos mínimos para clientes, vehículos, oportunidades y Kore.",
+    futureFields: ["field_group", "field_key", "field_label", "required", "source", "visibility"],
+    source: "package_payload.lead_fields_config",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "E",
+    title: "Configuración de reportes",
+    logicalKey: "reports_config",
+    purpose: "Definir reportes iniciales del piloto.",
+    futureFields: [
+      "report_key",
+      "report_label",
+      "report_type",
+      "source_module",
+      "visible_to_restricted_stage",
+    ],
+    source: "package_payload.reports_config",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "F",
+    title: "Configuración de Kore read-only",
+    logicalKey: "kore_readonly_connector_config",
+    purpose: "Preparar definición técnica de integración sin escritura.",
+    futureFields: [
+      "system",
+      "mode",
+      "write_allowed",
+      "sync_direction",
+      "credentials_status",
+      "api_docs_status",
+      "endpoints_status",
+      "sync_frequency",
+    ],
+    source: "package_payload.integrations_config",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "G",
+    title: "Configuración de auditoría",
+    logicalKey: "audit_log_config",
+    purpose: "Registrar evidencia de preparación e instalación futura.",
+    futureFields: [
+      "source_draft_id",
+      "source_snapshot_id",
+      "meeting_decision_id",
+      "created_by",
+      "audit_event_type",
+      "audit_notes",
+    ],
+    source: "draft + snapshot + meeting_decision",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "H",
+    title: "Política de acceso restringido",
+    logicalKey: "restricted_access_policy",
+    purpose: "Definir primera etapa restringida a propietarios + Daniel / Summer87.",
+    futureFields: [
+      "access_stage",
+      "allowed_participants",
+      "excluded_participants",
+      "invite_policy",
+      "operational_users_policy",
+    ],
+    source: "criterio estratégico del proyecto",
+    statusLabel: "Futuro / No aplicado",
+  },
+  {
+    letter: "I",
+    title: "Política futura de usuarios operativos",
+    logicalKey: "future_user_access_policy",
+    purpose:
+      "Dejar documentado que empleados operativos, permisos individuales e invitaciones se definen después.",
+    futureFields: [
+      "future_stage",
+      "user_collection_required",
+      "role_assignment_required",
+      "invitation_required",
+      "activation_condition",
+    ],
+    source: "criterio estratégico del proyecto",
+    statusLabel: "Fase posterior / No aplicado",
+  },
+];
+
 function koreReadonlyDesignRows(pp: Record<string, unknown>): {
   mode: string;
   direction: string;
@@ -1236,6 +1411,49 @@ function computeTechnicalDesignValidationRows(p: {
     { label: "Confirmar criterio de éxito.", badge: critOk ? "antecedente" : "pendiente" },
     {
       label: "Confirmar que usuarios operativos quedan para etapa posterior.",
+      badge: "requerido",
+    },
+  ];
+}
+
+function computeBlueprintValidationRows(p: {
+  packagePayload: Record<string, unknown>;
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+}): { label: string; badge: FutureExecutableUnlockBadge }[] {
+  const { packagePayload: pp, meta, humanConfirmationStatus: humanSt, latestAdvanceMeetingDecision: adv } = p;
+  const modulesOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "crm_modules_config", "crmModulesConfig")
+  );
+  const pipelineOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+  const fieldsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "lead_fields_config", "leadFieldsConfig"));
+  const reportsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "reports_config", "reportsConfig"));
+  const critOk =
+    typeof adv.decisionReason === "string" && adv.decisionReason.trim().length >= 20;
+  const summer87PilotOk = meta.status === "approved_for_pilot";
+  const pickupHumanOk = humanSt === "approved";
+  const koreOk = isKoreReadOnlyIntegration(pp);
+  const docOk = integrationsConfigHasEntries(pp);
+  const approvalsOk = summer87PilotOk && pickupHumanOk;
+  const scopeOk = modulesOk && pipelineOk && approvalsOk;
+  return [
+    {
+      label: "Confirmar aprobación final.",
+      badge: approvalsOk ? "antecedente" : "pendiente",
+    },
+    { label: "Confirmar alcance piloto.", badge: scopeOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar propietarios participantes.", badge: "pendiente" },
+    { label: "Confirmar canal de coordinación.", badge: "pendiente" },
+    { label: "Confirmar módulos finales.", badge: modulesOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar pipeline final.", badge: pipelineOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar campos mínimos.", badge: fieldsOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar reportes iniciales.", badge: reportsOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar Kore read-only.", badge: koreOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar documentación API Kore.", badge: docOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar criterio de éxito.", badge: critOk ? "antecedente" : "pendiente" },
+    {
+      label: "Confirmar que usuarios operativos quedan para fase posterior.",
       badge: "requerido",
     },
   ];
@@ -1339,6 +1557,88 @@ function buildTechnicalPilotEnvironmentDesignPlainText(p: {
   lines.push("");
   lines.push("NOTA DE SEGURIDAD");
   lines.push(PILOT_TECH_DESIGN_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
+function buildRealConfigBlueprintPlainText(p: {
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, humanConfirmationStatus, latestSnapshot, latestAdvanceMeetingDecision, packagePayload } = p;
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const valRows = computeBlueprintValidationRows({
+    packagePayload,
+    meta,
+    humanConfirmationStatus,
+    latestAdvanceMeetingDecision,
+  });
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — BLUEPRINT TÉCNICO DE CONFIGURACIÓN REAL");
+  lines.push("Documento informativo. Ninguna acción se ejecuta desde Constructor CRM.");
+  lines.push("");
+  lines.push("ESTADO DEL BLUEPRINT");
+  for (const b of [
+    "Blueprint",
+    "No aplicado",
+    "Sin SQL",
+    "Sin escritura",
+    "Futuro",
+    "Requiere aprobación final",
+  ]) {
+    lines.push(`- ${b}`);
+  }
+  lines.push("");
+  lines.push("REFERENCIA");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Snapshot: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Decisión reunión: ${latestAdvanceMeetingDecision.decisionLabel}`);
+  lines.push("");
+  lines.push("PROPÓSITO");
+  lines.push(REAL_CONFIG_BLUEPRINT_PURPOSE);
+  lines.push("");
+  lines.push("CONFIGURACIONES FUTURAS");
+  for (const e of REAL_CONFIG_BLUEPRINT_FUTURE_ENTRIES) {
+    lines.push(`- ${e.letter}. ${e.title} (${e.logicalKey})`);
+    lines.push(`  Propósito: ${e.purpose}`);
+    lines.push("  Campos futuros sugeridos:");
+    for (const f of e.futureFields) {
+      lines.push(`    · ${f}`);
+    }
+    lines.push(`  Fuente: ${e.source}`);
+    lines.push(`  Estado: ${e.statusLabel}`);
+    lines.push("");
+  }
+  lines.push("DEPENDENCIAS DE CONFIGURACIÓN (orden documental)");
+  REAL_CONFIG_BLUEPRINT_DEPENDENCY_ORDER.forEach((key, i) => {
+    lines.push(`${i + 1}. ${key}`);
+  });
+  lines.push("");
+  lines.push(REAL_CONFIG_BLUEPRINT_DEPENDENCY_NOTE);
+  lines.push("");
+  lines.push("VALIDACIONES PREVIAS ANTES DE APLICAR BLUEPRINT");
+  for (const r of valRows) {
+    lines.push(`- [${futureUnlockBadgeLabel(r.badge)}] ${r.label}`);
+  }
+  lines.push("");
+  lines.push(REAL_CONFIG_BLUEPRINT_NOT_EXEC_TITLE.toUpperCase());
+  lines.push(REAL_CONFIG_BLUEPRINT_NOT_EXEC_TEXT);
+  lines.push("");
+  lines.push("RIESGOS DEL BLUEPRINT");
+  for (const r of REAL_CONFIG_BLUEPRINT_RISKS) {
+    lines.push(`- ${r}`);
+  }
+  lines.push("");
+  lines.push("ACCIONES BLOQUEADAS");
+  for (const c of REAL_CONFIG_BLUEPRINT_BLOCKED_CODES) {
+    lines.push(`- ${c}`);
+  }
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD");
+  lines.push(REAL_CONFIG_BLUEPRINT_SECURITY_NOTE);
   return lines.join("\n");
 }
 
@@ -1916,6 +2216,7 @@ export default function PaqueteDraftDetailPage() {
   const [pilotEnvPlanCopied, setPilotEnvPlanCopied] = useState(false);
   const [futureExecutablePlanCopied, setFutureExecutablePlanCopied] = useState(false);
   const [technicalPilotDesignCopied, setTechnicalPilotDesignCopied] = useState(false);
+  const [realConfigBlueprintCopied, setRealConfigBlueprintCopied] = useState(false);
   const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
   const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
   const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
@@ -2436,6 +2737,24 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setTechnicalPilotDesignCopied(true);
       window.setTimeout(() => setTechnicalPilotDesignCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, latestAdvanceMeetingDecision, packagePayload]);
+
+  const copyRealConfigBlueprint = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
+    const text = buildRealConfigBlueprintPlainText({
+      meta,
+      humanConfirmationStatus: data.humanConfirmationStatus,
+      latestSnapshot,
+      latestAdvanceMeetingDecision,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setRealConfigBlueprintCopied(true);
+      window.setTimeout(() => setRealConfigBlueprintCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -5035,10 +5354,11 @@ export default function PaqueteDraftDetailPage() {
             ) : null}
 
             {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
-              <section
-                className="rounded-xl border border-slate-300/80 bg-white p-5"
-                aria-labelledby="pilot-tech-design-title"
-              >
+              <>
+                <section
+                  className="rounded-xl border border-slate-300/80 bg-white p-5"
+                  aria-labelledby="pilot-tech-design-title"
+                >
                 <h2 id="pilot-tech-design-title" className="text-sm font-semibold text-slate-900">
                   Diseño técnico del entorno piloto
                 </h2>
@@ -5315,7 +5635,208 @@ export default function PaqueteDraftDetailPage() {
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   {PILOT_TECH_DESIGN_SECURITY_NOTE}
                 </p>
-              </section>
+                </section>
+
+                <section
+                  className="mt-4 rounded-xl border border-slate-300/80 bg-white p-5"
+                  aria-labelledby="real-config-blueprint-title"
+                >
+                  <h2 id="real-config-blueprint-title" className="text-sm font-semibold text-slate-900">
+                    Blueprint técnico de configuración real
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                    Mapa declarativo de configuraciones futuras; solo lectura y copia. Primera etapa restringida;
+                    usuarios operativos quedan para una fase posterior explícita.
+                  </p>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Estado del blueprint
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {[
+                        "Blueprint",
+                        "No aplicado",
+                        "Sin SQL",
+                        "Sin escritura",
+                        "Futuro",
+                        "Requiere aprobación final",
+                      ].map((label) => (
+                        <li
+                          key={label}
+                          className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                        >
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Propósito</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-800">{REAL_CONFIG_BLUEPRINT_PURPOSE}</p>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Configuraciones futuras
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {REAL_CONFIG_BLUEPRINT_FUTURE_ENTRIES.map((entry) => (
+                        <li
+                          key={entry.logicalKey}
+                          className="rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm"
+                        >
+                          <p className="text-xs font-semibold text-slate-900">
+                            {entry.letter}. {entry.title}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[10px] text-slate-600">{entry.logicalKey}</p>
+                          <p className="mt-1 text-xs text-slate-800">
+                            <span className="font-semibold text-slate-900">Propósito: </span>
+                            {entry.purpose}
+                          </p>
+                          <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Campos futuros sugeridos
+                          </p>
+                          <ul className="mt-1 flex flex-wrap gap-1">
+                            {entry.futureFields.map((field) => (
+                              <li
+                                key={field}
+                                className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[9px] text-slate-700"
+                              >
+                                {field}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="mt-1.5 text-[11px] text-slate-600">
+                            <span className="font-semibold text-slate-800">Fuente: </span>
+                            {entry.source}
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-700">
+                            <span className="font-semibold text-slate-900">Estado: </span>
+                            {entry.statusLabel}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Dependencias de configuración
+                    </p>
+                    <ol className="mt-2 space-y-1 font-mono text-[10px] leading-relaxed text-slate-800">
+                      {REAL_CONFIG_BLUEPRINT_DEPENDENCY_ORDER.map((depKey, idx) => (
+                        <li key={depKey} className="flex gap-2">
+                          <span className="w-4 shrink-0 text-slate-500">{idx + 1}.</span>
+                          <span>{depKey}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-600">
+                      {REAL_CONFIG_BLUEPRINT_DEPENDENCY_NOTE}
+                    </p>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Validaciones previas antes de aplicar blueprint
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {computeBlueprintValidationRows({
+                        packagePayload,
+                        meta,
+                        humanConfirmationStatus: data.humanConfirmationStatus,
+                        latestAdvanceMeetingDecision,
+                      }).map((row) => (
+                        <li
+                          key={row.label}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                        >
+                          <span className="text-xs text-slate-800">{row.label}</span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${futureUnlockBadgeClass(row.badge)}`}
+                          >
+                            {futureUnlockBadgeLabel(row.badge)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-sm font-semibold text-slate-900">{REAL_CONFIG_BLUEPRINT_NOT_EXEC_TITLE}</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-800">
+                      {REAL_CONFIG_BLUEPRINT_NOT_EXEC_TEXT}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Riesgos del blueprint
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                      {REAL_CONFIG_BLUEPRINT_RISKS.map((risk) => (
+                        <li key={risk}>{risk}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Acciones bloqueadas
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                      {REAL_CONFIG_BLUEPRINT_BLOCKED_CODES.map((code) => (
+                        <li
+                          key={code}
+                          className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                        >
+                          {code}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 opacity-95"
+                      >
+                        Aplicar blueprint — Bloqueado
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copyRealConfigBlueprint()}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                      >
+                        {realConfigBlueprintCopied ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        )}
+                        Copiar blueprint técnico
+                      </button>
+                    </div>
+                    <div className="flex max-w-md flex-col gap-1">
+                      <p className="text-[11px] leading-relaxed text-slate-500">
+                        Este botón es informativo. Aplicar configuraciones reales requiere una fase posterior explícita.
+                      </p>
+                      {realConfigBlueprintCopied ? (
+                        <p className="text-[11px] font-medium text-slate-700">Blueprint copiado</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                    <span className="font-semibold text-slate-900">Seguridad: </span>
+                    {REAL_CONFIG_BLUEPRINT_SECURITY_NOTE}
+                  </p>
+                </section>
+              </>
             ) : null}
 
             <section className="rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="snapshots-history-title">
