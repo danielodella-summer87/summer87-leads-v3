@@ -43,6 +43,21 @@ type DraftDetailResponse = {
 
 type ApiErrJson = { ok?: boolean; code?: string; message?: string };
 
+/** Resumen de fila devuelto por GET simulation-snapshots (defensivo en UI). */
+type SimulationSnapshotRow = {
+  id: string;
+  draftId: string;
+  snapshotType: string;
+  contractVersion: string;
+  simulationStatus: string;
+  readinessScore: number | null;
+  finalGoNoGo: string | null;
+  riskLevel: string | null;
+  canProceedToPilotPreparation: boolean;
+  createdBy: string | null;
+  createdAt: string;
+};
+
 type SimulatePreinstallCheck = {
   key: string;
   label: string;
@@ -118,6 +133,39 @@ function riskBadgeClass(level: string): string {
     case "low":
     default:
       return "border border-slate-200 bg-slate-100 text-slate-800";
+  }
+}
+
+function shortSnapshotId(uuid: string): string {
+  const t = uuid.trim();
+  if (!t) return "—";
+  if (t.length <= 10) return t;
+  return `${t.slice(0, 8)}…`;
+}
+
+function snapshotGoNoGoBadgeClass(v: string | null): string {
+  switch (v) {
+    case "no_go":
+      return "border border-rose-200/80 bg-rose-50 text-rose-900";
+    case "pending_inputs":
+      return "border border-amber-200/80 bg-amber-50 text-amber-950";
+    case "ready_for_manual_install":
+      return "border border-emerald-200/70 bg-emerald-50/90 text-emerald-900";
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-700";
+  }
+}
+
+function snapshotRiskBadgeClass(v: string | null): string {
+  switch (v) {
+    case "high":
+      return "border border-rose-200/80 bg-rose-50 text-rose-900";
+    case "medium":
+      return "border border-amber-200/80 bg-amber-50 text-amber-950";
+    case "low":
+      return "border border-slate-200 bg-slate-100 text-slate-700";
+    default:
+      return "border border-slate-200 bg-slate-100 text-slate-600";
   }
 }
 
@@ -239,9 +287,9 @@ export default function PaqueteDraftDetailPage() {
   const [snapshotSaving, setSnapshotSaving] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [snapshotSuccess, setSnapshotSuccess] = useState<string | null>(null);
-  const [lastSnapshotSaved, setLastSnapshotSaved] = useState<{ id: string; createdAt: string } | null>(
-    null
-  );
+  const [snapshots, setSnapshots] = useState<SimulationSnapshotRow[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -275,8 +323,78 @@ export default function PaqueteDraftDetailPage() {
     setContractJsonCopied(false);
     setSnapshotError(null);
     setSnapshotSuccess(null);
-    setLastSnapshotSaved(null);
+    setSnapshots([]);
+    setSnapshotsError(null);
+    setSnapshotsLoading(false);
   }, [id]);
+
+  const loadSimulationSnapshots = useCallback(async () => {
+    if (!id) return;
+    setSnapshotsLoading(true);
+    setSnapshotsError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulation-snapshots`,
+        { cache: "no-store", headers: { "Cache-Control": "no-store" } }
+      );
+      const raw: unknown = await res.json();
+      const j = raw as {
+        ok?: boolean;
+        code?: string;
+        message?: string;
+        snapshots?: unknown;
+      };
+
+      if (res.status === 503 && j.code === "SNAPSHOT_TABLE_NOT_FOUND") {
+        setSnapshots([]);
+        setSnapshotsError(
+          "La tabla de snapshots no existe. Aplicá la migración antes de ver evidencias."
+        );
+        return;
+      }
+
+      if (!res.ok || j.ok !== true) {
+        setSnapshots([]);
+        setSnapshotsError(
+          [j.code, j.message].filter(Boolean).join(" — ") ||
+            `No se pudo cargar el historial de evidencias (HTTP ${res.status}).`
+        );
+        return;
+      }
+
+      const list = Array.isArray(j.snapshots) ? j.snapshots : [];
+      const parsed: SimulationSnapshotRow[] = list.map((row) => {
+        const r = row as Record<string, unknown>;
+        const rs = r.readinessScore;
+        const n =
+          rs === null || rs === undefined || Number.isNaN(Number(rs)) ? null : Math.round(Number(rs));
+        return {
+          id: String(r.id ?? ""),
+          draftId: String(r.draftId ?? ""),
+          snapshotType: String(r.snapshotType ?? ""),
+          contractVersion: String(r.contractVersion ?? ""),
+          simulationStatus: String(r.simulationStatus ?? ""),
+          readinessScore: n,
+          finalGoNoGo: r.finalGoNoGo == null || r.finalGoNoGo === undefined ? null : String(r.finalGoNoGo),
+          riskLevel: r.riskLevel == null || r.riskLevel === undefined ? null : String(r.riskLevel),
+          canProceedToPilotPreparation: Boolean(r.canProceedToPilotPreparation),
+          createdBy: r.createdBy == null || r.createdBy === undefined ? null : String(r.createdBy),
+          createdAt: String(r.createdAt ?? ""),
+        };
+      });
+      setSnapshots(parsed);
+    } catch (e: unknown) {
+      setSnapshots([]);
+      setSnapshotsError(e instanceof Error ? e.message : "Error de red al cargar evidencias.");
+    } finally {
+      setSnapshotsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !data) return;
+    void loadSimulationSnapshots();
+  }, [id, data, loadSimulationSnapshots]);
 
   async function copyId() {
     if (!id || !navigator.clipboard?.writeText) return;
@@ -422,7 +540,7 @@ export default function PaqueteDraftDetailPage() {
           ? `Evidencia guardada. snapshotId: ${sid}${cat ? ` · ${formatDt(cat)}` : ""}`
           : "Evidencia guardada."
       );
-      if (sid && cat) setLastSnapshotSaved({ id: sid, createdAt: cat });
+      await loadSimulationSnapshots();
     } catch (e: unknown) {
       setSnapshotError(e instanceof Error ? e.message : "Error de red");
     } finally {
@@ -490,38 +608,7 @@ export default function PaqueteDraftDetailPage() {
     );
   }, [simulateResult]);
 
-  useEffect(() => {
-    if (!id || !meta) return;
-    const approved =
-      meta.status === "approved_for_pilot" || data?.humanConfirmationStatus === "approved";
-    if (!approved) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulation-snapshots`,
-          { cache: "no-store", headers: { "Cache-Control": "no-store" } }
-        );
-        const raw: unknown = await res.json();
-        const j = raw as {
-          ok?: boolean;
-          snapshots?: Array<{ id?: string; createdAt?: string }>;
-        };
-        if (cancelled || !res.ok || j.ok !== true || !Array.isArray(j.snapshots)) return;
-        const first = j.snapshots[0];
-        if (first?.id && first?.createdAt) {
-          setLastSnapshotSaved({ id: first.id, createdAt: first.createdAt });
-        }
-      } catch {
-        /* Tabla ausente u otro error: no bloquear la vista. */
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id, meta, data?.humanConfirmationStatus, meta?.status]);
+  const latestSnapshot = snapshots.length > 0 ? snapshots[0] : null;
 
   return (
     <PageContainer>
@@ -982,12 +1069,12 @@ export default function PaqueteDraftDetailPage() {
                               Guardar este snapshot no instala el CRM ni ejecuta acciones externas. Solo
                               registra evidencia auditable del resultado de simulación ya generado.
                             </p>
-                            {lastSnapshotSaved ? (
+                            {latestSnapshot ? (
                               <p className="text-xs text-slate-500">
                                 Último snapshot guardado:{" "}
-                                <span className="font-mono text-slate-800">{lastSnapshotSaved.id}</span>
+                                <span className="font-mono text-slate-800">{latestSnapshot.id}</span>
                                 {" · "}
-                                <span className="text-slate-700">{formatDt(lastSnapshotSaved.createdAt)}</span>
+                                <span className="text-slate-700">{formatDt(latestSnapshot.createdAt)}</span>
                               </p>
                             ) : null}
                             <button
@@ -1132,6 +1219,121 @@ export default function PaqueteDraftDetailPage() {
                 ) : null}
               </>
             ) : null}
+
+            <section className="rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="snapshots-history-title">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 id="snapshots-history-title" className="text-sm font-semibold text-slate-900">
+                    Historial de evidencias guardadas
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Solo lectura de registros ya persistidos. No modifica el borrador ni ejecuta instalación.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadSimulationSnapshots()}
+                  disabled={snapshotsLoading || !id}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {snapshotsLoading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                      Actualizando…
+                    </>
+                  ) : (
+                    "Actualizar historial"
+                  )}
+                </button>
+              </div>
+
+              {snapshotsError ? (
+                <div
+                  className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                  role="alert"
+                >
+                  {snapshotsError}
+                </div>
+              ) : null}
+
+              {snapshotsLoading && snapshots.length === 0 && !snapshotsError ? (
+                <p className="mt-4 text-sm text-slate-500">Cargando historial…</p>
+              ) : null}
+
+              {!snapshotsLoading && !snapshotsError && snapshots.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-600">
+                  Todavía no hay evidencias guardadas para este borrador.
+                </p>
+              ) : null}
+
+              {snapshots.length > 0 ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-[720px] w-full text-left text-sm text-slate-800">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <th className="whitespace-nowrap py-2 pr-3">Fecha</th>
+                        <th className="whitespace-nowrap py-2 pr-3">ID</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Tipo</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Versión contrato</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Score</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Go / No-Go</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Riesgo</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Prep. piloto</th>
+                        <th className="whitespace-nowrap py-2 pr-3">Creado por</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshots.map((s) => (
+                        <tr key={s.id} className="border-b border-slate-100 last:border-0">
+                          <td className="whitespace-nowrap py-2 pr-3 align-top text-xs text-slate-600">
+                            {formatDt(s.createdAt)}
+                          </td>
+                          <td
+                            className="py-2 pr-3 align-top font-mono text-[11px] text-slate-700"
+                            title={s.id}
+                          >
+                            {shortSnapshotId(s.id)}
+                          </td>
+                          <td className="py-2 pr-3 align-top font-mono text-[11px]">{s.snapshotType || "—"}</td>
+                          <td className="py-2 pr-3 align-top font-mono text-[11px]">{s.contractVersion || "—"}</td>
+                          <td className="py-2 pr-3 align-top tabular-nums">
+                            {s.readinessScore ?? "—"}
+                          </td>
+                          <td className="py-2 pr-3 align-top">
+                            {s.finalGoNoGo ? (
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotGoNoGoBadgeClass(s.finalGoNoGo)}`}
+                              >
+                                {s.finalGoNoGo.replace(/_/g, " ")}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 align-top">
+                            {s.riskLevel ? (
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotRiskBadgeClass(s.riskLevel)}`}
+                              >
+                                {s.riskLevel}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 align-top text-xs">
+                            {s.canProceedToPilotPreparation ? "Sí" : "No"}
+                          </td>
+                          <td className="max-w-[140px] truncate py-2 pr-3 align-top font-mono text-[11px] text-slate-600" title={s.createdBy ?? undefined}>
+                            {s.createdBy ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </section>
 
             <JsonBlock title="Warnings" value={data.warnings} />
             <JsonBlock title="Acciones bloqueadas (blocked_actions)" value={data.blockedActions} />
