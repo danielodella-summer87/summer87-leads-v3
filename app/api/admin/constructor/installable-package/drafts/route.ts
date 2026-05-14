@@ -27,6 +27,8 @@ function jsonArrayLen(v: unknown): number {
   return Array.isArray(v) ? v.length : 0;
 }
 
+const EXEC_SUMMARY_PREVIEW_LEN = 240;
+
 function emptyEvidenceSummary() {
   return {
     snapshotCount: 0,
@@ -37,10 +39,40 @@ function emptyEvidenceSummary() {
     latestFinalGoNoGo: null as string | null,
     latestRiskLevel: null as string | null,
     hasEvidence: false,
+    latestHasExecutiveSummary: false,
+    latestExecutiveSummaryPreview: null as string | null,
+    latestExecutiveSummaryText: null as string | null,
   };
 }
 
 type EvidenceSummary = ReturnType<typeof emptyEvidenceSummary>;
+
+function executiveSummaryFromSimulationPayload(payload: unknown): {
+  latestHasExecutiveSummary: boolean;
+  latestExecutiveSummaryPreview: string | null;
+  latestExecutiveSummaryText: string | null;
+} {
+  const empty = {
+    latestHasExecutiveSummary: false,
+    latestExecutiveSummaryPreview: null as string | null,
+    latestExecutiveSummaryText: null as string | null,
+  };
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return empty;
+  const p = payload as Record<string, unknown>;
+  const raw = p.executiveSummaryText ?? p.executive_summary_text;
+  if (typeof raw !== "string") return empty;
+  const text = raw.trim();
+  if (!text) return empty;
+  const preview =
+    text.length <= EXEC_SUMMARY_PREVIEW_LEN
+      ? text
+      : `${text.slice(0, EXEC_SUMMARY_PREVIEW_LEN)}…`;
+  return {
+    latestHasExecutiveSummary: true,
+    latestExecutiveSummaryPreview: preview,
+    latestExecutiveSummaryText: text,
+  };
+}
 
 function isMissingSnapshotsTable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -131,7 +163,7 @@ export async function GET(req: NextRequest) {
     const { data: snapData, error: snapErr } = await sb
       .from("installer_package_simulation_snapshots")
       .select(
-        "id, draft_id, contract_version, readiness_score, final_go_no_go, risk_level, created_at"
+        "id, draft_id, contract_version, readiness_score, final_go_no_go, risk_level, created_at, simulation_payload"
       )
       .in("draft_id", draftIds)
       .order("created_at", { ascending: false })
@@ -151,6 +183,7 @@ export async function GET(req: NextRequest) {
         final_go_no_go: string | null;
         risk_level: string | null;
         created_at: string;
+        simulation_payload: unknown;
       }>;
 
       const counts = new Map<string, number>();
@@ -173,6 +206,7 @@ export async function GET(req: NextRequest) {
         const rs = l.readiness_score;
         const readinessNum =
           rs === null || rs === undefined || Number.isNaN(Number(rs)) ? null : Math.round(Number(rs));
+        const exec = executiveSummaryFromSimulationPayload(l.simulation_payload);
         summaryByDraft.set(did, {
           snapshotCount: n,
           latestSnapshotId: l.id,
@@ -182,6 +216,7 @@ export async function GET(req: NextRequest) {
           latestFinalGoNoGo: l.final_go_no_go,
           latestRiskLevel: l.risk_level,
           hasEvidence: true,
+          ...exec,
         });
       }
     }

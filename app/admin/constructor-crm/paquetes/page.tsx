@@ -14,6 +14,9 @@ type EvidenceSummary = {
   latestFinalGoNoGo: string | null;
   latestRiskLevel: string | null;
   hasEvidence: boolean;
+  latestHasExecutiveSummary: boolean;
+  latestExecutiveSummaryPreview: string | null;
+  latestExecutiveSummaryText: string | null;
 };
 
 type DraftListItem = {
@@ -182,8 +185,13 @@ function defaultEvidenceSummary(): EvidenceSummary {
     latestFinalGoNoGo: null,
     latestRiskLevel: null,
     hasEvidence: false,
+    latestHasExecutiveSummary: false,
+    latestExecutiveSummaryPreview: null,
+    latestExecutiveSummaryText: null,
   };
 }
+
+const LIST_EXEC_SUMMARY_PREVIEW_LEN = 240;
 
 function parseEvidenceSummary(raw: unknown): EvidenceSummary {
   const d = defaultEvidenceSummary();
@@ -207,6 +215,15 @@ function parseEvidenceSummary(raw: unknown): EvidenceSummary {
     const s = String(v).trim();
     return s.length ? s : null;
   };
+  const fullRaw = e.latestExecutiveSummaryText ?? e.latest_executive_summary_text;
+  const full = typeof fullRaw === "string" && fullRaw.trim() ? fullRaw.trim() : null;
+  const prevRaw = e.latestExecutiveSummaryPreview ?? e.latest_executive_summary_preview;
+  const preview =
+    typeof prevRaw === "string" && prevRaw.trim()
+      ? prevRaw.trim()
+      : full && full.length > LIST_EXEC_SUMMARY_PREVIEW_LEN
+        ? `${full.slice(0, LIST_EXEC_SUMMARY_PREVIEW_LEN)}…`
+        : full;
   return {
     snapshotCount: snapCount,
     latestSnapshotId: str(sid),
@@ -216,6 +233,9 @@ function parseEvidenceSummary(raw: unknown): EvidenceSummary {
     latestFinalGoNoGo: str(fg),
     latestRiskLevel: str(rl),
     hasEvidence: Boolean(e.hasEvidence ?? e.has_evidence ?? snapCount > 0),
+    latestHasExecutiveSummary: Boolean(full),
+    latestExecutiveSummaryPreview: full ? preview : null,
+    latestExecutiveSummaryText: full,
   };
 }
 
@@ -499,6 +519,7 @@ export default function PaquetesDraftsListPage() {
   const [filter, setFilter] = useState<FilterTab>("all");
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilterTab>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [summaryCopiedDraftId, setSummaryCopiedDraftId] = useState<string | null>(null);
   const [evidenceSummaryUnavailable, setEvidenceSummaryUnavailable] = useState(false);
   const [evidenceSummaryMessage, setEvidenceSummaryMessage] = useState<string | null>(null);
 
@@ -593,6 +614,19 @@ export default function PaquetesDraftsListPage() {
     await navigator.clipboard.writeText(uuid);
     setCopiedId(uuid);
     window.setTimeout(() => setCopiedId((cur) => (cur === uuid ? null : cur)), 2000);
+  }
+
+  async function copyLatestExecutiveSummary(draftId: string, text: string) {
+    if (!text || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setSummaryCopiedDraftId(draftId);
+      window.setTimeout(() => {
+        setSummaryCopiedDraftId((cur) => (cur === draftId ? null : cur));
+      }, 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
   }
 
   return (
@@ -810,6 +844,10 @@ export default function PaquetesDraftsListPage() {
                     const simOk = simulationAvailable(row);
 
                     const ev = evidenceSummaryForRow(row);
+                    const execSummaryText =
+                      typeof ev.latestExecutiveSummaryText === "string"
+                        ? ev.latestExecutiveSummaryText.trim()
+                        : "";
                     const scoreLabel =
                       ev.latestReadinessScore !== null && ev.latestReadinessScore !== undefined
                         ? `${ev.latestReadinessScore}/100`
@@ -874,6 +912,35 @@ export default function PaquetesDraftsListPage() {
                               <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
                                 {consolidated.helper}
                               </p>
+                            </div>
+                            <div className="border-t border-slate-100 pt-1.5">
+                              {execSummaryText ? (
+                                <div>
+                                  <p className="text-[10px] font-medium text-slate-700">
+                                    Resumen ejecutivo disponible
+                                  </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => void copyLatestExecutiveSummary(row.id, execSummaryText)}
+                                      className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-800 hover:bg-slate-50"
+                                    >
+                                      <Copy className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                                      Copiar resumen
+                                    </button>
+                                    {summaryCopiedDraftId === row.id ? (
+                                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-600">
+                                        <Check className="h-3 w-3 shrink-0 text-slate-600" aria-hidden />
+                                        Resumen copiado
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : ev.snapshotCount > 0 || ev.hasEvidence ? (
+                                <p className="text-[10px] text-slate-500">Evidencia sin resumen ejecutivo</p>
+                              ) : (
+                                <p className="text-[10px] text-slate-500">Sin resumen ejecutivo</p>
+                              )}
                             </div>
                             <span className="font-medium text-slate-800">{evidenceCountLabel(ev.snapshotCount)}</span>
                             <span>
