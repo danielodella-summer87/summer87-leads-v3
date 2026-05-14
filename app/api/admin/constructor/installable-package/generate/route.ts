@@ -4,6 +4,11 @@ import {
   requireConstructorInstallablePackageAccess,
   supabaseServiceRoleClient,
 } from "@/lib/admin/constructorInstallablePackageAccess";
+import {
+  isPickup4x4Preset,
+  mergePickup4x4IntoPackagePayload,
+  PICKUP_4X4_PRESET_KEY,
+} from "@/lib/admin/installablePackagePickup4x4Preset";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +17,7 @@ const DEFAULT_BLOCKED_ACTIONS = [
   "create_tenant",
   "create_users",
   "send_invites",
+  "write_kore",
   "write_zeta",
   "delete_data",
   "activate_sensitive_ai",
@@ -53,6 +59,7 @@ type GenerateBody = {
   targetClientId?: unknown;
   mode?: unknown;
   includeSampleData?: unknown;
+  preset?: unknown;
 };
 
 function isUuid(value: string): boolean {
@@ -214,14 +221,28 @@ export async function POST(req: NextRequest) {
         : null;
 
   const includeSampleDataRequested = body.includeSampleData === true;
+  const presetRaw = pickString(body.preset);
+  const usePickup4x4Preset = isPickup4x4Preset(presetRaw);
 
-  const { warnings: warningList, constructorDb, targetClientDb } = buildWarningsAndIds({
+  const builtIds = buildWarningsAndIds({
     modeEffective,
     includeSampleDataRequested,
     modeNormalizedFromUnknown,
     constructorIdRaw,
     targetClientIdRaw,
   });
+  const warningList = [...builtIds.warnings];
+  if (presetRaw && !usePickup4x4Preset) {
+    warningList.push(
+      `Unknown preset "${presetRaw}" ignored; only "${PICKUP_4X4_PRESET_KEY}" is supported in this phase.`
+    );
+  }
+  if (usePickup4x4Preset) {
+    warningList.push(
+      "Package populated from controlled preset pickup_4x4; no external systems were contacted."
+    );
+  }
+  const { constructorDb, targetClientDb } = builtIds;
 
   const packageVersion = modeEffective === "draft" ? "8B-draft-v1" : "8A-preview";
   const pkg = buildPackageBlock({
@@ -229,6 +250,14 @@ export async function POST(req: NextRequest) {
     installationMode: modeEffective === "draft" ? "draft" : "preview",
     packageVersion,
   });
+
+  if (usePickup4x4Preset) {
+    const layers = mergePickup4x4IntoPackagePayload({
+      baseInstallationManifest: { ...pkg.installation_manifest },
+      constructorIdRaw,
+    });
+    Object.assign(pkg, layers);
+  }
 
   const blockedActions = [...DEFAULT_BLOCKED_ACTIONS];
 
