@@ -54,6 +54,237 @@ const BLOCKED_ACTION_CODES = [
   "publish_production",
 ] as const;
 
+type CrmSectionStatus = "missing" | "partial" | "ready";
+
+function crmSectionStatus(v: unknown): CrmSectionStatus {
+  if (isSectionEmpty(v)) return "missing";
+  return "ready";
+}
+
+type FinalGo = "no_go" | "pending_inputs" | "ready_for_manual_install";
+
+function computeReadinessScore(params: {
+  hasTarget: boolean;
+  payloadEmpty: boolean;
+  payload: Record<string, unknown>;
+}): number {
+  const { hasTarget, payloadEmpty, payload } = params;
+  let score = 22;
+  score += 28;
+  if (hasTarget) score += 6;
+  else score -= 16;
+  if (!isSectionEmpty(payload.crm_modules_config)) score += 12;
+  else score -= 12;
+  if (!isSectionEmpty(payload.pipeline_config)) score += 10;
+  else score -= 10;
+  if (!isSectionEmpty(payload.permissions_config)) score += 10;
+  else score -= 9;
+  if (!isSectionEmpty(payload.lead_fields_config)) score += 6;
+  if (!isSectionEmpty(payload.integrations_config)) score += 4;
+  if (!isSectionEmpty(payload.reports_config)) score += 4;
+  if (payloadEmpty) score -= 22;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function computeFinalGoNoGo(params: {
+  hasTarget: boolean;
+  payloadEmpty: boolean;
+  payload: Record<string, unknown>;
+  failedCount: number;
+}): FinalGo {
+  const { hasTarget, payloadEmpty, payload, failedCount } = params;
+  const noCrm = isSectionEmpty(payload.crm_modules_config);
+  const noPipe = isSectionEmpty(payload.pipeline_config);
+  const noPerm = isSectionEmpty(payload.permissions_config);
+  const noLead = isSectionEmpty(payload.lead_fields_config);
+  if (!hasTarget && noCrm && noPipe && noPerm) return "no_go";
+  if (failedCount > 0) return "pending_inputs";
+  const minimalReady =
+    hasTarget &&
+    !noCrm &&
+    !noPipe &&
+    !noPerm &&
+    !noLead &&
+    !payloadEmpty;
+  if (minimalReady) return "ready_for_manual_install";
+  return "pending_inputs";
+}
+
+function buildTechnicalPreinstallContract(params: {
+  packageId: string;
+  generatedAt: string;
+  hasTarget: boolean;
+  targetClientId: string | null;
+  payload: Record<string, unknown>;
+  payloadEmpty: boolean;
+  riskLevel: "low" | "medium" | "high";
+  summary: string;
+  failedCount: number;
+}): Record<string, unknown> {
+  const {
+    packageId,
+    generatedAt,
+    hasTarget,
+    targetClientId,
+    payload,
+    payloadEmpty,
+    riskLevel,
+    summary,
+    failedCount,
+  } = params;
+
+  const readinessScore = computeReadinessScore({ hasTarget, payloadEmpty, payload });
+  const finalGoNoGo = computeFinalGoNoGo({
+    hasTarget,
+    payloadEmpty,
+    payload,
+    failedCount,
+  });
+
+  const tenantNotes: string[] = [
+    hasTarget
+      ? "UUID presente en borrador; no se resolvió tenant operativo en esta simulación."
+      : "Sin target_client_id: no hay anclaje de cliente destino en el borrador.",
+    "La creación de tenant queda explícitamente fuera de esta fase.",
+  ];
+
+  const installationPlanPreview = [
+    {
+      step: 1,
+      key: "resolve_target_client",
+      label: "Resolver cliente destino",
+      type: "validation",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 2,
+      key: "validate_package_payload",
+      label: "Validar package_payload completo",
+      type: "validation",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 3,
+      key: "validate_crm_modules",
+      label: "Validar módulos CRM",
+      type: "validation",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 4,
+      key: "validate_pipeline",
+      label: "Validar pipeline",
+      type: "validation",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 5,
+      key: "validate_permissions",
+      label: "Validar permisos iniciales",
+      type: "validation",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 6,
+      key: "validate_integrations",
+      label: "Validar integraciones permitidas",
+      type: "validation",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 7,
+      key: "final_human_install_gate",
+      label: "Aprobación final humana antes de ejecutar",
+      type: "governance",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+    {
+      step: 8,
+      key: "prepare_pilot_install_plan",
+      label: "Preparar plan de instalación piloto (documental)",
+      type: "planning",
+      execution: "manual_required",
+      blockedInThisPhase: true,
+    },
+  ];
+
+  return {
+    contractVersion: "8I-preinstall-contract-v1",
+    generatedAt,
+    packageId,
+    source: "simulation_only",
+    executionPolicy: {
+      mode: "simulation_only",
+      canExecuteInstallation: false,
+      requiresFinalHumanApproval: true,
+      zetaPolicy: "read_only",
+      externalWritesAllowed: false,
+      productionWritesAllowed: false,
+    },
+    readiness: {
+      readinessScore,
+      finalGoNoGo,
+      riskLevel,
+      canProceedToPilotPreparation: false,
+      summary,
+    },
+    tenantResolution: {
+      status: hasTarget ? "metadata_only" : "not_resolved",
+      targetClientId,
+      targetClientName: null,
+      requiresTenantCreation: true,
+      notes: tenantNotes,
+    },
+    crmConfiguration: {
+      modulesStatus: crmSectionStatus(payload.crm_modules_config),
+      pipelineStatus: crmSectionStatus(payload.pipeline_config),
+      leadFieldsStatus: crmSectionStatus(payload.lead_fields_config),
+      permissionsStatus: crmSectionStatus(payload.permissions_config),
+      reportsStatus: crmSectionStatus(payload.reports_config),
+      integrationsStatus: crmSectionStatus(payload.integrations_config),
+    },
+    installationPlanPreview,
+    requiredHumanApprovals: [
+      {
+        key: "final_installation_approval",
+        label: "Aprobación final de instalación",
+        required: true,
+        reason: "La aprobación del draft no equivale a instalación real.",
+      },
+      {
+        key: "pilot_install_readiness_review",
+        label: "Revisión de readiness para piloto",
+        required: true,
+        reason: "Aun con package_payload poblado, la ejecución sigue siendo manual y gobernada.",
+      },
+    ],
+    userProvisioningPlanPreview: {
+      status: "not_configured",
+      initialUsersDetected: 0,
+      requiresManualDefinition: true,
+      notes: ["No se crearán usuarios en esta fase.", "No se envían invitaciones desde esta simulación."],
+    },
+    zetaPolicy: {
+      mode: "read_only",
+      writeAllowed: false,
+      reason: "Zeta permanece en modo solo lectura por regla del proyecto.",
+    },
+    blockedProductionActions: [...BLOCKED_ACTION_CODES],
+    auditNotes: [
+      "Contrato generado por simulación.",
+      "No se modificó la base de datos.",
+      "No se ejecutaron acciones externas.",
+    ],
+  };
+}
+
 /**
  * POST /api/admin/constructor/installable-package/drafts/[id]/simulate-preinstall
  * Simulación técnica solo lectura: no muta tablas, no llama externos, no toca Zeta.
@@ -281,6 +512,19 @@ export async function POST(
 
   const canProceedToPilotPreparation = false;
 
+  const generatedAt = new Date().toISOString();
+  const technicalPreinstallContract = buildTechnicalPreinstallContract({
+    packageId: row.id,
+    generatedAt,
+    hasTarget: Boolean(hasTarget),
+    targetClientId: hasTarget,
+    payload,
+    payloadEmpty,
+    riskLevel,
+    summary,
+    failedCount,
+  });
+
   return NextResponse.json(
     {
       ok: true,
@@ -295,6 +539,7 @@ export async function POST(
       simulatedActions,
       blockedActions: [...BLOCKED_ACTION_CODES],
       nextRecommendedAction,
+      technicalPreinstallContract,
     },
     { status: 200, headers: { "Cache-Control": "no-store" } }
   );
