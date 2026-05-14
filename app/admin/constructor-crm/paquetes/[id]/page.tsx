@@ -1024,6 +1024,324 @@ function buildFutureExecutablePlanPlainText(p: {
   return lines.join("\n");
 }
 
+const PILOT_TECH_DESIGN_PURPOSE =
+  "Este diseño define cómo debería organizarse técnicamente el primer entorno piloto de Pickup 4x4 antes de crear recursos reales. La etapa inicial queda restringida a propietarios de Pickup 4x4 y Daniel / Summer87. Los usuarios operativos se definirán más adelante.";
+
+const PILOT_TECH_DESIGN_ISOLATION_RECOMMENDED: string[] = [
+  "Instancia / tenant piloto separado para Pickup 4x4",
+  "Configuración aislada del resto de clientes",
+  "Kore como fuente externa read-only",
+  "Summer87 como operador inicial controlado",
+  "Propietarios como validadores del piloto",
+];
+
+const PILOT_TECH_DESIGN_ISOLATION_NOTE =
+  "No se crea el tenant en esta fase. Solo se documenta el diseño recomendado.";
+
+const PILOT_TECH_DESIGN_LAYERS: { title: string; body: string }[] = [
+  { title: "Capa cliente", body: "Pickup 4x4 como cliente piloto." },
+  {
+    title: "Capa CRM",
+    body: "Módulos, pipeline, campos y reportes definidos desde el package_payload.",
+  },
+  {
+    title: "Capa datos",
+    body: "Datos propios del piloto + referencias futuras a Kore read-only.",
+  },
+  { title: "Capa integración", body: "Kore read-only, sin escritura externa." },
+  {
+    title: "Capa auditoría",
+    body: "Snapshots, decisiones de reunión y trazabilidad del proceso.",
+  },
+  {
+    title: "Capa accesos",
+    body: "Primera etapa restringida a propietarios + Daniel / Summer87; usuarios operativos al final.",
+  },
+];
+
+type PilotTechComponentDef = { key: string; purpose: string; source: string };
+
+const PILOT_TECH_DESIGN_COMPONENTS: PilotTechComponentDef[] = [
+  {
+    key: "tenant_config",
+    purpose: "Representar el entorno piloto Pickup 4x4.",
+    source: "Decisión final + package payload.",
+  },
+  {
+    key: "crm_modules_config",
+    purpose: "Definir módulos CRM del piloto.",
+    source: "package_payload.crm_modules_config",
+  },
+  {
+    key: "pipeline_config",
+    purpose: "Definir etapas comerciales.",
+    source: "package_payload.pipeline_config",
+  },
+  {
+    key: "lead_fields_config",
+    purpose: "Definir campos de clientes, vehículos y oportunidades.",
+    source: "package_payload.lead_fields_config",
+  },
+  {
+    key: "report_views_config",
+    purpose: "Definir vistas y reportes iniciales.",
+    source: "package_payload.reports_config",
+  },
+  {
+    key: "kore_readonly_connector_config",
+    purpose: "Conectar lectura desde Kore sin escritura.",
+    source: "package_payload.integrations_config",
+  },
+  {
+    key: "audit_log_config",
+    purpose: "Registrar trazabilidad de preparación y decisiones.",
+    source: "Snapshots + meeting_decisions + proceso Constructor.",
+  },
+  {
+    key: "restricted_access_policy",
+    purpose: "Limitar acceso a propietarios + Daniel / Summer87 en etapa 1.",
+    source: "Criterio operativo acordado (no persistido en esta pantalla).",
+  },
+  {
+    key: "future_user_access_policy",
+    purpose: "Modelar usuarios operativos e invitaciones en fase posterior.",
+    source: "Definición futura; no parte del alcance inicial.",
+  },
+];
+
+const PILOT_TECH_KORE_DESIGN_INTRO =
+  "Kore se mantiene como sistema de origen. Summer87 no escribirá datos en Kore en esta etapa.";
+
+const PILOT_TECH_INITIAL_DATA_ITEMS: string[] = [
+  "Clientes",
+  "Vehículos",
+  "Oportunidades",
+  "Presupuestos o consultas",
+  "Seguimiento comercial",
+  "Reportes iniciales",
+  "Referencias externas Kore",
+  "Estado de sincronización read-only",
+];
+
+const PILOT_TECH_INITIAL_DATA_NOTE = "No se importan datos en esta fase.";
+
+const PILOT_TECH_RESTRICTED_PARTICIPANTS = ["Propietarios Pickup 4x4", "Daniel / Summer87"];
+
+const PILOT_TECH_RESTRICTED_EXCLUDED: string[] = [
+  "empleados operativos",
+  "usuarios comerciales",
+  "invitaciones",
+  "permisos individuales complejos",
+];
+
+const PILOT_TECH_RESTRICTED_TEXT =
+  "La primera etapa busca validar estructura, datos y alcance con un grupo reducido antes de abrir uso operativo.";
+
+const PILOT_TECH_DESIGN_RISKS: string[] = [
+  "Crear entorno antes de cerrar alcance.",
+  "Diseñar integración sin documentación Kore.",
+  "Asumir campos Kore no confirmados.",
+  "Confundir piloto restringido con producción.",
+  "Abrir acceso operativo demasiado temprano.",
+  "Activar automatizaciones antes de validar datos.",
+  "Mezclar datos de prueba con datos reales sin trazabilidad.",
+  "No dejar auditoría suficiente de decisiones.",
+];
+
+const PILOT_TECH_DESIGN_SECURITY_NOTE =
+  "Este diseño técnico no crea recursos, no instala CRM, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta. Solo documenta la arquitectura propuesta para una futura fase de preparación controlada.";
+
+function koreReadonlyDesignRows(pp: Record<string, unknown>): {
+  mode: string;
+  direction: string;
+  writeAllowed: string;
+  credentials: string;
+  documentation: string;
+  endpoints: string;
+  syncFrequency: string;
+  validation: string;
+} {
+  const raw = payloadCfg(pp, "integrations_config", "integrationsConfig");
+  let mode = "read_only";
+  let direction = "Kore → Summer87";
+  let writeAllowed = "no";
+  let credentials = "pendiente";
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const list = (raw as Record<string, unknown>).integrations;
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const o = item as Record<string, unknown>;
+        const sys = String(o.system ?? "").toLowerCase();
+        if (!sys.includes("kore")) continue;
+        if (typeof o.mode === "string" && o.mode.trim()) mode = o.mode.trim();
+        if (typeof o.syncDirection === "string" && o.syncDirection.trim())
+          direction = o.syncDirection.trim();
+        if (o.writeAllowed === false) writeAllowed = "no";
+        else if (o.writeAllowed === true) writeAllowed = "sí (no aplica en diseño read-only)";
+        const st = String(o.status ?? "").trim();
+        if (st) credentials = st === "pending_credentials" ? "pendiente" : st;
+        break;
+      }
+    }
+  }
+  const docOk = integrationsConfigHasEntries(pp);
+  return {
+    mode,
+    direction,
+    writeAllowed,
+    credentials,
+    documentation: docOk ? "Con antecedente (payload)" : "pendiente",
+    endpoints: "pendiente de confirmación",
+    syncFrequency: "futura definición",
+    validation: "prueba controlada de lectura",
+  };
+}
+
+function computeTechnicalDesignValidationRows(p: {
+  packagePayload: Record<string, unknown>;
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+}): { label: string; badge: FutureExecutableUnlockBadge }[] {
+  const { packagePayload: pp, meta, humanConfirmationStatus: humanSt, latestAdvanceMeetingDecision: adv } = p;
+  const modulesOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "crm_modules_config", "crmModulesConfig")
+  );
+  const pipelineOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+  const fieldsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "lead_fields_config", "leadFieldsConfig"));
+  const reportsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "reports_config", "reportsConfig"));
+  const critOk =
+    typeof adv.decisionReason === "string" && adv.decisionReason.trim().length >= 20;
+  const summer87PilotOk = meta.status === "approved_for_pilot";
+  const pickupHumanOk = humanSt === "approved";
+  const koreOk = isKoreReadOnlyIntegration(pp);
+  const docOk = integrationsConfigHasEntries(pp);
+  const approvalsOk = summer87PilotOk && pickupHumanOk;
+  const scopeOk = modulesOk && pipelineOk && approvalsOk;
+  return [
+    {
+      label: "Confirmar aprobación final.",
+      badge: approvalsOk ? "antecedente" : "pendiente",
+    },
+    { label: "Confirmar alcance piloto.", badge: scopeOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar propietarios participantes.", badge: "pendiente" },
+    { label: "Confirmar canal de coordinación.", badge: "pendiente" },
+    { label: "Confirmar estructura CRM.", badge: modulesOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar pipeline.", badge: pipelineOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar campos mínimos.", badge: fieldsOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar reportes iniciales.", badge: reportsOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar Kore read-only.", badge: koreOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar documentación API.", badge: docOk ? "antecedente" : "pendiente" },
+    { label: "Confirmar criterio de éxito.", badge: critOk ? "antecedente" : "pendiente" },
+    {
+      label: "Confirmar que usuarios operativos quedan para etapa posterior.",
+      badge: "requerido",
+    },
+  ];
+}
+
+function buildTechnicalPilotEnvironmentDesignPlainText(p: {
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, humanConfirmationStatus, latestSnapshot, latestAdvanceMeetingDecision, packagePayload } = p;
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const koreRows = koreReadonlyDesignRows(packagePayload);
+  const valRows = computeTechnicalDesignValidationRows({
+    packagePayload,
+    meta,
+    humanConfirmationStatus,
+    latestAdvanceMeetingDecision,
+  });
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — DISEÑO TÉCNICO DEL ENTORNO PILOTO (Pickup 4x4)");
+  lines.push("Documento informativo. Ninguna acción se ejecuta desde Constructor CRM.");
+  lines.push("");
+  lines.push("ESTADO DEL DISEÑO");
+  for (const b of ["Diseño técnico", "No ejecutado", "Sin SQL", "Sin recursos creados", "Primera etapa restringida"]) {
+    lines.push(`- ${b}`);
+  }
+  lines.push("");
+  lines.push("REFERENCIA");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Snapshot: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Decisión reunión: ${latestAdvanceMeetingDecision.decisionLabel}`);
+  lines.push("");
+  lines.push("PROPÓSITO");
+  lines.push(PILOT_TECH_DESIGN_PURPOSE);
+  lines.push("");
+  lines.push("MODELO DE AISLAMIENTO PROPUESTO");
+  for (const it of PILOT_TECH_DESIGN_ISOLATION_RECOMMENDED) {
+    lines.push(`- ${it}`);
+  }
+  lines.push(PILOT_TECH_DESIGN_ISOLATION_NOTE);
+  lines.push("");
+  lines.push("CAPAS DEL ENTORNO PILOTO (cada capa: Diseñado · No ejecutado)");
+  for (const L of PILOT_TECH_DESIGN_LAYERS) {
+    lines.push(`- ${L.title}: ${L.body} [Diseñado · No ejecutado]`);
+  }
+  lines.push("");
+  lines.push("COMPONENTES TÉCNICOS PROPUESTOS (futuro · no creado)");
+  for (const c of PILOT_TECH_DESIGN_COMPONENTS) {
+    lines.push(`- ${c.key}`);
+    lines.push(`  Propósito: ${c.purpose}`);
+    lines.push(`  Fuente: ${c.source}`);
+    lines.push("  Estado: futuro / no creado");
+  }
+  lines.push("");
+  lines.push("DISEÑO KORE READ-ONLY");
+  lines.push(PILOT_TECH_KORE_DESIGN_INTRO);
+  lines.push(`- Modo: ${koreRows.mode}`);
+  lines.push(`- Dirección: ${koreRows.direction}`);
+  lines.push(`- Escritura permitida: ${koreRows.writeAllowed}`);
+  lines.push(`- Estado credenciales: ${koreRows.credentials}`);
+  lines.push(`- Documentación API: ${koreRows.documentation}`);
+  lines.push(`- Endpoints: ${koreRows.endpoints}`);
+  lines.push(`- Frecuencia de sincronización: ${koreRows.syncFrequency}`);
+  lines.push(`- Validación inicial: ${koreRows.validation}`);
+  lines.push("");
+  lines.push("DISEÑO DE DATOS INICIALES (no importación en esta fase)");
+  for (const d of PILOT_TECH_INITIAL_DATA_ITEMS) {
+    lines.push(`- ${d}`);
+  }
+  lines.push(PILOT_TECH_INITIAL_DATA_NOTE);
+  lines.push("");
+  lines.push("PRIMERA ETAPA RESTRINGIDA");
+  lines.push("Participantes:");
+  for (const x of PILOT_TECH_RESTRICTED_PARTICIPANTS) {
+    lines.push(`- ${x}`);
+  }
+  lines.push("Quedan fuera:");
+  for (const x of PILOT_TECH_RESTRICTED_EXCLUDED) {
+    lines.push(`- ${x}`);
+  }
+  lines.push(PILOT_TECH_RESTRICTED_TEXT);
+  lines.push("");
+  lines.push("VALIDACIONES REQUERIDAS ANTES DE CREAR RECURSOS");
+  for (const r of valRows) {
+    lines.push(`- [${futureUnlockBadgeLabel(r.badge)}] ${r.label}`);
+  }
+  lines.push("");
+  lines.push("RIESGOS TÉCNICOS");
+  for (const r of PILOT_TECH_DESIGN_RISKS) {
+    lines.push(`- ${r}`);
+  }
+  lines.push("");
+  lines.push("ACCIONES BLOQUEADAS");
+  for (const c of FUTURE_EXECUTABLE_BLOCKED_CODES) {
+    lines.push(`- ${c}`);
+  }
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD");
+  lines.push(PILOT_TECH_DESIGN_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
 const MEETING_FINAL_DECISION_OPTIONS: { value: MeetingFinalDecisionValue; label: string }[] = [
   { value: "advance_manual_preparation", label: "Avanzar a preparación manual controlada" },
   { value: "wait_kore_technical_info", label: "Esperar información técnica de Kore" },
@@ -1597,6 +1915,7 @@ export default function PaqueteDraftDetailPage() {
   const [pickupCommercialMessageCopied, setPickupCommercialMessageCopied] = useState(false);
   const [pilotEnvPlanCopied, setPilotEnvPlanCopied] = useState(false);
   const [futureExecutablePlanCopied, setFutureExecutablePlanCopied] = useState(false);
+  const [technicalPilotDesignCopied, setTechnicalPilotDesignCopied] = useState(false);
   const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
   const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
   const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
@@ -2099,6 +2418,24 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setFutureExecutablePlanCopied(true);
       window.setTimeout(() => setFutureExecutablePlanCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, latestAdvanceMeetingDecision, packagePayload]);
+
+  const copyTechnicalPilotEnvironmentDesign = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
+    const text = buildTechnicalPilotEnvironmentDesignPlainText({
+      meta,
+      humanConfirmationStatus: data.humanConfirmationStatus,
+      latestSnapshot,
+      latestAdvanceMeetingDecision,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setTechnicalPilotDesignCopied(true);
+      window.setTimeout(() => setTechnicalPilotDesignCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -4693,6 +5030,290 @@ export default function PaqueteDraftDetailPage() {
                 <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   {FUTURE_EXECUTABLE_PLAN_FINAL_SECURITY}
+                </p>
+              </section>
+            ) : null}
+
+            {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
+              <section
+                className="rounded-xl border border-slate-300/80 bg-white p-5"
+                aria-labelledby="pilot-tech-design-title"
+              >
+                <h2 id="pilot-tech-design-title" className="text-sm font-semibold text-slate-900">
+                  Diseño técnico del entorno piloto
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  Arquitectura propuesta en papel; sin SQL, sin recursos nuevos y sin ejecución. Primera etapa
+                  restringida; usuarios operativos al final.
+                </p>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado del diseño
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      "Diseño técnico",
+                      "No ejecutado",
+                      "Sin SQL",
+                      "Sin recursos creados",
+                      "Primera etapa restringida",
+                    ].map((label) => (
+                      <li
+                        key={label}
+                        className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                      >
+                        {label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Propósito</p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-800">{PILOT_TECH_DESIGN_PURPOSE}</p>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Modelo de aislamiento propuesto
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-800">
+                    <li className="font-medium text-slate-900">Opción recomendada</li>
+                    {PILOT_TECH_DESIGN_ISOLATION_RECOMMENDED.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-600">{PILOT_TECH_DESIGN_ISOLATION_NOTE}</p>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Capas del entorno piloto
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {PILOT_TECH_DESIGN_LAYERS.map((L) => (
+                      <li
+                        key={L.title}
+                        className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-slate-100 bg-slate-50/40 px-2.5 py-2"
+                      >
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900">{L.title}</p>
+                          <p className="mt-0.5 text-xs leading-relaxed text-slate-700">{L.body}</p>
+                        </div>
+                        <span className="flex shrink-0 flex-wrap gap-1">
+                          <span className="rounded-full border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-700">
+                            Diseñado
+                          </span>
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-950">
+                            No ejecutado
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Componentes técnicos propuestos
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {PILOT_TECH_DESIGN_COMPONENTS.map((c) => (
+                      <li
+                        key={c.key}
+                        className="rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm"
+                      >
+                        <p className="font-mono text-[10px] text-slate-600">{c.key}</p>
+                        <p className="mt-1 text-xs text-slate-800">
+                          <span className="font-semibold text-slate-900">Propósito: </span>
+                          {c.purpose}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-800">Fuente: </span>
+                          {c.source}
+                        </p>
+                        <p className="mt-1.5 flex flex-wrap gap-1">
+                          <span className="rounded-full border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-700">
+                            Futuro
+                          </span>
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-950">
+                            No creado
+                          </span>
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Diseño de Kore read-only
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-800">{PILOT_TECH_KORE_DESIGN_INTRO}</p>
+                  <dl className="mt-2 grid gap-1.5 text-xs text-slate-800 sm:grid-cols-2">
+                    {(() => {
+                      const kr = koreReadonlyDesignRows(packagePayload);
+                      return (
+                        <>
+                          <div>
+                            <dt className="text-slate-500">Modo</dt>
+                            <dd className="font-mono text-[11px]">{kr.mode}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Dirección</dt>
+                            <dd>{kr.direction}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Escritura permitida</dt>
+                            <dd>{kr.writeAllowed}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Estado credenciales</dt>
+                            <dd>{kr.credentials}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Documentación API</dt>
+                            <dd>{kr.documentation}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Endpoints</dt>
+                            <dd>{kr.endpoints}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Frecuencia de sincronización</dt>
+                            <dd>{kr.syncFrequency}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Validación inicial</dt>
+                            <dd>{kr.validation}</dd>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </dl>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Diseño de datos iniciales
+                  </p>
+                  <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-slate-800">
+                    {PILOT_TECH_INITIAL_DATA_ITEMS.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[11px] font-medium text-slate-700">{PILOT_TECH_INITIAL_DATA_NOTE}</p>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Diseño de primera etapa restringida
+                  </p>
+                  <p className="mt-2 text-xs font-semibold text-slate-900">Participantes</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-slate-800">
+                    {PILOT_TECH_RESTRICTED_PARTICIPANTS.map((participant) => (
+                      <li key={participant}>{participant}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs font-semibold text-slate-900">Quedan fuera</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-slate-800">
+                    {PILOT_TECH_RESTRICTED_EXCLUDED.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-700">{PILOT_TECH_RESTRICTED_TEXT}</p>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Validaciones requeridas antes de crear recursos
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {computeTechnicalDesignValidationRows({
+                      packagePayload,
+                      meta,
+                      humanConfirmationStatus: data.humanConfirmationStatus,
+                      latestAdvanceMeetingDecision,
+                    }).map((row) => (
+                      <li
+                        key={row.label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{row.label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${futureUnlockBadgeClass(row.badge)}`}
+                        >
+                          {futureUnlockBadgeLabel(row.badge)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Riesgos técnicos
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                    {PILOT_TECH_DESIGN_RISKS.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Acciones bloqueadas
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {FUTURE_EXECUTABLE_BLOCKED_CODES.map((code) => (
+                      <li
+                        key={code}
+                        className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                      >
+                        {code}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 opacity-95"
+                    >
+                      Crear diseño ejecutable — Próximamente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyTechnicalPilotEnvironmentDesign()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      {technicalPilotDesignCopied ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Copiar diseño técnico
+                    </button>
+                  </div>
+                  <div className="flex max-w-md flex-col gap-1">
+                    <p className="text-[11px] leading-relaxed text-slate-500">
+                      Este botón es informativo. El diseño ejecutable requiere una fase posterior explícita.
+                    </p>
+                    {technicalPilotDesignCopied ? (
+                      <p className="text-[11px] font-medium text-slate-700">Diseño copiado</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                  <span className="font-semibold text-slate-900">Seguridad: </span>
+                  {PILOT_TECH_DESIGN_SECURITY_NOTE}
                 </p>
               </section>
             ) : null}
