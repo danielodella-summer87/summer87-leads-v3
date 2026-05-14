@@ -505,6 +505,115 @@ function formatDt(iso: string | null): string {
   }
 }
 
+function yn(v: boolean): string {
+  return v ? "sí" : "no";
+}
+
+/** Texto plano para minuta interna / WhatsApp / mail (no persiste ni ejecuta acciones). */
+function buildPickup4x4MeetingDocumentPlainText(p: {
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, humanConfirmationStatus, latestSnapshot, packagePayload: pp } = p;
+  const goRaw = (latestSnapshot.finalGoNoGo ?? "").trim();
+  const goLabel = goRaw ? goRaw.replace(/_/g, " ") : "—";
+  const score =
+    latestSnapshot.readinessScore != null && !Number.isNaN(Number(latestSnapshot.readinessScore))
+      ? `${String(latestSnapshot.readinessScore)}/100`
+      : "—/100";
+  const risk = latestSnapshot.riskLevel?.trim() || "—";
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const snapDate = formatDt(latestSnapshot.createdAt);
+  const execTextOk =
+    typeof latestSnapshot.executiveSummaryText === "string" &&
+    latestSnapshot.executiveSummaryText.trim().length > 0;
+  const resumenGuardado = execTextOk || latestSnapshot.hasExecutiveSummary;
+
+  const sec = (snake: string, camel: string) =>
+    yn(!isManualInstallPayloadSectionEmpty(payloadCfg(pp, snake, camel)));
+
+  const lines: string[] = [];
+  lines.push("1. TÍTULO");
+  lines.push("SUMMER87 — DOCUMENTO INTERNO DE REUNIÓN");
+  lines.push("Pickup 4x4 · Preparación de instalación manual controlada");
+  lines.push("");
+  lines.push("2. ESTADO ACTUAL");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Estado draft: ${meta.status}`);
+  lines.push(`- Estado humano: ${humanConfirmationStatus}`);
+  lines.push(`- Score: ${score}`);
+  lines.push(`- Go / No-Go: ${goLabel}`);
+  lines.push(`- Riesgo: ${risk}`);
+  lines.push(`- Snapshot base: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Fecha del snapshot: ${snapDate}`);
+  lines.push(`- Resumen ejecutivo guardado: ${yn(resumenGuardado)}`);
+  lines.push("");
+  lines.push("3. QUÉ YA ESTÁ LISTO");
+  lines.push(`- Draft aprobado: sí`);
+  lines.push(`- Package payload poblado: ${yn(isPackagePayloadPopulated(pp))}`);
+  lines.push(`- Módulos CRM definidos: ${sec("crm_modules_config", "crmModulesConfig")}`);
+  lines.push(`- Pipeline definido: ${sec("pipeline_config", "pipelineConfig")}`);
+  lines.push(`- Campos de leads definidos: ${sec("lead_fields_config", "leadFieldsConfig")}`);
+  lines.push(`- Permisos definidos: ${sec("permissions_config", "permissionsConfig")}`);
+  lines.push(`- Integración Kore definida como read-only: ${yn(isKoreReadOnlyIntegration(pp))}`);
+  lines.push(`- Snapshot técnico guardado: sí`);
+  lines.push(`- Resumen ejecutivo guardado: ${yn(resumenGuardado)}`);
+  lines.push("");
+  lines.push("4. QUÉ FALTA DEFINIR CON PICKUP 4X4");
+  lines.push("- Responsable operativo");
+  lines.push("- Usuarios reales del piloto");
+  lines.push("- Permisos por usuario");
+  lines.push("- Alcance exacto del piloto");
+  lines.push("- Datos iniciales a usar/sincronizar desde Kore");
+  lines.push("- Criterio de éxito del piloto");
+  lines.push("- Confirmación humana final");
+  lines.push("");
+  lines.push("5. QUÉ FALTA DEFINIR CON KORE / ÁREA TÉCNICA");
+  lines.push("- Credenciales o acceso técnico");
+  lines.push("- Endpoints disponibles");
+  lines.push("- Campos disponibles");
+  lines.push("- Frecuencia de sincronización");
+  lines.push("- Límites de API");
+  lines.push("- Confirmación de modo solo lectura");
+  lines.push("- Ambientes disponibles: sandbox / producción / demo");
+  lines.push("");
+  lines.push("6. BLOQUEOS NO NEGOCIABLES");
+  lines.push("- No crear tenant sin aprobación final");
+  lines.push("- No crear usuarios sin lista validada");
+  lines.push("- No enviar invitaciones");
+  lines.push("- No escribir en Kore");
+  lines.push("- No escribir en Zeta");
+  lines.push("- No publicar producción");
+  lines.push("- No instalar automáticamente");
+  lines.push("");
+  lines.push("7. RECOMENDACIÓN SUMMER87");
+  lines.push(
+    "El paquete Pickup 4x4 está técnicamente preparado para revisión manual final. La recomendación es avanzar a una reunión breve de validación operativa y técnica antes de instalar. La instalación no debe ejecutarse hasta confirmar usuarios, permisos, acceso Kore, alcance del piloto y responsable operativo."
+  );
+  lines.push("");
+  lines.push("8. DECISIÓN SUGERIDA");
+  lines.push("- Avanzar a preparación manual controlada");
+  lines.push("- No ejecutar instalación todavía");
+  lines.push("- Documentar aprobación final fuera del sistema");
+  lines.push("");
+  lines.push("9. PRÓXIMOS PASOS PROPUESTOS");
+  lines.push("- Confirmar responsable operativo Pickup 4x4");
+  lines.push("- Confirmar usuarios piloto");
+  lines.push("- Confirmar permisos");
+  lines.push("- Confirmar acceso Kore read-only");
+  lines.push("- Definir alcance piloto");
+  lines.push("- Definir fecha tentativa de instalación manual");
+  lines.push("- Registrar decisión final cuando la funcionalidad exista");
+  lines.push("");
+  lines.push("10. NOTA DE SEGURIDAD");
+  lines.push(
+    "Este documento proviene de una revisión interna del Constructor CRM. No ejecuta acciones, no crea recursos, no instala CRM y no escribe en Kore ni en Zeta."
+  );
+  return lines.join("\n");
+}
+
 function crmSummaryPlainLine(crm: Record<string, unknown>): string {
   const pairs: [string, string][] = [
     ["Módulos", "modulesStatus"],
@@ -722,6 +831,7 @@ export default function PaqueteDraftDetailPage() {
   const [snapshotSummaryCopiedId, setSnapshotSummaryCopiedId] = useState<string | null>(null);
   const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
   const [preManualReviewSummaryCopied, setPreManualReviewSummaryCopied] = useState(false);
+  const [meetingDocumentCopied, setMeetingDocumentCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -1116,6 +1226,23 @@ export default function PaqueteDraftDetailPage() {
     showPostApprovalPilotPrep &&
     latestSnapshot !== null &&
     latestSnapshot.finalGoNoGo === "ready_for_manual_install";
+
+  const copyPickup4x4MeetingDocument = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !navigator.clipboard?.writeText) return;
+    const text = buildPickup4x4MeetingDocumentPlainText({
+      meta,
+      humanConfirmationStatus: data.humanConfirmationStatus,
+      latestSnapshot,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setMeetingDocumentCopied(true);
+      window.setTimeout(() => setMeetingDocumentCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, packagePayload]);
 
   return (
     <PageContainer>
@@ -2584,7 +2711,25 @@ export default function PaqueteDraftDetailPage() {
                       Botón informativo. La decisión final todavía se documenta fuera del sistema.
                     </p>
                   </div>
-                  <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1.5 sm:max-w-sm sm:items-end">
+                  <div className="flex min-w-0 flex-1 flex-col items-stretch gap-2 sm:max-w-sm sm:items-end">
+                    <p className="text-[11px] leading-relaxed text-slate-500 sm:text-right">
+                      Texto plano para WhatsApp, correo o minuta. No incluye el contrato técnico completo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void copyPickup4x4MeetingDocument()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      {meetingDocumentCopied ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Copiar documento de reunión
+                    </button>
+                    {meetingDocumentCopied ? (
+                      <p className="text-[11px] text-slate-600 sm:text-right">Documento copiado</p>
+                    ) : null}
                     {typeof latestSnapshot.executiveSummaryText === "string" &&
                     latestSnapshot.executiveSummaryText.trim().length > 0 ? (
                       <>
