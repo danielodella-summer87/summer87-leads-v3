@@ -527,6 +527,39 @@ function buildPickup4x4ExternalCommercialMessagePlainText(): string {
   ].join("\n");
 }
 
+type MeetingFinalDecisionValue =
+  | "advance_manual_preparation"
+  | "wait_kore_technical_info"
+  | "adjust_scope"
+  | "pause_project";
+
+type MeetingDecisionListItem = {
+  id: string;
+  draftId: string;
+  decision: string;
+  decisionLabel: string;
+  decisionReason: string | null;
+  meetingNotes: string | null;
+  pendingItems: string[];
+  decidedBy: string | null;
+  createdAt: string;
+};
+
+const MEETING_FINAL_DECISION_OPTIONS: { value: MeetingFinalDecisionValue; label: string }[] = [
+  { value: "advance_manual_preparation", label: "Avanzar a preparación manual controlada" },
+  { value: "wait_kore_technical_info", label: "Esperar información técnica de Kore" },
+  { value: "adjust_scope", label: "Ajustar alcance antes de avanzar" },
+  { value: "pause_project", label: "Pausar proyecto" },
+];
+
+function truncateMeetingDecisionPreview(s: string | null | undefined, max: number): string {
+  if (s == null) return "—";
+  const t = String(s).trim();
+  if (!t) return "—";
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
+
 /** Solo lectura: dictamen de readiness para instalación manual (derivado de último snapshot). */
 function manualInstallReadinessDictamen(latest: SimulationSnapshotRow | undefined): {
   estadoLabel: string;
@@ -1083,6 +1116,17 @@ export default function PaqueteDraftDetailPage() {
   const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
   const [meetingMinutaCopied, setMeetingMinutaCopied] = useState(false);
   const [pickupCommercialMessageCopied, setPickupCommercialMessageCopied] = useState(false);
+  const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
+  const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
+  const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
+  const [meetingDecisionsTableMissing, setMeetingDecisionsTableMissing] = useState(false);
+  const [meetingDecisionSubmitting, setMeetingDecisionSubmitting] = useState(false);
+  const [meetingDecisionFormError, setMeetingDecisionFormError] = useState<string | null>(null);
+  const [meetingDecisionSuccess, setMeetingDecisionSuccess] = useState<string | null>(null);
+  const [selectedMeetingDecision, setSelectedMeetingDecision] = useState<MeetingFinalDecisionValue | null>(null);
+  const [meetingDecisionReason, setMeetingDecisionReason] = useState("");
+  const [meetingDecisionNotes, setMeetingDecisionNotes] = useState("");
+  const [meetingDecisionPendientes, setMeetingDecisionPendientes] = useState("");
 
   const load = useCallback(async () => {
     if (!id) {
@@ -1530,6 +1574,98 @@ export default function PaqueteDraftDetailPage() {
       /* clipboard no disponible */
     }
   }, []);
+
+  const loadMeetingDecisions = useCallback(async () => {
+    if (!id) return;
+    setMeetingDecisionsLoading(true);
+    setMeetingDecisionsError(null);
+    setMeetingDecisionsTableMissing(false);
+    try {
+      const res = await fetch(
+        `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/meeting-decisions`,
+        { cache: "no-store", headers: { "Cache-Control": "no-store" } }
+      );
+      const json = (await res.json()) as {
+        ok?: boolean;
+        code?: string;
+        message?: string;
+        decisions?: MeetingDecisionListItem[];
+      };
+      if (res.status === 503 && json.code === "MEETING_DECISION_TABLE_NOT_FOUND") {
+        setMeetingDecisionsTableMissing(true);
+        setMeetingDecisions([]);
+        return;
+      }
+      if (!res.ok || json.ok !== true) {
+        throw new Error(
+          [json.code, json.message].filter(Boolean).join(" — ") || "No se pudo cargar el historial de decisiones."
+        );
+      }
+      setMeetingDecisions(Array.isArray(json.decisions) ? json.decisions : []);
+    } catch (e: unknown) {
+      setMeetingDecisionsError(e instanceof Error ? e.message : "Error");
+      setMeetingDecisions([]);
+    } finally {
+      setMeetingDecisionsLoading(false);
+    }
+  }, [id]);
+
+  const submitMeetingDecision = useCallback(async () => {
+    if (!id || !selectedMeetingDecision || meetingDecisionSubmitting) return;
+    setMeetingDecisionSubmitting(true);
+    setMeetingDecisionFormError(null);
+    setMeetingDecisionSuccess(null);
+    try {
+      const pendingItems = meetingDecisionPendientes
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const res = await fetch(
+        `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/meeting-decisions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+          body: JSON.stringify({
+            decision: selectedMeetingDecision,
+            decisionReason: meetingDecisionReason.trim() || undefined,
+            meetingNotes: meetingDecisionNotes.trim() || undefined,
+            pendingItems,
+          }),
+        }
+      );
+      const json = (await res.json()) as { ok?: boolean; code?: string; message?: string };
+      if (!res.ok || json.ok !== true) {
+        throw new Error(
+          [json.code, json.message].filter(Boolean).join(" — ") || "No se pudo registrar la decisión."
+        );
+      }
+      setMeetingDecisionSuccess("Decisión registrada");
+      setSelectedMeetingDecision(null);
+      setMeetingDecisionReason("");
+      setMeetingDecisionNotes("");
+      setMeetingDecisionPendientes("");
+      await loadMeetingDecisions();
+      window.setTimeout(() => {
+        setMeetingDecisionSuccess(null);
+      }, 4500);
+    } catch (e: unknown) {
+      setMeetingDecisionFormError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setMeetingDecisionSubmitting(false);
+    }
+  }, [
+    id,
+    selectedMeetingDecision,
+    meetingDecisionReason,
+    meetingDecisionNotes,
+    meetingDecisionPendientes,
+    loadMeetingDecisions,
+  ]);
+
+  useEffect(() => {
+    if (!id || !showExecutivePreManualReview) return;
+    void loadMeetingDecisions();
+  }, [id, showExecutivePreManualReview, loadMeetingDecisions]);
 
   return (
     <PageContainer>
@@ -3138,18 +3274,172 @@ export default function PaqueteDraftDetailPage() {
                   ) : null}
                 </div>
 
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" aria-labelledby="meeting-final-decision-title">
+                  <h3 id="meeting-final-decision-title" className="text-xs font-semibold text-slate-900">
+                    Decisión final de reunión
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                    Registrar una decisión no instala el CRM ni ejecuta acciones. Solo deja evidencia de la reunión.
+                  </p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                    Aun si se elige avanzar, la instalación real queda bloqueada hasta una fase posterior explícita.
+                  </p>
+
+                  {meetingDecisionsTableMissing ? (
+                    <div
+                      className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                      role="alert"
+                    >
+                      La tabla de decisiones de reunión no existe en la base. Aplicá la migración SQL en Supabase
+                      antes de registrar decisiones.
+                    </div>
+                  ) : null}
+
+                  {meetingDecisionsError ? (
+                    <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                      {meetingDecisionsError}
+                    </div>
+                  ) : null}
+
+                  {meetingDecisionSuccess ? (
+                    <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800">
+                      {meetingDecisionSuccess}
+                    </div>
+                  ) : null}
+
+                  {!meetingDecisionsTableMissing ? (
+                    <>
+                      <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Elegí la decisión
+                      </p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {MEETING_FINAL_DECISION_OPTIONS.map((opt) => {
+                          const sel = selectedMeetingDecision === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setSelectedMeetingDecision(opt.value)}
+                              disabled={meetingDecisionSubmitting}
+                              className={`rounded-lg border px-3 py-2 text-left text-xs font-medium leading-snug transition-colors disabled:opacity-60 ${
+                                sel
+                                  ? "border-slate-600 bg-slate-50 text-slate-900 ring-2 ring-slate-400"
+                                  : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <label className="mt-3 block">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          Motivo de la decisión
+                        </span>
+                        <textarea
+                          value={meetingDecisionReason}
+                          onChange={(e) => setMeetingDecisionReason(e.target.value)}
+                          rows={3}
+                          disabled={meetingDecisionSubmitting}
+                          className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-800 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50"
+                          placeholder="Opcional"
+                        />
+                      </label>
+                      <label className="mt-2 block">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          Notas de reunión
+                        </span>
+                        <textarea
+                          value={meetingDecisionNotes}
+                          onChange={(e) => setMeetingDecisionNotes(e.target.value)}
+                          rows={3}
+                          disabled={meetingDecisionSubmitting}
+                          className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-800 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50"
+                          placeholder="Opcional"
+                        />
+                      </label>
+                      <label className="mt-2 block">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          Pendientes (uno por línea)
+                        </span>
+                        <textarea
+                          value={meetingDecisionPendientes}
+                          onChange={(e) => setMeetingDecisionPendientes(e.target.value)}
+                          rows={3}
+                          disabled={meetingDecisionSubmitting}
+                          className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-800 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 disabled:bg-slate-50"
+                          placeholder="Un ítem por línea"
+                        />
+                      </label>
+
+                      {meetingDecisionFormError ? (
+                        <p className="mt-2 text-xs text-red-700">{meetingDecisionFormError}</p>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() => void submitMeetingDecision()}
+                        disabled={
+                          meetingDecisionSubmitting || !selectedMeetingDecision || meetingDecisionsTableMissing
+                        }
+                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-500 bg-slate-100 px-4 py-2 text-xs font-medium text-slate-900 shadow-sm hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {meetingDecisionSubmitting ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                            Registrando…
+                          </>
+                        ) : (
+                          "Registrar decisión"
+                        )}
+                      </button>
+                    </>
+                  ) : null}
+
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Historial de decisiones de reunión
+                    </p>
+                    {meetingDecisionsLoading ? (
+                      <p className="mt-2 text-xs text-slate-500">Cargando…</p>
+                    ) : meetingDecisions.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Todavía no hay decisiones de reunión registradas.
+                      </p>
+                    ) : (
+                      <ul className="mt-2 space-y-2">
+                        {meetingDecisions.map((d) => (
+                          <li
+                            key={d.id}
+                            className="rounded-md border border-slate-100 bg-slate-50/80 px-2.5 py-2 text-xs text-slate-800"
+                          >
+                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                              <span className="font-semibold text-slate-900">{d.decisionLabel}</span>
+                              <span className="font-mono text-[10px] text-slate-500">
+                                {formatDt(d.createdAt)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-slate-600">
+                              <span className="text-slate-500">Por: </span>
+                              {d.decidedBy ?? "—"}
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-600">
+                              <span className="text-slate-500">Motivo: </span>
+                              {truncateMeetingDecisionPreview(d.decisionReason, 120)}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
                 <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <div>
-                    <button
-                      type="button"
-                      disabled
-                      aria-disabled="true"
-                      className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-90"
-                    >
-                      Registrar decisión final — Próximamente
-                    </button>
-                    <p className="mt-1.5 max-w-md text-[11px] text-slate-500">
-                      Botón informativo. La decisión final todavía se documenta fuera del sistema.
+                    <p className="max-w-md text-[11px] leading-relaxed text-slate-500">
+                      La instalación manual del CRM no se ejecuta desde esta pantalla. Los botones de la derecha
+                      copian material interno o externo; la decisión de reunión se audita en el bloque anterior.
                     </p>
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col items-stretch gap-2 sm:max-w-sm sm:items-end">
