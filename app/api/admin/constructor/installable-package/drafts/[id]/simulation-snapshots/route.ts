@@ -104,6 +104,35 @@ function actorLabel(userId: string): string | null {
   return t.length > 0 ? t : null;
 }
 
+const EXEC_SUMMARY_PREVIEW_LEN = 240;
+
+function executiveSummaryFromSimulationPayload(payload: unknown): {
+  hasExecutiveSummary: boolean;
+  executiveSummaryPreview: string | null;
+  executiveSummaryText: string | null;
+} {
+  const empty = {
+    hasExecutiveSummary: false,
+    executiveSummaryPreview: null as string | null,
+    executiveSummaryText: null as string | null,
+  };
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return empty;
+  const p = payload as Record<string, unknown>;
+  const raw = p.executiveSummaryText ?? p.executive_summary_text;
+  if (typeof raw !== "string") return empty;
+  const text = raw.trim();
+  if (!text) return empty;
+  const preview =
+    text.length <= EXEC_SUMMARY_PREVIEW_LEN
+      ? text
+      : `${text.slice(0, EXEC_SUMMARY_PREVIEW_LEN)}…`;
+  return {
+    hasExecutiveSummary: true,
+    executiveSummaryPreview: preview,
+    executiveSummaryText: text,
+  };
+}
+
 /**
  * GET /api/admin/constructor/installable-package/drafts/[id]/simulation-snapshots
  * Lista snapshots del borrador (más recientes primero). Solo lectura.
@@ -147,7 +176,7 @@ export async function GET(
   const { data: rows, error } = await sb
     .from("installer_package_simulation_snapshots")
     .select(
-      "id, draft_id, snapshot_type, contract_version, simulation_status, readiness_score, final_go_no_go, risk_level, can_proceed_to_pilot_preparation, created_by, created_at"
+      "id, draft_id, snapshot_type, contract_version, simulation_status, readiness_score, final_go_no_go, risk_level, can_proceed_to_pilot_preparation, created_by, created_at, simulation_payload"
     )
     .eq("draft_id", id)
     .order("created_at", { ascending: false });
@@ -165,6 +194,7 @@ export async function GET(
 
   const snapshots = (rows ?? []).map((r) => {
     const row = r as Record<string, unknown>;
+    const exec = executiveSummaryFromSimulationPayload(row.simulation_payload);
     return {
       id: String(row.id ?? ""),
       draftId: String(row.draft_id ?? ""),
@@ -177,6 +207,9 @@ export async function GET(
       canProceedToPilotPreparation: Boolean(row.can_proceed_to_pilot_preparation),
       createdBy: row.created_by === null || row.created_by === undefined ? null : String(row.created_by),
       createdAt: String(row.created_at ?? ""),
+      hasExecutiveSummary: exec.hasExecutiveSummary,
+      executiveSummaryPreview: exec.executiveSummaryPreview,
+      executiveSummaryText: exec.executiveSummaryText,
     };
   });
 

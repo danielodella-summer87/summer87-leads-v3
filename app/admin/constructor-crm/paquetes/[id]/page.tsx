@@ -56,6 +56,9 @@ type SimulationSnapshotRow = {
   canProceedToPilotPreparation: boolean;
   createdBy: string | null;
   createdAt: string;
+  hasExecutiveSummary: boolean;
+  executiveSummaryPreview: string | null;
+  executiveSummaryText: string | null;
 };
 
 type SimulatePreinstallCheck = {
@@ -141,6 +144,34 @@ function shortSnapshotId(uuid: string): string {
   if (!t) return "—";
   if (t.length <= 10) return t;
   return `${t.slice(0, 8)}…`;
+}
+
+/** Deriva campos de resumen ejecutivo desde la fila del GET (con o sin campos explícitos del backend). */
+function parseSnapshotExecutiveFields(r: Record<string, unknown>): {
+  hasExecutiveSummary: boolean;
+  executiveSummaryPreview: string | null;
+  executiveSummaryText: string | null;
+} {
+  const sp = r.simulation_payload ?? r.simulationPayload;
+  const nested =
+    sp && typeof sp === "object" && !Array.isArray(sp)
+      ? (sp as Record<string, unknown>).executiveSummaryText ??
+        (sp as Record<string, unknown>).executive_summary_text
+      : undefined;
+  const fullRaw = r.executiveSummaryText ?? r.executive_summary_text ?? nested;
+  const full = typeof fullRaw === "string" && fullRaw.trim() ? fullRaw.trim() : null;
+  const prevRaw = r.executiveSummaryPreview ?? r.executive_summary_preview;
+  const preview =
+    typeof prevRaw === "string" && prevRaw.trim()
+      ? prevRaw.trim()
+      : full && full.length > 240
+        ? `${full.slice(0, 240)}…`
+        : full;
+  return {
+    hasExecutiveSummary: Boolean(full),
+    executiveSummaryPreview: full ? preview : null,
+    executiveSummaryText: full,
+  };
 }
 
 function snapshotGoNoGoBadgeClass(v: string | null): string {
@@ -552,6 +583,7 @@ export default function PaqueteDraftDetailPage() {
   const [snapshots, setSnapshots] = useState<SimulationSnapshotRow[]>([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
+  const [snapshotSummaryCopiedId, setSnapshotSummaryCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -589,6 +621,7 @@ export default function PaqueteDraftDetailPage() {
     setSnapshots([]);
     setSnapshotsError(null);
     setSnapshotsLoading(false);
+    setSnapshotSummaryCopiedId(null);
   }, [id]);
 
   const loadSimulationSnapshots = useCallback(async () => {
@@ -631,6 +664,7 @@ export default function PaqueteDraftDetailPage() {
         const rs = r.readinessScore;
         const n =
           rs === null || rs === undefined || Number.isNaN(Number(rs)) ? null : Math.round(Number(rs));
+        const ex = parseSnapshotExecutiveFields(r);
         return {
           id: String(r.id ?? ""),
           draftId: String(r.draftId ?? ""),
@@ -643,6 +677,9 @@ export default function PaqueteDraftDetailPage() {
           canProceedToPilotPreparation: Boolean(r.canProceedToPilotPreparation),
           createdBy: r.createdBy == null || r.createdBy === undefined ? null : String(r.createdBy),
           createdAt: String(r.createdAt ?? ""),
+          hasExecutiveSummary: ex.hasExecutiveSummary,
+          executiveSummaryPreview: ex.executiveSummaryPreview,
+          executiveSummaryText: ex.executiveSummaryText,
         };
       });
       setSnapshots(parsed);
@@ -653,6 +690,19 @@ export default function PaqueteDraftDetailPage() {
       setSnapshotsLoading(false);
     }
   }, [id]);
+
+  const copySnapshotSavedSummary = useCallback(async (snapshotId: string, text: string) => {
+    if (!text || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setSnapshotSummaryCopiedId(snapshotId);
+      window.setTimeout(() => {
+        setSnapshotSummaryCopiedId((cur) => (cur === snapshotId ? null : cur));
+      }, 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, []);
 
   useEffect(() => {
     if (!id || !data) return;
@@ -1772,7 +1822,7 @@ export default function PaqueteDraftDetailPage() {
 
               {snapshots.length > 0 ? (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="min-w-[720px] w-full text-left text-sm text-slate-800">
+                  <table className="min-w-[880px] w-full text-left text-sm text-slate-800">
                     <thead>
                       <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <th className="whitespace-nowrap py-2 pr-3">Fecha</th>
@@ -1783,6 +1833,7 @@ export default function PaqueteDraftDetailPage() {
                         <th className="whitespace-nowrap py-2 pr-3">Go / No-Go</th>
                         <th className="whitespace-nowrap py-2 pr-3">Riesgo</th>
                         <th className="whitespace-nowrap py-2 pr-3">Prep. piloto</th>
+                        <th className="min-w-[200px] max-w-[280px] py-2 pr-3">Resumen</th>
                         <th className="whitespace-nowrap py-2 pr-3">Creado por</th>
                       </tr>
                     </thead>
@@ -1827,6 +1878,46 @@ export default function PaqueteDraftDetailPage() {
                           </td>
                           <td className="py-2 pr-3 align-top text-xs">
                             {s.canProceedToPilotPreparation ? "Sí" : "No"}
+                          </td>
+                          <td className="min-w-[200px] max-w-[280px] py-2 pr-3 align-top text-xs text-slate-700">
+                            {s.hasExecutiveSummary ? (
+                              <p className="font-medium text-slate-800">Resumen ejecutivo guardado</p>
+                            ) : (
+                              <>
+                                <p className="font-medium text-slate-600">Sin resumen ejecutivo</p>
+                                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+                                  No disponible en esta evidencia.
+                                </p>
+                              </>
+                            )}
+                            {s.executiveSummaryText ? (
+                              <>
+                                <details className="mt-2 rounded-md border border-slate-200 bg-slate-50/60 px-2 py-1.5">
+                                  <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-700 hover:text-slate-900">
+                                    Ver resumen
+                                  </summary>
+                                  <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-white p-2 font-sans text-[11px] leading-relaxed text-slate-800">
+                                    {s.executiveSummaryText}
+                                  </pre>
+                                </details>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void copySnapshotSavedSummary(s.id, s.executiveSummaryText!)}
+                                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                                  >
+                                    <Copy className="h-3 w-3 shrink-0" aria-hidden />
+                                    Copiar resumen guardado
+                                  </button>
+                                  {snapshotSummaryCopiedId === s.id ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600">
+                                      <Check className="h-3.5 w-3.5 text-slate-600" aria-hidden />
+                                      Resumen guardado copiado
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </>
+                            ) : null}
                           </td>
                           <td className="max-w-[140px] truncate py-2 pr-3 align-top font-mono text-[11px] text-slate-600" title={s.createdBy ?? undefined}>
                             {s.createdBy ?? "—"}
