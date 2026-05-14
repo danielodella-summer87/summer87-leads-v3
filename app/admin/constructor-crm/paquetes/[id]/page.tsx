@@ -900,6 +900,8 @@ const FUTURE_EXECUTABLE_BLOCKED_CODES: string[] = [
 
 const REAL_CONFIG_BLUEPRINT_BLOCKED_CODES: string[] = [...FUTURE_EXECUTABLE_BLOCKED_CODES, "apply_real_config"];
 
+const FUTURE_MIGRATION_SPEC_BLOCKED_CODES: string[] = [...REAL_CONFIG_BLUEPRINT_BLOCKED_CODES, "execute_sql_migration"];
+
 const FUTURE_EXECUTABLE_BARRIER_TITLE = "Barrera de seguridad activa";
 
 const FUTURE_EXECUTABLE_BARRIER_TEXT =
@@ -1326,6 +1328,137 @@ const REAL_CONFIG_BLUEPRINT_FUTURE_ENTRIES: RealConfigBlueprintFutureEntry[] = [
   },
 ];
 
+const FUTURE_MIGRATION_SPEC_PURPOSE =
+  "Esta especificación documenta qué migraciones o configuraciones podrían prepararse en una fase posterior para crear el entorno piloto de Pickup 4x4. No genera SQL, no crea tablas, no inserta datos y no modifica la base.";
+
+type FutureMigrationSpecArea = {
+  letter: string;
+  title: string;
+  key: string;
+  need: string;
+  futureType: string;
+  statusLabel: string;
+};
+
+const FUTURE_MIGRATION_SPEC_AREAS: FutureMigrationSpecArea[] = [
+  {
+    letter: "A",
+    title: "Entorno / tenant piloto",
+    key: "pilot_environment",
+    need: "Crear o registrar un entorno piloto aislado para Pickup 4x4.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "B",
+    title: "Configuración de cliente",
+    key: "pilot_client_config",
+    need: "Registrar metadata de Pickup 4x4 como cliente piloto restringido.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "C",
+    title: "Módulos CRM",
+    key: "crm_modules_config",
+    need: "Persistir módulos definidos en package_payload.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "D",
+    title: "Pipeline comercial",
+    key: "pipeline_config",
+    need: "Persistir etapas comerciales iniciales.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "E",
+    title: "Campos comerciales",
+    key: "lead_fields_config",
+    need: "Persistir grupos y campos mínimos de cliente, vehículo, oportunidad y Kore.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "F",
+    title: "Reportes iniciales",
+    key: "reports_config",
+    need: "Persistir reportes iniciales del piloto.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "G",
+    title: "Kore read-only",
+    key: "kore_readonly_config",
+    need: "Registrar definición de integración read-only sin credenciales sensibles todavía.",
+    futureType: "insert/configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "H",
+    title: "Auditoría",
+    key: "installation_audit",
+    need: "Registrar evento de preparación cuando exista ejecución real.",
+    futureType: "insert/audit",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "I",
+    title: "Acceso restringido primera etapa",
+    key: "restricted_access_stage",
+    need: "Documentar que el acceso queda limitado a propietarios + Daniel / Summer87.",
+    futureType: "configuración",
+    statusLabel: "No definido / No ejecutado",
+  },
+  {
+    letter: "J",
+    title: "Usuarios operativos fase posterior",
+    key: "future_operational_users",
+    need: "Dejar explícito que empleados, roles individuales e invitaciones quedan fuera de esta etapa.",
+    futureType: "política/metadata",
+    statusLabel: "Fase posterior / No ejecutado",
+  },
+];
+
+const FUTURE_MIGRATION_SPEC_ORDER_STEPS: string[] = [
+  "Auditar tablas existentes.",
+  "Confirmar modelo de aislamiento.",
+  "Definir estrategia de tenant/configuración.",
+  "Preparar SQL en archivo separado.",
+  "Revisar SQL manualmente.",
+  "Aplicar primero en entorno de prueba.",
+  "Validar datos resultantes.",
+  "Registrar auditoría.",
+  "Recién después evaluar ejecución en entorno real.",
+  "Mantener usuarios operativos para fase posterior.",
+];
+
+const FUTURE_MIGRATION_SPEC_SQL_SCOPE_TITLE = "Alcance posible de SQL futuro";
+
+const FUTURE_MIGRATION_SPEC_SQL_SCOPE_TEXT =
+  "El SQL futuro podría incluir inserts de configuración, referencias al draft, referencias al snapshot base, configuración de módulos, pipeline, campos, reportes y metadata de integración Kore read-only. No debería incluir creación de usuarios, invitaciones, escritura en Kore, escritura en Zeta ni activación de automatizaciones sensibles.";
+
+const FUTURE_MIGRATION_SPEC_SQL_SCOPE_IMPORTANT =
+  "Importante: no incluir código SQL real en esta fase.";
+
+const FUTURE_MIGRATION_SPEC_RISKS: string[] = [
+  "Ejecutar SQL sin revisar tablas existentes.",
+  "Duplicar configuraciones ya presentes.",
+  "Crear tenant sin aislamiento claro.",
+  "Aplicar configuración sin rollback.",
+  "Insertar datos reales sin trazabilidad.",
+  "Guardar credenciales sensibles prematuramente.",
+  "Mezclar piloto con producción.",
+  "Incluir usuarios operativos demasiado temprano.",
+  "Ejecutar en producción antes de probar.",
+];
+
+const FUTURE_MIGRATION_SPEC_SECURITY_NOTE =
+  "Esta especificación no genera SQL, no aplica migraciones, no crea tablas, no inserta datos, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta. Solo documenta una posible migración futura para revisión técnica.";
+
 function koreReadonlyDesignRows(pp: Record<string, unknown>): {
   mode: string;
   direction: string;
@@ -1455,6 +1588,63 @@ function computeBlueprintValidationRows(p: {
     {
       label: "Confirmar que usuarios operativos quedan para fase posterior.",
       badge: "requerido",
+    },
+  ];
+}
+
+function computeMigrationSpecPrevalidationRows(p: {
+  packagePayload: Record<string, unknown>;
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+}): { label: string; badge: FutureExecutableUnlockBadge }[] {
+  const { packagePayload: pp, meta, humanConfirmationStatus: humanSt, latestSnapshot } = p;
+  const clientIdOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "client_identity", "clientIdentity")
+  );
+  const modulesOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "crm_modules_config", "crmModulesConfig")
+  );
+  const pipelineOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+  const fieldsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "lead_fields_config", "leadFieldsConfig"));
+  const reportsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "reports_config", "reportsConfig"));
+  const koreOk = isKoreReadOnlyIntegration(pp);
+  const summer87PilotOk = meta.status === "approved_for_pilot";
+  const pickupHumanOk = humanSt === "approved";
+  const approvalsSqlOk = summer87PilotOk && pickupHumanOk;
+  const reusableSignal =
+    Boolean(latestSnapshot.id?.trim()) &&
+    (clientIdOk || modulesOk || pipelineOk || fieldsOk || reportsOk);
+  return [
+    {
+      label: "Confirmar si ya existen tablas/configuraciones reutilizables.",
+      badge: reusableSignal ? "antecedente" : "pendiente",
+    },
+    {
+      label:
+        "Confirmar si el entorno será tenant separado o configuración dentro de estructura existente.",
+      badge: "pendiente",
+    },
+    { label: "Confirmar naming convention.", badge: "pendiente" },
+    {
+      label: "Confirmar campos obligatorios.",
+      badge: fieldsOk ? "antecedente" : "pendiente",
+    },
+    { label: "Confirmar relaciones / foreign keys.", badge: "pendiente" },
+    { label: "Confirmar RLS y políticas necesarias.", badge: "pendiente" },
+    { label: "Confirmar rollback posible.", badge: "pendiente" },
+    { label: "Confirmar ambiente de prueba.", badge: "pendiente" },
+    {
+      label: "Confirmar que Kore seguirá read-only.",
+      badge: koreOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar que usuarios operativos quedan para etapa posterior.",
+      badge: "requerido",
+    },
+    {
+      label: "Confirmar aprobación final antes de ejecutar SQL.",
+      badge: approvalsSqlOk ? "antecedente" : "pendiente",
     },
   ];
 }
@@ -1639,6 +1829,83 @@ function buildRealConfigBlueprintPlainText(p: {
   lines.push("");
   lines.push("NOTA DE SEGURIDAD");
   lines.push(REAL_CONFIG_BLUEPRINT_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
+function buildFutureMigrationSpecPlainText(p: {
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, humanConfirmationStatus, latestSnapshot, latestAdvanceMeetingDecision, packagePayload } = p;
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const preRows = computeMigrationSpecPrevalidationRows({
+    packagePayload,
+    meta,
+    humanConfirmationStatus,
+    latestSnapshot,
+  });
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — ESPECIFICACIÓN DE MIGRACIÓN FUTURA");
+  lines.push("Documento informativo. Ninguna acción se ejecuta desde Constructor CRM.");
+  lines.push("");
+  lines.push("ESTADO DE LA ESPECIFICACIÓN");
+  for (const b of [
+    "Especificación",
+    "No ejecutada",
+    "Sin archivo SQL",
+    "Sin migración aplicada",
+    "Futuro",
+    "Requiere revisión técnica",
+  ]) {
+    lines.push(`- ${b}`);
+  }
+  lines.push("");
+  lines.push("REFERENCIA");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Snapshot: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Decisión reunión: ${latestAdvanceMeetingDecision.decisionLabel}`);
+  lines.push("");
+  lines.push("PROPÓSITO");
+  lines.push(FUTURE_MIGRATION_SPEC_PURPOSE);
+  lines.push("");
+  lines.push("ÁREAS QUE PODRÍAN REQUERIR MIGRACIÓN FUTURA");
+  for (const a of FUTURE_MIGRATION_SPEC_AREAS) {
+    lines.push(`- ${a.letter}. ${a.title} (${a.key})`);
+    lines.push(`  Posible necesidad: ${a.need}`);
+    lines.push(`  Tipo futuro: ${a.futureType}`);
+    lines.push(`  Estado: ${a.statusLabel}`);
+    lines.push("");
+  }
+  lines.push("PREVALIDACIONES ANTES DE ESCRIBIR CUALQUIER SQL");
+  for (const r of preRows) {
+    lines.push(`- [${futureUnlockBadgeLabel(r.badge)}] ${r.label}`);
+  }
+  lines.push("");
+  lines.push("ORDEN SUGERIDO DE MIGRACIÓN FUTURA");
+  FUTURE_MIGRATION_SPEC_ORDER_STEPS.forEach((step, i) => {
+    lines.push(`${i + 1}. ${step}`);
+  });
+  lines.push("");
+  lines.push(FUTURE_MIGRATION_SPEC_SQL_SCOPE_TITLE.toUpperCase());
+  lines.push(FUTURE_MIGRATION_SPEC_SQL_SCOPE_TEXT);
+  lines.push(FUTURE_MIGRATION_SPEC_SQL_SCOPE_IMPORTANT);
+  lines.push("");
+  lines.push("RIESGOS DE MIGRACIÓN FUTURA");
+  for (const r of FUTURE_MIGRATION_SPEC_RISKS) {
+    lines.push(`- ${r}`);
+  }
+  lines.push("");
+  lines.push("ACCIONES BLOQUEADAS");
+  for (const c of FUTURE_MIGRATION_SPEC_BLOCKED_CODES) {
+    lines.push(`- ${c}`);
+  }
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD");
+  lines.push(FUTURE_MIGRATION_SPEC_SECURITY_NOTE);
   return lines.join("\n");
 }
 
@@ -2217,6 +2484,7 @@ export default function PaqueteDraftDetailPage() {
   const [futureExecutablePlanCopied, setFutureExecutablePlanCopied] = useState(false);
   const [technicalPilotDesignCopied, setTechnicalPilotDesignCopied] = useState(false);
   const [realConfigBlueprintCopied, setRealConfigBlueprintCopied] = useState(false);
+  const [futureMigrationSpecCopied, setFutureMigrationSpecCopied] = useState(false);
   const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
   const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
   const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
@@ -2755,6 +3023,24 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setRealConfigBlueprintCopied(true);
       window.setTimeout(() => setRealConfigBlueprintCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, latestAdvanceMeetingDecision, packagePayload]);
+
+  const copyFutureMigrationSpec = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
+    const text = buildFutureMigrationSpecPlainText({
+      meta,
+      humanConfirmationStatus: data.humanConfirmationStatus,
+      latestSnapshot,
+      latestAdvanceMeetingDecision,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setFutureMigrationSpecCopied(true);
+      window.setTimeout(() => setFutureMigrationSpecCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -5834,6 +6120,190 @@ export default function PaqueteDraftDetailPage() {
                   <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
                     <span className="font-semibold text-slate-900">Seguridad: </span>
                     {REAL_CONFIG_BLUEPRINT_SECURITY_NOTE}
+                  </p>
+                </section>
+
+                <section
+                  className="mt-4 rounded-xl border border-slate-300/80 bg-white p-5"
+                  aria-labelledby="future-migration-spec-title"
+                >
+                  <h2 id="future-migration-spec-title" className="text-sm font-semibold text-slate-900">
+                    Especificación de migración futura
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                    Documentación de posibles migraciones; sin SQL ejecutable, sin archivos y sin cambios en base.
+                    Usuarios operativos al final del roadmap.
+                  </p>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Estado de la especificación
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {[
+                        "Especificación",
+                        "No ejecutada",
+                        "Sin archivo SQL",
+                        "Sin migración aplicada",
+                        "Futuro",
+                        "Requiere revisión técnica",
+                      ].map((label) => (
+                        <li
+                          key={label}
+                          className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                        >
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Propósito</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-800">{FUTURE_MIGRATION_SPEC_PURPOSE}</p>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Áreas que podrían requerir migración futura
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {FUTURE_MIGRATION_SPEC_AREAS.map((area) => (
+                        <li
+                          key={area.key}
+                          className="rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm"
+                        >
+                          <p className="text-xs font-semibold text-slate-900">
+                            {area.letter}. {area.title}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[10px] text-slate-600">{area.key}</p>
+                          <p className="mt-1 text-xs text-slate-800">
+                            <span className="font-semibold text-slate-900">Posible necesidad: </span>
+                            {area.need}
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-700">
+                            <span className="font-semibold text-slate-800">Tipo futuro: </span>
+                            {area.futureType}
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-700">
+                            <span className="font-semibold text-slate-800">Estado: </span>
+                            {area.statusLabel}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Prevalidaciones antes de escribir cualquier SQL
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {computeMigrationSpecPrevalidationRows({
+                        packagePayload,
+                        meta,
+                        humanConfirmationStatus: data.humanConfirmationStatus,
+                        latestSnapshot,
+                      }).map((row) => (
+                        <li
+                          key={row.label}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                        >
+                          <span className="text-xs text-slate-800">{row.label}</span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${futureUnlockBadgeClass(row.badge)}`}
+                          >
+                            {futureUnlockBadgeLabel(row.badge)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Orden sugerido de migración futura
+                    </p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                      {FUTURE_MIGRATION_SPEC_ORDER_STEPS.map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-sm font-semibold text-slate-900">{FUTURE_MIGRATION_SPEC_SQL_SCOPE_TITLE}</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-800">
+                      {FUTURE_MIGRATION_SPEC_SQL_SCOPE_TEXT}
+                    </p>
+                    <p className="mt-2 text-[11px] font-medium text-slate-700">
+                      {FUTURE_MIGRATION_SPEC_SQL_SCOPE_IMPORTANT}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Riesgos de migración futura
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                      {FUTURE_MIGRATION_SPEC_RISKS.map((risk) => (
+                        <li key={risk}>{risk}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Acciones bloqueadas
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                      {FUTURE_MIGRATION_SPEC_BLOCKED_CODES.map((code) => (
+                        <li
+                          key={code}
+                          className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                        >
+                          {code}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 opacity-95"
+                      >
+                        Generar migración SQL — Bloqueado
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copyFutureMigrationSpec()}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                      >
+                        {futureMigrationSpecCopied ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        )}
+                        Copiar especificación de migración
+                      </button>
+                    </div>
+                    <div className="flex max-w-md flex-col gap-1">
+                      <p className="text-[11px] leading-relaxed text-slate-500">
+                        Este botón es informativo. La generación de SQL requiere una fase posterior explícita.
+                      </p>
+                      {futureMigrationSpecCopied ? (
+                        <p className="text-[11px] font-medium text-slate-700">Especificación copiada</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                    <span className="font-semibold text-slate-900">Seguridad: </span>
+                    {FUTURE_MIGRATION_SPEC_SECURITY_NOTE}
                   </p>
                 </section>
               </>
