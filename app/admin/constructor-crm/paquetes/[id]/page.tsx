@@ -498,6 +498,35 @@ function buildPickup4x4MeetingMinutaPlainText(p: {
   return lines.join("\n");
 }
 
+/** Mensaje B2B para enviar a Pickup 4x4; sin IDs ni términos internos. */
+function buildPickup4x4ExternalCommercialMessagePlainText(): string {
+  return [
+    "Hola [Nombre],",
+    "",
+    "Avanzamos con la preparación inicial del CRM inteligente para Pickup 4x4.",
+    "",
+    "Ya dejamos armado un primer modelo de trabajo orientado a centralizar clientes, vehículos, oportunidades comerciales, seguimiento, reportes e integración con Kore en modo solo lectura.",
+    "",
+    "Antes de avanzar hacia una instalación manual controlada, nos gustaría coordinar una reunión breve para validar algunos puntos clave:",
+    "",
+    "1. Objetivo y alcance del primer piloto.",
+    "2. Usuarios que deberían participar.",
+    "3. Roles y permisos iniciales.",
+    "4. Datos que necesitan visualizar desde Kore.",
+    "5. Acceso técnico disponible para trabajar en modo solo lectura.",
+    "6. Criterios para considerar exitoso el piloto.",
+    "",
+    "La idea de esta etapa no es modificar Kore ni automatizar acciones sensibles, sino validar juntos el alcance y preparar una base segura para el primer CRM operativo.",
+    "",
+    "Si te parece, coordinamos una reunión de 30 a 45 minutos con la persona responsable del proceso comercial y, si corresponde, alguien del área técnica o del proveedor Kore.",
+    "",
+    "Quedo atento para coordinar día y horario.",
+    "",
+    "Saludos,",
+    "Daniel",
+  ].join("\n");
+}
+
 /** Solo lectura: dictamen de readiness para instalación manual (derivado de último snapshot). */
 function manualInstallReadinessDictamen(latest: SimulationSnapshotRow | undefined): {
   estadoLabel: string;
@@ -1053,6 +1082,7 @@ export default function PaqueteDraftDetailPage() {
   const [meetingDocumentCopied, setMeetingDocumentCopied] = useState(false);
   const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
   const [meetingMinutaCopied, setMeetingMinutaCopied] = useState(false);
+  const [pickupCommercialMessageCopied, setPickupCommercialMessageCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -1488,6 +1518,18 @@ export default function PaqueteDraftDetailPage() {
       /* clipboard no disponible */
     }
   }, [meta, latestSnapshot]);
+
+  const copyPickup4x4CommercialMessage = useCallback(async () => {
+    if (!navigator.clipboard?.writeText) return;
+    const text = buildPickup4x4ExternalCommercialMessagePlainText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setPickupCommercialMessageCopied(true);
+      window.setTimeout(() => setPickupCommercialMessageCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, []);
 
   return (
     <PageContainer>
@@ -3066,6 +3108,34 @@ export default function PaqueteDraftDetailPage() {
                       <p className="mt-2 text-xs leading-relaxed text-slate-800">{PICKUP_REUNION_MINUTA_CIERRE}</p>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 p-3" aria-labelledby="pickup-external-message-title">
+                  <h3
+                    id="pickup-external-message-title"
+                    className="text-xs font-semibold text-slate-900"
+                  >
+                    Mensaje comercial para Pickup 4x4
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                    Mensaje externo para coordinar la reunión de validación con Pickup 4x4. No incluye datos internos
+                    del sistema.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void copyPickup4x4CommercialMessage()}
+                    className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                  >
+                    {pickupCommercialMessageCopied ? (
+                      <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    )}
+                    Copiar mensaje para Pickup 4x4
+                  </button>
+                  {pickupCommercialMessageCopied ? (
+                    <p className="mt-1.5 text-[11px] text-slate-600">Mensaje copiado</p>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
