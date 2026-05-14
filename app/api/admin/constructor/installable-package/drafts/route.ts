@@ -20,6 +20,7 @@ type DraftListRow = {
   blocked_actions: unknown;
   human_confirmation_status: string;
   created_at: string;
+  updated_at: string;
 };
 
 function jsonArrayLen(v: unknown): number {
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await sb
     .from("installer_package_drafts")
     .select(
-      "id, status, package_version, constructor_id, target_client_id, requested_by, generated_at, expires_at, warnings, blocked_actions, human_confirmation_status, created_at"
+      "id, status, package_version, constructor_id, target_client_id, requested_by, generated_at, expires_at, warnings, blocked_actions, human_confirmation_status, created_at, updated_at"
     )
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -93,6 +94,7 @@ export async function GET(req: NextRequest) {
     blockedActionsCount: jsonArrayLen(r.blocked_actions),
     humanConfirmationStatus: r.human_confirmation_status,
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
   }));
 
   return NextResponse.json(

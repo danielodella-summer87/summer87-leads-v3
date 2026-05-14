@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ChevronRight, Copy, Check } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 
 type DraftListItem = {
@@ -18,7 +18,10 @@ type DraftListItem = {
   blockedActionsCount: number;
   humanConfirmationStatus: string;
   createdAt: string;
+  updatedAt: string;
 };
+
+type FilterTab = "all" | "pending" | "approved" | "rejected" | "expired";
 
 function formatDt(iso: string | null): string {
   if (!iso) return "—";
@@ -32,28 +35,75 @@ function formatDt(iso: string | null): string {
   }
 }
 
-function rowSemaphore(item: DraftListItem): "green" | "amber" | "red" {
-  if (item.status === "rejected" || item.status === "expired") return "red";
-  if (
-    item.status === "under_review" ||
-    item.status === "changes_requested" ||
-    item.warningsCount > 0
-  ) {
-    return "amber";
-  }
-  return "green";
+function shortId(uuid: string): string {
+  const t = uuid.trim();
+  if (t.length < 8) return t;
+  return `${t.slice(0, 8)}…`;
 }
 
-const DOT: Record<"green" | "amber" | "red", string> = {
-  green: "bg-emerald-500",
-  amber: "bg-amber-500",
-  red: "bg-red-500",
-};
+function isExpiredAt(iso: string | null): boolean {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  return t < Date.now();
+}
+
+function isRejectedRow(row: DraftListItem): boolean {
+  return row.status === "rejected" || row.humanConfirmationStatus === "rejected";
+}
+
+function isApprovedRow(row: DraftListItem): boolean {
+  return row.status === "approved_for_pilot" || row.humanConfirmationStatus === "approved";
+}
+
+function isPendingReviewRow(row: DraftListItem): boolean {
+  if (isRejectedRow(row)) return false;
+  if (row.status === "expired") return false;
+  return row.humanConfirmationStatus === "pending";
+}
+
+function simulationAvailable(row: DraftListItem): boolean {
+  if (isRejectedRow(row)) return false;
+  if (row.humanConfirmationStatus === "pending") return false;
+  return row.status === "approved_for_pilot" || row.humanConfirmationStatus === "approved";
+}
+
+function filterRow(tab: FilterTab, row: DraftListItem): boolean {
+  const expired = isExpiredAt(row.expiresAt);
+  switch (tab) {
+    case "all":
+      return true;
+    case "pending":
+      return isPendingReviewRow(row);
+    case "approved":
+      return isApprovedRow(row);
+    case "rejected":
+      return isRejectedRow(row);
+    case "expired":
+      return expired;
+    default:
+      return true;
+  }
+}
+
+const TAB_LABELS: { id: FilterTab; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "pending", label: "Pendientes" },
+  { id: "approved", label: "Aprobados" },
+  { id: "rejected", label: "Rechazados" },
+  { id: "expired", label: "Expirados" },
+];
+
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
 export default function PaquetesDraftsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<DraftListItem[]>([]);
+  const [filter, setFilter] = useState<FilterTab>("all");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,11 +113,35 @@ export default function PaquetesDraftsListPage() {
         cache: "no-store",
         headers: { "Cache-Control": "no-store" },
       });
-      const json = await res.json();
+      const json = (await res.json()) as { ok?: boolean; items?: unknown; message?: string; code?: string };
       if (!res.ok) {
         throw new Error(json?.message ?? json?.code ?? "Error al cargar borradores");
       }
-      setItems(Array.isArray(json?.items) ? json.items : []);
+      const raw = Array.isArray(json?.items) ? json.items : [];
+      const normalized: DraftListItem[] = raw.map((x) => {
+        const o = x as Record<string, unknown>;
+        return {
+          id: String(o.id ?? ""),
+          status: String(o.status ?? ""),
+          packageVersion: String(o.packageVersion ?? o.package_version ?? ""),
+          constructorId: (o.constructorId ?? o.constructor_id) as string | null,
+          targetClientId: (o.targetClientId ?? o.target_client_id) as string | null,
+          requestedBy: (o.requestedBy ?? o.requested_by) as string | null,
+          generatedAt: String(o.generatedAt ?? o.generated_at ?? ""),
+          expiresAt: (o.expiresAt ?? o.expires_at) as string | null,
+          warningsCount: typeof o.warningsCount === "number" ? o.warningsCount : Number(o.warnings_count) || 0,
+          blockedActionsCount:
+            typeof o.blockedActionsCount === "number"
+              ? o.blockedActionsCount
+              : Number(o.blocked_actions_count) || 0,
+          humanConfirmationStatus: String(
+            o.humanConfirmationStatus ?? o.human_confirmation_status ?? ""
+          ),
+          createdAt: String(o.createdAt ?? o.created_at ?? ""),
+          updatedAt: String(o.updatedAt ?? o.updated_at ?? o.createdAt ?? o.created_at ?? ""),
+        };
+      });
+      setItems(normalized.filter((r) => r.id));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error");
       setItems([]);
@@ -79,6 +153,24 @@ export default function PaquetesDraftsListPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const stats = useMemo(() => {
+    const total = items.length;
+    const pending = items.filter((r) => isPendingReviewRow(r)).length;
+    const approved = items.filter((r) => isApprovedRow(r)).length;
+    const rejected = items.filter((r) => isRejectedRow(r)).length;
+    const expired = items.filter((r) => isExpiredAt(r.expiresAt)).length;
+    return { total, pending, approved, rejected, expired };
+  }, [items]);
+
+  const filteredItems = useMemo(() => items.filter((row) => filterRow(filter, row)), [items, filter]);
+
+  async function copyFullId(uuid: string) {
+    if (!uuid || !navigator.clipboard?.writeText) return;
+    await navigator.clipboard.writeText(uuid);
+    setCopiedId(uuid);
+    window.setTimeout(() => setCopiedId((cur) => (cur === uuid ? null : cur)), 2000);
+  }
 
   return (
     <PageContainer>
@@ -93,11 +185,60 @@ export default function PaquetesDraftsListPage() {
               Constructor CRM
             </Link>
             <h1 className="text-xl font-semibold text-slate-900">Borradores de paquete instalable</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              Vista interna solo lectura. No aprueba ni instala CRM; inspección del paquete persistido
-              en <code className="rounded bg-slate-100 px-1">installer_package_drafts</code>.
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">
+              Vista interna solo lectura. Inspección de filas en{" "}
+              <code className="rounded bg-slate-100 px-1">installer_package_drafts</code>.
             </p>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-700">
+              <p className="font-medium text-slate-900">Capacitación</p>
+              <p className="mt-1">
+                Esta bandeja muestra borradores de paquetes instalables. Revisar, aprobar o rechazar un
+                borrador no instala CRM, no crea tenant, no crea usuarios y no escribe en Zeta. La instalación
+                real requiere una fase posterior explícita.
+              </p>
+            </div>
           </div>
+        </div>
+
+        <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Total</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.total}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Pendientes</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-700">{stats.pending}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Aprobados</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.approved}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Rechazados</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.rejected}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Expirados</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{stats.expired}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {TAB_LABELS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setFilter(t.id)}
+              className={cx(
+                "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                filter === t.id
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {error ? (
@@ -105,80 +246,127 @@ export default function PaquetesDraftsListPage() {
         ) : null}
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Listado</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Bandeja</p>
+            <p className="text-xs text-slate-500">
+              Mostrando{" "}
+              <span className="font-semibold text-slate-800">{filteredItems.length}</span> de {items.length}
+            </p>
           </div>
           {loading ? (
             <p className="p-6 text-sm text-slate-500">Cargando…</p>
           ) : items.length === 0 ? (
             <p className="p-6 text-sm text-slate-500">No hay borradores registrados.</p>
+          ) : filteredItems.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500">No hay borradores en este filtro.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <table className="w-full min-w-[1100px] text-left text-sm">
                 <thead className="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                   <tr>
-                    <th className="px-3 py-2.5" aria-label="Semáforo" />
-                    <th className="px-3 py-2.5">Generado</th>
-                    <th className="px-3 py-2.5">Estado</th>
-                    <th className="px-3 py-2.5">Versión</th>
+                    <th className="px-3 py-2.5">ID</th>
+                    <th className="px-3 py-2.5">Estado draft</th>
+                    <th className="px-3 py-2.5">Estado humano</th>
+                    <th className="px-3 py-2.5">Creado</th>
+                    <th className="px-3 py-2.5">Actualizado</th>
+                    <th className="px-3 py-2.5">Expira</th>
                     <th className="px-3 py-2.5">constructor_id</th>
                     <th className="px-3 py-2.5">target_client_id</th>
-                    <th className="px-3 py-2.5">requested_by</th>
-                    <th className="px-3 py-2.5">expires_at</th>
-                    <th className="px-3 py-2.5 text-right">warnings</th>
-                    <th className="px-3 py-2.5 text-right">blocked</th>
-                    <th className="px-3 py-2.5">Confirmación humana</th>
-                    <th className="px-3 py-2.5">Acción</th>
+                    <th className="px-3 py-2.5">Versión</th>
+                    <th className="px-3 py-2.5">Señal</th>
+                    <th className="px-3 py-2.5">Simulación</th>
+                    <th className="px-3 py-2.5">Detalle</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {items.map((row) => {
-                    const sem = rowSemaphore(row);
+                  {filteredItems.map((row) => {
+                    const expired = isExpiredAt(row.expiresAt);
+                    const pendingReview = isPendingReviewRow(row);
+                    const approved = isApprovedRow(row);
+                    const rejected = isRejectedRow(row);
+                    const simOk = simulationAvailable(row);
+
                     return (
-                      <tr key={row.id} className="hover:bg-slate-50/80">
+                      <tr key={row.id} className="align-top hover:bg-slate-50/80">
                         <td className="px-3 py-2.5">
-                          <span
-                            className={`inline-block h-2.5 w-2.5 rounded-full ${DOT[sem]}`}
-                            title={
-                              sem === "green"
-                                ? "Revisión sin señales críticas (informativo)"
-                                : sem === "amber"
-                                  ? "Requiere atención / warnings"
-                                  : "Expirado o rechazado"
-                            }
-                          />
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-slate-700">
-                          {formatDt(row.generatedAt)}
+                          <div className="flex flex-col gap-1">
+                            <span className="font-mono text-xs text-slate-800" title={row.id}>
+                              {shortId(row.id)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void copyFullId(row.id)}
+                              className="inline-flex w-fit items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+                            >
+                              {copiedId === row.id ? (
+                                <Check className="h-3 w-3 text-emerald-600" aria-hidden />
+                              ) : (
+                                <Copy className="h-3 w-3 opacity-70" aria-hidden />
+                              )}
+                              Copiar UUID
+                            </button>
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 font-mono text-xs text-slate-800">{row.status}</td>
-                        <td className="px-3 py-2.5 text-slate-600">{row.packageVersion}</td>
-                        <td className="max-w-[140px] truncate px-3 py-2.5 font-mono text-xs text-slate-600">
-                          {row.constructorId ?? "—"}
+                        <td className="px-3 py-2.5 font-mono text-xs text-slate-800">
+                          {row.humanConfirmationStatus}
                         </td>
-                        <td className="max-w-[140px] truncate px-3 py-2.5 font-mono text-xs text-slate-600">
-                          {row.targetClientId ?? "—"}
+                        <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-700">
+                          {formatDt(row.createdAt)}
                         </td>
-                        <td className="max-w-[120px] truncate px-3 py-2.5 font-mono text-xs text-slate-600">
-                          {row.requestedBy ?? "—"}
+                        <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-700">
+                          {formatDt(row.updatedAt)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-700">
                           {formatDt(row.expiresAt)}
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                          {row.warningsCount}
+                        <td className="max-w-[120px] truncate px-3 py-2.5 font-mono text-[11px] text-slate-600">
+                          {row.constructorId ?? "—"}
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                          {row.blockedActionsCount}
+                        <td className="max-w-[120px] truncate px-3 py-2.5 font-mono text-[11px] text-slate-600">
+                          {row.targetClientId ?? "—"}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-slate-600">{row.humanConfirmationStatus}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-700">{row.packageVersion}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-wrap gap-1">
+                            {rejected ? (
+                              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-800">
+                                Rechazado
+                              </span>
+                            ) : approved ? (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-900">
+                                Aprobado para piloto
+                              </span>
+                            ) : pendingReview ? (
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                                Pendiente de revisión
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                                Otro estado
+                              </span>
+                            )}
+                            {expired ? (
+                              <span className="rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                                Expirado
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs">
+                          {simOk ? (
+                            <span className="text-slate-700">Simulación disponible</span>
+                          ) : (
+                            <span className="text-slate-500">No disponible</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2.5">
                           <Link
                             href={`/admin/constructor/paquetes/${row.id}`}
-                            className="inline-flex items-center gap-0.5 text-xs font-medium text-slate-900 underline-offset-2 hover:underline"
+                            className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
                           >
                             Ver detalle
-                            <ChevronRight className="h-3.5 w-3.5 opacity-60" />
+                            <ChevronRight className="h-3.5 w-3.5 opacity-60" aria-hidden />
                           </Link>
                         </td>
                       </tr>
