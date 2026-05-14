@@ -307,6 +307,191 @@ function evidenceFilterDisplayLabel(tab: EvidenceFilterTab): string {
   }
 }
 
+type ListExecutiveRollup = {
+  total: number;
+  pendingHuman: number;
+  approved: number;
+  rejected: number;
+  withEvidence: number;
+  withoutEvidence: number;
+  pendingInputs: number;
+  noGo: number;
+  readyManual: number;
+  riskMedHigh: number;
+  approvedWithoutEvidence: number;
+  dictamen: string;
+  operativa: string;
+  chips: { key: string; label: string; className: string }[];
+};
+
+/** Resumen ejecutivo global sobre `items` (ignora filtros de bandeja). */
+function computeListExecutiveRollup(items: DraftListItem[]): ListExecutiveRollup {
+  const emptyChips: ListExecutiveRollup["chips"] = [];
+  const total = items.length;
+  if (total === 0) {
+    return {
+      total: 0,
+      pendingHuman: 0,
+      approved: 0,
+      rejected: 0,
+      withEvidence: 0,
+      withoutEvidence: 0,
+      pendingInputs: 0,
+      noGo: 0,
+      readyManual: 0,
+      riskMedHigh: 0,
+      approvedWithoutEvidence: 0,
+      dictamen: "",
+      operativa: "",
+      chips: emptyChips,
+    };
+  }
+
+  let pendingHuman = 0;
+  let approved = 0;
+  let rejected = 0;
+  let withEvidence = 0;
+  let pendingInputs = 0;
+  let noGo = 0;
+  let readyManual = 0;
+  let riskMedHigh = 0;
+  let approvedWithoutEvidence = 0;
+
+  for (const row of items) {
+    if (isPendingReviewRow(row)) pendingHuman++;
+    if (isApprovedRow(row)) approved++;
+    if (isRejectedRow(row)) rejected++;
+    const es = evidenceSummaryForRow(row);
+    const hasEv = es.hasEvidence === true || es.snapshotCount > 0;
+    if (hasEv) withEvidence++;
+    const go = (es.latestFinalGoNoGo ?? "").trim();
+    if (go === "pending_inputs") pendingInputs++;
+    else if (go === "no_go") noGo++;
+    else if (go === "ready_for_manual_install") readyManual++;
+    const rl = (es.latestRiskLevel ?? "").trim();
+    if (rl === "medium" || rl === "high") riskMedHigh++;
+    if (isApprovedRow(row) && !hasEv) approvedWithoutEvidence++;
+  }
+
+  const withoutEvidence = total - withEvidence;
+
+  let dictamen = "";
+  if (noGo > 0) {
+    dictamen = "Hay evidencia con no-go. No conviene avanzar sin correcciones.";
+  } else if (rejected > 0) {
+    dictamen =
+      "Hay borradores rechazados que deben quedar como evidencia histórica o ser reemplazados por una nueva versión.";
+  } else if (approvedWithoutEvidence > 0) {
+    dictamen =
+      "Hay borradores aprobados sin evidencia técnica. Conviene simular y guardar snapshot antes de avanzar.";
+  } else if (pendingInputs > 0) {
+    dictamen =
+      "Hay evidencia pendiente de insumos. Conviene completar configuración mínima antes de cualquier instalación.";
+  } else if (readyManual > 0) {
+    dictamen =
+      "Hay borradores listos para revisión manual final. Aun así, no deben instalarse sin aprobación explícita.";
+  } else if (withEvidence === 0) {
+    dictamen =
+      "Todavía no hay evidencia técnica guardada. El próximo paso recomendado es simular preinstalación en los borradores aprobados.";
+  } else {
+    dictamen =
+      "El conjunto cargado no muestra señales críticas prioritarias. Continuar seguimiento operativo habitual.";
+  }
+
+  let operativa = "";
+  if (noGo > 0) {
+    operativa = "Priorizar corrección de borradores con evidencia en no-go antes de planificar instalación.";
+  } else if (approvedWithoutEvidence > 0) {
+    operativa = "Simular preinstalación y guardar evidencia.";
+  } else if (pendingInputs > 0) {
+    operativa = "Completar módulos, pipeline, campos y permisos antes de instalar.";
+  } else if (rejected > 0) {
+    operativa = "Mantener rechazados como historial; generar nuevo borrador si corresponde.";
+  } else if (readyManual > 0) {
+    operativa = "Solicitar aprobación humana final antes de ejecución.";
+  } else if (approved === 0) {
+    operativa = "Revisar o generar borradores aprobables.";
+  } else {
+    operativa = "Mantener disciplina de evidencias y revisión humana antes de cualquier ejecución.";
+  }
+
+  const chips: ListExecutiveRollup["chips"] = [
+    { key: "tot", label: `Total ${total}`, className: "border-slate-200 bg-white text-slate-800" },
+    {
+      key: "ph",
+      label: `Pend. humano ${pendingHuman}`,
+      className:
+        pendingHuman > 0
+          ? "border-amber-200 bg-amber-50 text-amber-950"
+          : "border-slate-200 bg-slate-50 text-slate-600",
+    },
+    {
+      key: "ap",
+      label: `Aprobados ${approved}`,
+      className:
+        approved > 0
+          ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-900"
+          : "border-slate-200 bg-slate-50 text-slate-600",
+    },
+    {
+      key: "rj",
+      label: `Rechazados ${rejected}`,
+      className:
+        rejected > 0
+          ? "border-rose-200 bg-rose-50 text-rose-900"
+          : "border-slate-200 bg-slate-50 text-slate-600",
+    },
+    {
+      key: "ev",
+      label: `Evid. sí ${withEvidence} · no ${withoutEvidence}`,
+      className: "border-slate-200 bg-slate-50 text-slate-700",
+    },
+    noGo > 0
+      ? {
+          key: "ng",
+          label: `No-go ${noGo}`,
+          className: "border-rose-200 bg-rose-50 text-rose-900",
+        }
+      : pendingInputs > 0
+        ? {
+            key: "pi",
+            label: `Pend. insumos ${pendingInputs}`,
+            className: "border-amber-200 bg-amber-50 text-amber-950",
+          }
+        : readyManual > 0
+          ? {
+              key: "rm",
+              label: `Ready manual ${readyManual}`,
+              className: "border-emerald-200/80 bg-emerald-50/90 text-emerald-900",
+            }
+          : {
+              key: "rh",
+              label: `Riesgo med./alto ${riskMedHigh}`,
+              className:
+                riskMedHigh > 0
+                  ? "border-amber-200 bg-amber-50 text-amber-950"
+                  : "border-slate-200 bg-slate-50 text-slate-500",
+            },
+  ];
+
+  return {
+    total,
+    pendingHuman,
+    approved,
+    rejected,
+    withEvidence,
+    withoutEvidence,
+    pendingInputs,
+    noGo,
+    readyManual,
+    riskMedHigh,
+    approvedWithoutEvidence,
+    dictamen,
+    operativa,
+    chips,
+  };
+}
+
 export default function PaquetesDraftsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -400,6 +585,8 @@ export default function PaquetesDraftsListPage() {
     () => items.filter((row) => passesCombinedFilters(row, filter, evidenceFilter)),
     [items, filter, evidenceFilter]
   );
+
+  const listExecutiveRollup = useMemo(() => computeListExecutiveRollup(items), [items]);
 
   async function copyFullId(uuid: string) {
     if (!uuid || !navigator.clipboard?.writeText) return;
@@ -515,6 +702,51 @@ export default function PaquetesDraftsListPage() {
             </span>
           </p>
         </div>
+
+        <section
+          className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+          aria-labelledby="list-executive-summary-title"
+        >
+          <h2 id="list-executive-summary-title" className="text-sm font-semibold text-slate-900">
+            Resumen ejecutivo del listado
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Métricas globales sobre los borradores cargados (no cambian al filtrar la bandeja).
+          </p>
+          {loading ? (
+            <p className="mt-3 text-sm text-slate-500">Cargando resumen ejecutivo…</p>
+          ) : listExecutiveRollup.total === 0 ? (
+            <p className="mt-3 text-sm text-slate-600">No hay borradores cargados para resumir.</p>
+          ) : (
+            <>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {listExecutiveRollup.chips.map((c) => (
+                  <span
+                    key={c.key}
+                    className={cx(
+                      "inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold tabular-nums",
+                      c.className
+                    )}
+                  >
+                    {c.label}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-slate-500 tabular-nums">
+                Pend. insumos: {listExecutiveRollup.pendingInputs} · No-go: {listExecutiveRollup.noGo} · Ready
+                manual: {listExecutiveRollup.readyManual} · Riesgo med./alto: {listExecutiveRollup.riskMedHigh} ·
+                Aprob. sin evidencia: {listExecutiveRollup.approvedWithoutEvidence}
+              </p>
+              <p className="mt-4 text-sm font-medium leading-snug text-slate-900">
+                {listExecutiveRollup.dictamen}
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                <span className="font-semibold text-slate-700">Recomendación operativa: </span>
+                {listExecutiveRollup.operativa}
+              </p>
+            </>
+          )}
+        </section>
 
         {error ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
