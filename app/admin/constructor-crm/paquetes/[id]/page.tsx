@@ -602,7 +602,11 @@ export default function PaqueteDraftDetailPage() {
   const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
 
   const load = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      setData(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -612,7 +616,16 @@ export default function PaqueteDraftDetailPage() {
       );
       const json = (await res.json()) as DraftDetailResponse;
       if (!res.ok || !json.ok || !json.draft) {
-        throw new Error(json?.message ?? json?.code ?? "No se pudo cargar el borrador");
+        const code = json.code;
+        let msg = json.message ?? json.code ?? "No se pudo cargar el borrador";
+        if (res.status === 400 && code === "INVALID_DRAFT_ID") {
+          msg = "El identificador del borrador no es un UUID válido.";
+        } else if (res.status === 404 && code === "DRAFT_NOT_FOUND") {
+          msg = "No se encontró el borrador.";
+        } else if (res.status === 500 && code === "TABLE_NOT_AVAILABLE") {
+          msg = "La tabla de borradores no está disponible en este entorno.";
+        }
+        throw new Error(msg);
       }
       setData(json.draft);
     } catch (e: unknown) {

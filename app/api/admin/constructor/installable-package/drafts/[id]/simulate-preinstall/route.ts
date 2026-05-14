@@ -361,7 +361,7 @@ export async function POST(
     return jsonError(
       409,
       "SIMULATION_NOT_ALLOWED",
-      "Draft must be approved for pilot (status and human confirmation) before simulation."
+      "Draft must be approved for pilot (status or human confirmation) before simulation."
     );
   }
 
