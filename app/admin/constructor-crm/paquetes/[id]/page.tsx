@@ -567,6 +567,223 @@ type MeetingDecisionListItem = {
   createdAt: string;
 };
 
+type PilotEnvEntityKind = "core" | "restricted_access" | "users_late";
+
+const PILOT_ENV_CREATION_PLAN_ENTITY_DEFS: { label: string; kind: PilotEnvEntityKind }[] = [
+  { label: "Entorno / tenant piloto Pickup 4x4", kind: "core" },
+  { label: "Configuración base del CRM", kind: "core" },
+  { label: "Módulos CRM", kind: "core" },
+  { label: "Pipeline comercial", kind: "core" },
+  { label: "Campos de clientes, vehículos y oportunidades", kind: "core" },
+  { label: "Reportes iniciales", kind: "core" },
+  { label: "Conector Kore read-only", kind: "core" },
+  { label: "Auditoría de instalación", kind: "core" },
+  { label: "Acceso restringido para propietarios + Daniel / Summer87", kind: "restricted_access" },
+  { label: "Usuarios operativos y permisos: fase posterior", kind: "users_late" },
+];
+
+const PILOT_ENV_CREATION_PLAN_ORDER_STEPS: string[] = [
+  "Confirmar aprobación final.",
+  "Preparar entorno piloto.",
+  "Cargar configuración base.",
+  "Configurar módulos CRM.",
+  "Configurar pipeline.",
+  "Configurar campos.",
+  "Configurar reportes iniciales.",
+  "Configurar Kore read-only.",
+  "Validar estructura con propietarios.",
+  "Validar datos de prueba o datos read-only disponibles.",
+  "Registrar auditoría de instalación.",
+  "Coordinar acceso restringido propietarios + Daniel / Summer87.",
+  "Recién después definir usuarios operativos.",
+  "Recién después definir permisos individuales.",
+  "Recién después enviar invitaciones controladas.",
+  "Habilitar acceso operativo controlado en fase posterior.",
+];
+
+const PILOT_ENV_CREATION_PLAN_RISKS: string[] = [
+  "No tener propietarios participantes confirmados.",
+  "No tener canal de coordinación claro.",
+  "Conectar Kore sin documentación suficiente.",
+  "Ampliar demasiado el alcance del piloto.",
+  "Confundir piloto con producción.",
+  "Activar automatizaciones antes de validar datos.",
+  "Incorporar empleados antes de validar estructura y alcance.",
+  "Definir permisos individuales antes de tener clara la operación real.",
+];
+
+const PILOT_ENV_CREATION_PLAN_BLOCKED_CODES: string[] = [
+  "create_tenant",
+  "create_users",
+  "send_invites",
+  "write_kore",
+  "write_zeta",
+  "publish_production",
+  "install_crm_automatically",
+  "enable_sensitive_automations",
+];
+
+const PILOT_ENV_CREATION_PLAN_OBJECTIVE_TEXT =
+  "Definir la estructura mínima que debería prepararse para un primer entorno piloto de Pickup 4x4, manteniendo Kore en modo solo lectura. En esta primera etapa, el trabajo será coordinado únicamente entre los propietarios de Pickup 4x4 y Daniel / Summer87. Los empleados operativos, permisos individuales e invitaciones se definirán en una fase posterior.";
+
+const PILOT_ENV_CREATION_PLAN_SECURITY_NOTE =
+  "El plan de creación de entorno piloto no crea recursos. Solo documenta qué habría que preparar cuando exista aprobación final y datos operativos completos. En esta primera etapa, el acceso queda restringido a propietarios de Pickup 4x4 y Daniel / Summer87. Los usuarios operativos se definirán al final del proceso.";
+
+const PILOT_ENV_CONTROLLED_ACCESS_INTRO =
+  "En esta primera etapa, el entorno piloto no será utilizado por empleados operativos de Pickup 4x4. El trabajo será coordinado entre los propietarios y Daniel / Summer87. Los usuarios del equipo, permisos individuales e invitaciones se definirán más adelante, cuando la estructura base esté validada.";
+
+const PILOT_ENV_CONTROLLED_ACCESS_ROWS: { label: string; badgeGroup: "etapa1" | "posterior" }[] = [
+  { label: "Propietarios de Pickup 4x4", badgeGroup: "etapa1" },
+  { label: "Daniel / Summer87", badgeGroup: "etapa1" },
+  { label: "Acceso restringido", badgeGroup: "etapa1" },
+  { label: "Sin empleados operativos en esta etapa", badgeGroup: "etapa1" },
+  { label: "Sin invitaciones masivas", badgeGroup: "etapa1" },
+  { label: "Usuarios del equipo: fase posterior", badgeGroup: "posterior" },
+  { label: "Permisos individuales: fase posterior", badgeGroup: "posterior" },
+  { label: "Invitaciones: fase posterior", badgeGroup: "posterior" },
+];
+
+const PILOT_ENV_OPERATIVE_DEFERRED_COPY_LINES: string[] = [
+  "Lista de empleados / usuarios operativos: fuera del foco de la primera etapa; fase posterior.",
+  "Emails de empleados e invitaciones masivas: fase posterior.",
+  "Roles por usuario operativo y permisos complejos como requisito inicial: no aplica en esta etapa.",
+];
+
+type PilotPlanDataRow = { label: string; status: ManualCheckStatus };
+
+function computePilotEnvironmentPlanDataRows(p: {
+  packagePayload: Record<string, unknown>;
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+}): PilotPlanDataRow[] {
+  const { packagePayload: pp, meta, humanConfirmationStatus: humanSt, latestAdvanceMeetingDecision: adv } = p;
+  const idName = clientIdentityOperationalName(pp);
+  const modulesOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "crm_modules_config", "crmModulesConfig")
+  );
+  const pipelineOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+  const fieldsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "lead_fields_config", "leadFieldsConfig"));
+  const reportsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "reports_config", "reportsConfig"));
+  const critOk =
+    typeof adv.decisionReason === "string" && adv.decisionReason.trim().length >= 20;
+  const summer87PilotOk = meta.status === "approved_for_pilot";
+  const pickupHumanOk = humanSt === "approved";
+  const alcanceAprobado = summer87PilotOk && pickupHumanOk && modulesOk && pipelineOk;
+  return [
+    { label: "Nombre comercial confirmado", status: idName ? "cumplido" : "pendiente" },
+    { label: "Propietarios participantes confirmados", status: "pendiente" },
+    { label: "Daniel / Summer87 como operador del armado", status: "pendiente" },
+    { label: "Canal de coordinación definido", status: "pendiente" },
+    { label: "Alcance piloto aprobado", status: alcanceAprobado ? "cumplido" : "pendiente" },
+    { label: "Módulos iniciales confirmados", status: modulesOk ? "cumplido" : "pendiente" },
+    { label: "Pipeline inicial confirmado", status: pipelineOk ? "cumplido" : "pendiente" },
+    { label: "Campos mínimos confirmados", status: fieldsOk ? "cumplido" : "pendiente" },
+    { label: "Reportes iniciales confirmados", status: reportsOk ? "cumplido" : "pendiente" },
+    { label: "Acceso Kore read-only confirmado", status: isKoreReadOnlyIntegration(pp) ? "cumplido" : "pendiente" },
+    {
+      label: "Documentación API Kore",
+      status: integrationsConfigHasEntries(pp) ? "cumplido" : "pendiente",
+    },
+    { label: "Criterio de éxito definido", status: critOk ? "cumplido" : "pendiente" },
+    { label: "Aprobación final Summer87", status: summer87PilotOk ? "cumplido" : "pendiente" },
+    { label: "Aprobación final Pickup 4x4", status: pickupHumanOk ? "cumplido" : "pendiente" },
+  ];
+}
+
+function buildPilotEnvCreationPlanPlainText(p: {
+  meta: DraftMetadata;
+  humanConfirmationStatus: string;
+  latestSnapshot: SimulationSnapshotRow;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, humanConfirmationStatus, latestSnapshot, latestAdvanceMeetingDecision, packagePayload } = p;
+  const goRaw = (latestSnapshot.finalGoNoGo ?? "").trim();
+  const goLabel = goRaw ? goRaw.replace(/_/g, " ") : "—";
+  const score =
+    latestSnapshot.readinessScore != null && !Number.isNaN(Number(latestSnapshot.readinessScore))
+      ? `${String(latestSnapshot.readinessScore)}/100`
+      : "—/100";
+  const risk = latestSnapshot.riskLevel?.trim() || "—";
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const dataRows = computePilotEnvironmentPlanDataRows({
+    packagePayload,
+    meta,
+    humanConfirmationStatus,
+    latestAdvanceMeetingDecision,
+  });
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — PLAN DE CREACIÓN DE ENTORNO PILOTO (Pickup 4x4)");
+  lines.push("Documento informativo. Ninguna acción se ejecuta desde Constructor CRM.");
+  lines.push("");
+  lines.push("ESTADO ACTUAL (referencia)");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Estado draft: ${meta.status}`);
+  lines.push(`- Confirmación humana: ${humanConfirmationStatus}`);
+  lines.push(`- Snapshot: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Fecha snapshot: ${formatDt(latestSnapshot.createdAt)}`);
+  lines.push(`- Score: ${score}`);
+  lines.push(`- Go / No-Go: ${goLabel}`);
+  lines.push(`- Riesgo: ${risk}`);
+  lines.push(`- Decisión reunión (última avance preparación manual): ${latestAdvanceMeetingDecision.decisionLabel}`);
+  lines.push(`- Fecha decisión: ${formatDt(latestAdvanceMeetingDecision.createdAt)}`);
+  lines.push(`- Registró: ${latestAdvanceMeetingDecision.decidedBy ?? "—"}`);
+  lines.push("");
+  lines.push("OBJETIVO DEL ENTORNO PILOTO");
+  lines.push(PILOT_ENV_CREATION_PLAN_OBJECTIVE_TEXT);
+  lines.push("");
+  lines.push("ENTIDADES FUTURAS A PREPARAR");
+  for (const e of PILOT_ENV_CREATION_PLAN_ENTITY_DEFS) {
+    const tag =
+      e.kind === "users_late"
+        ? "Futuro · Al final"
+        : e.kind === "restricted_access"
+          ? "Futuro · Primera etapa"
+          : "Futuro · no creado";
+    lines.push(`- ${e.label} [${tag}]`);
+  }
+  lines.push("");
+  lines.push("DATOS REQUERIDOS ANTES DE PREPARAR ENTORNO");
+  for (const r of dataRows) {
+    const tag = r.status === "cumplido" ? "Con antecedente" : "Pendiente";
+    lines.push(`- [${tag}] ${r.label}`);
+  }
+  lines.push("");
+  lines.push("ACCESOS CONTROLADOS — PRIMERA ETAPA RESTRINGIDA");
+  lines.push(PILOT_ENV_CONTROLLED_ACCESS_INTRO);
+  for (const row of PILOT_ENV_CONTROLLED_ACCESS_ROWS) {
+    const tag =
+      row.badgeGroup === "etapa1" ? "Primera etapa · Restringido" : "Fase posterior · Restringido";
+    lines.push(`- [${tag}] ${row.label}`);
+  }
+  lines.push("");
+  lines.push("USUARIOS OPERATIVOS — FASE POSTERIOR (resumen)");
+  for (const line of PILOT_ENV_OPERATIVE_DEFERRED_COPY_LINES) {
+    lines.push(`- ${line}`);
+  }
+  lines.push("");
+  lines.push("ORDEN SUGERIDO DE PREPARACIÓN FUTURA (no ejecutado)");
+  PILOT_ENV_CREATION_PLAN_ORDER_STEPS.forEach((step, i) => {
+    lines.push(`${i + 1}. ${step} (futuro; no ejecutado en esta fase).`);
+  });
+  lines.push("");
+  lines.push("RIESGOS ANTES DE PREPARAR ENTORNO");
+  for (const x of PILOT_ENV_CREATION_PLAN_RISKS) {
+    lines.push(`- ${x}`);
+  }
+  lines.push("");
+  lines.push("ACCIONES BLOQUEADAS");
+  for (const c of PILOT_ENV_CREATION_PLAN_BLOCKED_CODES) {
+    lines.push(`- ${c}`);
+  }
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD");
+  lines.push(PILOT_ENV_CREATION_PLAN_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
 const MEETING_FINAL_DECISION_OPTIONS: { value: MeetingFinalDecisionValue; label: string }[] = [
   { value: "advance_manual_preparation", label: "Avanzar a preparación manual controlada" },
   { value: "wait_kore_technical_info", label: "Esperar información técnica de Kore" },
@@ -1138,6 +1355,7 @@ export default function PaqueteDraftDetailPage() {
   const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
   const [meetingMinutaCopied, setMeetingMinutaCopied] = useState(false);
   const [pickupCommercialMessageCopied, setPickupCommercialMessageCopied] = useState(false);
+  const [pilotEnvPlanCopied, setPilotEnvPlanCopied] = useState(false);
   const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
   const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
   const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
@@ -1608,6 +1826,24 @@ export default function PaqueteDraftDetailPage() {
       /* clipboard no disponible */
     }
   }, []);
+
+  const copyPilotEnvCreationPlan = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
+    const text = buildPilotEnvCreationPlanPlainText({
+      meta,
+      humanConfirmationStatus: data.humanConfirmationStatus,
+      latestSnapshot,
+      latestAdvanceMeetingDecision,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setPilotEnvPlanCopied(true);
+      window.setTimeout(() => setPilotEnvPlanCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, latestAdvanceMeetingDecision, packagePayload]);
 
   const loadMeetingDecisions = useCallback(async () => {
     if (!id) return;
@@ -3787,6 +4023,234 @@ export default function PaqueteDraftDetailPage() {
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   El registro de decisión habilita la preparación manual, no la instalación. Antes de crear recursos
                   reales se deben confirmar usuarios, permisos, alcance, acceso Kore y aprobación final.
+                </p>
+              </section>
+            ) : null}
+
+            {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
+              <section
+                className="rounded-xl border border-slate-300 bg-slate-50/30 p-5"
+                aria-labelledby="pilot-env-creation-plan-title"
+              >
+                <h2 id="pilot-env-creation-plan-title" className="text-sm font-semibold text-slate-900">
+                  Plan de creación de entorno piloto
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  Plan prospectivo: entorno, configuración, módulos, pipeline, campos, reportes, Kore read-only y
+                  validación de estructura con propietarios y Daniel / Summer87. Acceso restringido en primera etapa;
+                  usuarios operativos e invitaciones al final. No crea recursos ni ejecuta instalación.
+                </p>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado del plan
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      "Plan preliminar",
+                      "No ejecutado",
+                      "Requiere aprobación final",
+                      "Recursos no creados",
+                      "Acceso restringido",
+                      "Usuarios operativos al final",
+                    ].map((label) => (
+                      <li
+                        key={label}
+                        className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                      >
+                        {label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Objetivo del entorno piloto
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-800">
+                    {PILOT_ENV_CREATION_PLAN_OBJECTIVE_TEXT}
+                  </p>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Entidades futuras a preparar
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {PILOT_ENV_CREATION_PLAN_ENTITY_DEFS.map(({ label, kind }) => (
+                      <li
+                        key={label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50/40 px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{label}</span>
+                        <span className="flex shrink-0 flex-wrap gap-1">
+                          <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                            Futuro
+                          </span>
+                          {kind === "users_late" ? (
+                            <span className="rounded-full border border-slate-400 bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                              Al final
+                            </span>
+                          ) : kind === "restricted_access" ? (
+                            <span className="rounded-full border border-slate-500/40 bg-slate-200/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                              Primera etapa
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                              No creado
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Datos requeridos antes de preparar entorno
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {computePilotEnvironmentPlanDataRows({
+                      packagePayload,
+                      meta,
+                      humanConfirmationStatus: data.humanConfirmationStatus,
+                      latestAdvanceMeetingDecision,
+                    }).map((row) => (
+                      <li
+                        key={row.label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{row.label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${prepReadinessBadgeClass(row.status)}`}
+                        >
+                          {row.status === "cumplido" ? "Con antecedente" : "Pendiente"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Accesos controlados — primera etapa restringida
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-800">{PILOT_ENV_CONTROLLED_ACCESS_INTRO}</p>
+                  <ul className="mt-3 space-y-2">
+                    {PILOT_ENV_CONTROLLED_ACCESS_ROWS.map(({ label, badgeGroup }) => (
+                      <li
+                        key={label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50/40 px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{label}</span>
+                        <span className="flex shrink-0 flex-wrap gap-1">
+                          {badgeGroup === "etapa1" ? (
+                            <>
+                              <span className="rounded-full border border-slate-500/35 bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                                Primera etapa
+                              </span>
+                              <span className="rounded-full border border-rose-200/90 bg-rose-50/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-900">
+                                Restringido
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="rounded-full border border-slate-400 bg-slate-200/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                                Fase posterior
+                              </span>
+                              <span className="rounded-full border border-rose-200/90 bg-rose-50/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-900">
+                                Restringido
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Orden sugerido de preparación futura
+                  </p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                    Pasos prospectivos; ninguno se ejecuta desde esta pantalla.
+                  </p>
+                  <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-slate-800">
+                    {PILOT_ENV_CREATION_PLAN_ORDER_STEPS.map((step) => (
+                      <li key={step}>
+                        {step}{" "}
+                        <span className="text-[10px] font-medium text-slate-500">(futuro · no ejecutado)</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Riesgos antes de preparar entorno
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                    {PILOT_ENV_CREATION_PLAN_RISKS.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Acciones bloqueadas
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {PILOT_ENV_CREATION_PLAN_BLOCKED_CODES.map((code) => (
+                      <li
+                        key={code}
+                        className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                      >
+                        {code}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-90"
+                    >
+                      Generar plan ejecutable — Próximamente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyPilotEnvCreationPlan()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                    >
+                      {pilotEnvPlanCopied ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      Copiar plan de entorno piloto
+                    </button>
+                  </div>
+                  <div className="flex max-w-md flex-col gap-1">
+                    <p className="text-[11px] leading-relaxed text-slate-500">
+                      Este botón es informativo. El plan ejecutable requiere una fase posterior explícita.
+                    </p>
+                    {pilotEnvPlanCopied ? (
+                      <p className="text-[11px] font-medium text-slate-700">Plan copiado</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                  <span className="font-semibold text-slate-900">Seguridad: </span>
+                  {PILOT_ENV_CREATION_PLAN_SECURITY_NOTE}
                 </p>
               </section>
             ) : null}
