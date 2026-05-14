@@ -237,6 +237,63 @@ function manualChecklistStatusBadgeClass(s: ManualCheckStatus): string {
   }
 }
 
+/** Solo lectura: dictamen de readiness para instalación manual (derivado de último snapshot). */
+function manualInstallReadinessDictamen(latest: SimulationSnapshotRow | undefined): {
+  estadoLabel: string;
+  motivo: string;
+  siguienteAccion: string;
+  semaforoDotClass: string;
+} {
+  if (!latest) {
+    return {
+      estadoLabel: "Sin evidencia suficiente",
+      motivo: "Primero se debe simular preinstalación y guardar evidencia.",
+      siguienteAccion: "Simular preinstalación y guardar snapshot.",
+      semaforoDotClass: "bg-slate-400",
+    };
+  }
+  const go = (latest.finalGoNoGo ?? "").trim();
+  if (!go) {
+    return {
+      estadoLabel: "Sin evidencia suficiente",
+      motivo: "La evidencia no contiene un dictamen suficiente.",
+      siguienteAccion: "Generar una nueva simulación con contrato técnico completo.",
+      semaforoDotClass: "bg-slate-400",
+    };
+  }
+  switch (go) {
+    case "no_go":
+      return {
+        estadoLabel: "Bloqueado",
+        motivo: "La última evidencia recomienda no avanzar sin correcciones.",
+        siguienteAccion: "Corregir faltantes críticos y volver a simular.",
+        semaforoDotClass: "bg-rose-500",
+      };
+    case "pending_inputs":
+      return {
+        estadoLabel: "Pendiente de insumos",
+        motivo: "La última evidencia indica que faltan configuraciones mínimas.",
+        siguienteAccion: "Completar cliente, módulos, pipeline, campos y permisos.",
+        semaforoDotClass: "bg-amber-500",
+      };
+    case "ready_for_manual_install":
+      return {
+        estadoLabel: "Casi listo para revisión manual",
+        motivo:
+          "La evidencia permite considerar revisión humana final, pero no autoriza ejecución automática.",
+        siguienteAccion: "Solicitar aprobación humana final fuera de esta pantalla.",
+        semaforoDotClass: "bg-emerald-600/80",
+      };
+    default:
+      return {
+        estadoLabel: "Sin evidencia suficiente",
+        motivo: "La evidencia no contiene un dictamen suficiente.",
+        siguienteAccion: "Generar una nueva simulación con contrato técnico completo.",
+        semaforoDotClass: "bg-slate-400",
+      };
+  }
+}
+
 function strFromUnknown(v: unknown): string {
   if (v === null || v === undefined) return "";
   const s = String(v).trim();
@@ -2055,6 +2112,37 @@ export default function PaqueteDraftDetailPage() {
                     Basada en evidencia guardada
                   </span>
                 ) : null}
+              </div>
+
+              <div
+                className="mt-5 rounded-lg border border-slate-200 bg-white px-3 py-2.5"
+                aria-labelledby="manual-readiness-dictamen-title"
+              >
+                <p
+                  id="manual-readiness-dictamen-title"
+                  className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+                >
+                  Dictamen de readiness
+                </p>
+                {(() => {
+                  const d = manualInstallReadinessDictamen(snapshots[0]);
+                  return (
+                    <div className="mt-2 flex gap-2.5">
+                      <span
+                        aria-hidden
+                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ring-1 ring-black/5 ${d.semaforoDotClass}`}
+                      />
+                      <div className="min-w-0 flex-1 space-y-1.5 text-xs leading-relaxed">
+                        <p className="font-semibold text-slate-900">{d.estadoLabel}</p>
+                        <p className="text-slate-600">{d.motivo}</p>
+                        <p className="text-[11px] text-slate-600">
+                          <span className="font-medium text-slate-700">Próxima acción recomendada: </span>
+                          {d.siguienteAccion}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="mt-5 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
