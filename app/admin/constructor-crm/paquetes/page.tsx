@@ -332,8 +332,8 @@ function listRowExecutiveState(es: EvidenceSummary): { label: string; helper: st
 function goNoGoChipValue(go: string | null): string {
   const g = (go ?? "").trim();
   if (!g) return "—";
-  if (g === "pending_inputs") return "insumos";
-  if (g === "ready_for_manual_install") return "manual";
+  if (g === "pending_inputs") return "pending";
+  if (g === "ready_for_manual_install") return "ready";
   if (g === "no_go") return "no-go";
   return g.replace(/_/g, " ");
 }
@@ -797,12 +797,17 @@ export default function PaquetesDraftsListPage() {
                   </span>
                 ))}
               </div>
-              <p className="mt-2 text-[10px] leading-relaxed text-slate-500 tabular-nums">
-                Ready manual: {listExecutiveRollup.readyManual} · Pendientes de insumos:{" "}
-                {listExecutiveRollup.pendingInputs} · Sin evidencia: {listExecutiveRollup.withoutEvidence} · No-go:{" "}
-                {listExecutiveRollup.noGo} · Riesgo med./alto: {listExecutiveRollup.riskMedHigh} · Aprob. sin
-                evidencia: {listExecutiveRollup.approvedWithoutEvidence}
-              </p>
+              <div className="mt-2 space-y-1 text-[10px] leading-relaxed text-slate-500 tabular-nums">
+                <p>
+                  Ready manual: {listExecutiveRollup.readyManual} · Pendientes de insumos:{" "}
+                  {listExecutiveRollup.pendingInputs} · Sin evidencia: {listExecutiveRollup.withoutEvidence} · No-go:{" "}
+                  {listExecutiveRollup.noGo}
+                </p>
+                <p>
+                  Riesgo med./alto: {listExecutiveRollup.riskMedHigh} · Aprob. sin evidencia:{" "}
+                  {listExecutiveRollup.approvedWithoutEvidence}
+                </p>
+              </div>
               <p className="mt-4 text-sm font-medium leading-snug text-slate-900">
                 {listExecutiveRollup.dictamen}
               </p>
@@ -845,11 +850,11 @@ export default function PaquetesDraftsListPage() {
             <p className="p-6 text-sm text-slate-500">No hay borradores registrados.</p>
           ) : filteredItems.length === 0 ? (
             <p className="p-6 text-sm text-slate-500">
-              No hay borradores para esta combinación de filtros.
+              No hay borradores que coincidan con los filtros seleccionados (estado y evidencia).
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1280px] text-left text-sm">
+            <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+              <table className="w-full min-w-[1260px] text-left text-sm">
                 <thead className="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                   <tr>
                     <th className="px-3 py-2.5">ID</th>
@@ -861,7 +866,7 @@ export default function PaquetesDraftsListPage() {
                     <th className="px-3 py-2.5">constructor_id</th>
                     <th className="px-3 py-2.5">target_client_id</th>
                     <th className="px-3 py-2.5">Versión</th>
-                    <th className="min-w-[200px] px-3 py-2.5">Evidencia</th>
+                    <th className="w-[188px] max-w-[188px] px-3 py-2.5">Evidencia</th>
                     <th className="px-3 py-2.5">Señal</th>
                     <th className="px-3 py-2.5">Simulación</th>
                     <th className="px-3 py-2.5">Detalle</th>
@@ -929,44 +934,44 @@ export default function PaquetesDraftsListPage() {
                           {row.targetClientId ?? "—"}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-700">{row.packageVersion}</td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex max-w-[240px] flex-col gap-1.5 text-[11px] leading-snug text-slate-700">
-                            <div>
+                        <td className="max-w-[188px] px-3 py-2.5 align-top">
+                          <div className="flex min-w-0 max-w-[180px] flex-col gap-1.5 text-[11px] leading-snug text-slate-700">
+                            <div className="min-w-0">
                               <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
                                 Estado ejecutivo
                               </p>
                               <span
                                 className={cx(
-                                  "mt-0.5 inline-flex max-w-full rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight",
+                                  "mt-0.5 inline-flex max-w-full shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight",
                                   execState.pillClass
                                 )}
                               >
                                 {execState.label}
                               </span>
-                              <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-500">
+                              <p className="mt-0.5 line-clamp-2 break-words text-[10px] leading-snug text-slate-500">
                                 {execState.helper}
                               </p>
                             </div>
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex min-w-0 flex-wrap gap-1">
                               <span
                                 title={
                                   hasSnap
                                     ? `${ev.snapshotCount} snapshot${ev.snapshotCount === 1 ? "" : "s"}`
                                     : "Sin snapshots"
                                 }
-                                className="inline-flex rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-700"
+                                className="inline-flex cursor-default select-none rounded-sm border border-slate-200/90 bg-slate-50/90 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-600"
                               >
                                 Snap: {hasSnap ? "sí" : "no"}
                               </span>
-                              <span className="inline-flex rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-700">
+                              <span className="inline-flex cursor-default select-none rounded-sm border border-slate-200/90 bg-slate-50/90 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-600">
                                 Res: {hasSum ? "sí" : "no"}
                               </span>
                               <span
                                 className={cx(
-                                  "inline-flex max-w-[5.5rem] truncate rounded border px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                                  "inline-flex max-w-[5.25rem] cursor-default select-none truncate rounded-sm border px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
                                   ev.latestFinalGoNoGo
                                     ? goNoGoBadgeClass(ev.latestFinalGoNoGo)
-                                    : "border-slate-200 bg-slate-50 text-slate-500"
+                                    : "border-slate-200/90 bg-slate-50/90 text-slate-500"
                                 )}
                                 title={ev.latestFinalGoNoGo ?? ""}
                               >
@@ -974,48 +979,40 @@ export default function PaquetesDraftsListPage() {
                               </span>
                               <span
                                 className={cx(
-                                  "inline-flex max-w-[4.5rem] truncate rounded border px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                                  "inline-flex max-w-[4.25rem] cursor-default select-none truncate rounded-sm border px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
                                   ev.latestRiskLevel
                                     ? riskListBadgeClass(ev.latestRiskLevel)
-                                    : "border-slate-200 bg-slate-50 text-slate-500"
+                                    : "border-slate-200/90 bg-slate-50/90 text-slate-500"
                                 )}
                               >
                                 Riesgo: {riskChipValue(ev.latestRiskLevel)}
                               </span>
                             </div>
-                            <div className="border-t border-slate-100 pt-1.5">
-                              {execSummaryText ? (
-                                <div>
-                                  <p className="text-[10px] font-medium text-slate-700">
-                                    Resumen ejecutivo disponible
-                                  </p>
-                                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => void copyLatestExecutiveSummary(row.id, execSummaryText)}
-                                      className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-800 hover:bg-slate-50"
-                                    >
-                                      <Copy className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-                                      Copiar resumen
-                                    </button>
-                                    {summaryCopiedDraftId === row.id ? (
-                                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-600">
-                                        <Check className="h-3 w-3 shrink-0 text-slate-600" aria-hidden />
-                                        Resumen copiado
-                                      </span>
-                                    ) : null}
-                                  </div>
+                            {execSummaryText ? (
+                              <div className="border-t border-slate-100 pt-1.5">
+                                <p className="text-[10px] font-medium text-slate-700">Resumen ejecutivo disponible</p>
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void copyLatestExecutiveSummary(row.id, execSummaryText)}
+                                    className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-800 hover:bg-slate-50"
+                                  >
+                                    <Copy className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                                    Copiar resumen
+                                  </button>
+                                  {summaryCopiedDraftId === row.id ? (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-600">
+                                      <Check className="h-3 w-3 shrink-0 text-slate-600" aria-hidden />
+                                      Resumen copiado
+                                    </span>
+                                  ) : null}
                                 </div>
-                              ) : hasSnap ? (
-                                <p className="text-[10px] text-slate-500">Evidencia sin resumen ejecutivo</p>
-                              ) : (
-                                <p className="text-[10px] text-slate-500">Sin resumen ejecutivo</p>
-                              )}
-                            </div>
-                            <span>
+                              </div>
+                            ) : null}
+                            <p className="text-[10px] text-slate-500">
                               <span className="text-slate-500">Score:</span>{" "}
                               <span className="font-mono tabular-nums text-slate-900">{scoreLabel}</span>
-                            </span>
+                            </p>
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
@@ -1051,13 +1048,13 @@ export default function PaquetesDraftsListPage() {
                             <span className="text-slate-500">No disponible</span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-2.5 align-top">
                           <Link
                             href={`/admin/constructor/paquetes/${row.id}`}
-                            className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                            className="inline-flex items-center gap-0.5 rounded-md border border-slate-200/80 bg-slate-50/60 px-2 py-1 text-[11px] font-normal text-slate-600 hover:border-slate-300 hover:bg-slate-100/80 hover:text-slate-800"
                           >
                             Ver detalle
-                            <ChevronRight className="h-3.5 w-3.5 opacity-60" aria-hidden />
+                            <ChevronRight className="h-3 w-3 shrink-0 opacity-50" aria-hidden />
                           </Link>
                         </td>
                       </tr>
