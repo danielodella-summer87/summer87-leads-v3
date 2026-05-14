@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Copy, Check, Loader2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 
@@ -902,6 +902,11 @@ const REAL_CONFIG_BLUEPRINT_BLOCKED_CODES: string[] = [...FUTURE_EXECUTABLE_BLOC
 
 const FUTURE_MIGRATION_SPEC_BLOCKED_CODES: string[] = [...REAL_CONFIG_BLUEPRINT_BLOCKED_CODES, "execute_sql_migration"];
 
+const PRE_SQL_READINESS_AUDIT_BLOCKED_CODES: string[] = [
+  ...FUTURE_MIGRATION_SPEC_BLOCKED_CODES,
+  "introspect_database_runtime",
+];
+
 const FUTURE_EXECUTABLE_BARRIER_TITLE = "Barrera de seguridad activa";
 
 const FUTURE_EXECUTABLE_BARRIER_TEXT =
@@ -1459,6 +1464,182 @@ const FUTURE_MIGRATION_SPEC_RISKS: string[] = [
 const FUTURE_MIGRATION_SPEC_SECURITY_NOTE =
   "Esta especificación no genera SQL, no aplica migraciones, no crea tablas, no inserta datos, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta. Solo documenta una posible migración futura para revisión técnica.";
 
+const PRE_SQL_READINESS_PURPOSE =
+  "Esta auditoría ordena qué debe revisarse antes de escribir una migración real para Pickup 4x4. No consulta la base automáticamente, no genera SQL y no modifica datos. Sirve como guía de revisión manual para detectar estructuras reutilizables y evitar crear tablas innecesarias.";
+
+type PreSqlReadinessAuditArea = {
+  letter: string;
+  title: string;
+  possibleStructures: string[];
+  questions: string[];
+  statusLine: string;
+};
+
+const PRE_SQL_READINESS_AUDIT_AREAS: PreSqlReadinessAuditArea[] = [
+  {
+    letter: "A",
+    title: "Clientes / empresas",
+    possibleStructures: ["empresas", "clients", "companies", "crm_setup_config", "config"],
+    questions: [
+      "¿Ya existe una entidad reutilizable para representar Pickup 4x4?",
+      "¿Tiene identificador estable?",
+      "¿Puede usarse como cliente piloto sin crear tabla nueva?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "B",
+    title: "Configuración CRM",
+    possibleStructures: [
+      "crm_setup_config",
+      "installer_package_drafts",
+      "package_payload",
+      "config tables",
+    ],
+    questions: [
+      "¿La configuración puede vivir en JSONB existente?",
+      "¿Hay una tabla de configuración reusable?",
+      "¿Conviene normalizar o mantener declarativo?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "C",
+    title: "Módulos CRM",
+    possibleStructures: ["crm_modules_config", "package_payload.crm_modules_config", "tablas legacy de módulos si existen"],
+    questions: [
+      "¿Ya hay una forma de definir módulos por cliente?",
+      "¿Se puede reutilizar package_payload?",
+      "¿Hace falta persistir módulos por separado?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "D",
+    title: "Pipeline comercial",
+    possibleStructures: ["lead_pipelines", "pipeline_config", "package_payload.pipeline_config"],
+    questions: [
+      "¿Ya existen pipelines configurables?",
+      "¿Están asociados a cliente/empresa?",
+      "¿Se puede usar el pipeline del package_payload como origen inicial?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "E",
+    title: "Campos comerciales",
+    possibleStructures: ["lead_fields_config", "custom fields", "package_payload.lead_fields_config"],
+    questions: [
+      "¿Hay campos dinámicos reutilizables?",
+      "¿Se pueden agrupar por Cliente / Vehículo / Oportunidad / Kore?",
+      "¿Hace falta migración o alcanza con configuración JSONB?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "F",
+    title: "Reportes",
+    possibleStructures: ["reports_config", "report_views", "package_payload.reports_config"],
+    questions: [
+      "¿Los reportes ya se configuran por cliente?",
+      "¿Hay vistas reutilizables?",
+      "¿La primera etapa puede usar reportes declarativos?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "G",
+    title: "Kore read-only",
+    possibleStructures: ["integrations_config", "integration settings", "package_payload.integrations_config"],
+    questions: [
+      "¿Ya existe estructura para integraciones externas?",
+      "¿Permite marcar read-only?",
+      "¿Dónde se guardarían credenciales si más adelante aplica?",
+      "¿Cómo evitar escritura accidental?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "H",
+    title: "Auditoría",
+    possibleStructures: [
+      "installer_package_simulation_snapshots",
+      "installer_package_meeting_decisions",
+      "audit logs si existen",
+    ],
+    questions: [
+      "¿La evidencia actual alcanza para trazabilidad?",
+      "¿Hace falta una tabla futura de auditoría de instalación?",
+      "¿Qué evento debería registrarse al crear entorno en una fase posterior?",
+    ],
+    statusLine: "Con antecedentes",
+  },
+  {
+    letter: "I",
+    title: "Accesos restringidos",
+    possibleStructures: ["app_users", "roles", "permissions", "access policy configs"],
+    questions: [
+      "¿Cómo representar primera etapa restringida sin empleados operativos?",
+      "¿Se puede trabajar solo con propietarios + Daniel / Summer87?",
+      "¿Cómo dejar usuarios operativos para etapa posterior?",
+    ],
+    statusLine: "Revisión manual pendiente",
+  },
+  {
+    letter: "J",
+    title: "Tenancy / aislamiento",
+    possibleStructures: ["company_id", "workspace_company_id", "tenant_id", "client_id", "empresas.id"],
+    questions: [
+      "¿Cuál es la columna de aislamiento real del sistema?",
+      "¿Conviene tenant separado o configuración por empresa?",
+      "¿Qué tablas críticas requieren aislamiento?",
+      "¿Hay riesgo de mezclar datos entre clientes?",
+    ],
+    statusLine: "Revisión manual requerida",
+  },
+];
+
+const PRE_SQL_TECHNICAL_QUESTIONS: string[] = [
+  "¿Qué tabla representa hoy a una empresa/cliente?",
+  "¿Cuál es el identificador real para aislar datos?",
+  "¿Qué tablas ya tienen company_id, workspace_company_id o equivalente?",
+  "¿Qué configuración puede quedar en JSONB?",
+  "¿Qué configuración necesita normalización?",
+  "¿Qué datos son solo declarativos?",
+  "¿Qué datos serían operativos?",
+  "¿Qué parte depende de Kore?",
+  "¿Qué parte puede prepararse sin Kore?",
+  "¿Qué parte debe esperar a fase de usuarios?",
+];
+
+const PRE_SQL_DECISION_PENDING_TITLE = "Decisión técnica pendiente";
+
+const PRE_SQL_DECISION_PENDING_TEXT =
+  "Antes de escribir SQL real, debe decidirse si Pickup 4x4 se representará como tenant separado, empresa dentro de una estructura existente o configuración declarativa vinculada al package. Esta decisión afecta aislamiento, permisos, reportes y futuras integraciones.";
+
+const PRE_SQL_DECISION_DOCUMENT_OPTIONS: string[] = [
+  "Tenant / entorno separado.",
+  "Empresa dentro de estructura existente.",
+  "Configuración declarativa sobre package_payload.",
+  "Modelo híbrido.",
+];
+
+const PRE_SQL_READINESS_RISKS: string[] = [
+  "Crear tablas nuevas cuando ya existen estructuras reutilizables.",
+  "Elegir mal la columna de aislamiento.",
+  "Normalizar demasiado pronto configuraciones que aún están cambiando.",
+  "Mantener demasiado en JSONB sin estrategia de lectura futura.",
+  "Mezclar configuración con datos operativos.",
+  "Diseñar sin confirmar cómo se integrará Kore.",
+  "Preparar usuarios antes de validar estructura.",
+  "Ejecutar SQL sin rollback.",
+  "Ejecutar SQL sin ambiente de prueba.",
+  "Confundir especificación con migración ejecutable.",
+];
+
+const PRE_SQL_READINESS_SECURITY_NOTE =
+  "Esta auditoría pre-SQL no ejecuta queries, no genera SQL, no aplica migraciones, no crea tablas, no inserta datos, no crea tenant, no crea usuarios y no escribe en Kore ni en Zeta. Solo ordena la revisión técnica previa a una posible migración futura.";
+
 function koreReadonlyDesignRows(pp: Record<string, unknown>): {
   mode: string;
   direction: string;
@@ -1646,6 +1827,69 @@ function computeMigrationSpecPrevalidationRows(p: {
       label: "Confirmar aprobación final antes de ejecutar SQL.",
       badge: approvalsSqlOk ? "antecedente" : "pendiente",
     },
+  ];
+}
+
+function computePreSqlReadinessChecklistRows(p: {
+  packagePayload: Record<string, unknown>;
+  latestSnapshot: SimulationSnapshotRow;
+}): { label: string; badge: FutureExecutableUnlockBadge }[] {
+  const { packagePayload: pp, latestSnapshot } = p;
+  const clientIdOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "client_identity", "clientIdentity")
+  );
+  const modulesOk = !isManualInstallPayloadSectionEmpty(
+    payloadCfg(pp, "crm_modules_config", "crmModulesConfig")
+  );
+  const pipelineOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "pipeline_config", "pipelineConfig"));
+  const fieldsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "lead_fields_config", "leadFieldsConfig"));
+  const reportsOk = !isManualInstallPayloadSectionEmpty(payloadCfg(pp, "reports_config", "reportsConfig"));
+  const koreOk = isKoreReadOnlyIntegration(pp);
+  const evidenceOk = Boolean(latestSnapshot.id?.trim());
+  return [
+    {
+      label: "Identificar tabla/entidad principal para Pickup 4x4.",
+      badge: clientIdOk ? "antecedente" : "pendiente",
+    },
+    { label: "Confirmar columna de aislamiento.", badge: "pendiente" },
+    {
+      label: "Confirmar si se usará tenant separado o configuración existente.",
+      badge: "pendiente",
+    },
+    {
+      label: "Confirmar si módulos pueden vivir en JSONB o deben normalizarse.",
+      badge: modulesOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar si pipeline puede reutilizar estructuras existentes.",
+      badge: pipelineOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar si campos comerciales pueden ser dinámicos.",
+      badge: fieldsOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar si reportes iniciales requieren tablas o vistas.",
+      badge: reportsOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar estrategia Kore read-only.",
+      badge: koreOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar si credenciales quedan fuera de esta etapa.",
+      badge: "requerido",
+    },
+    {
+      label: "Confirmar estrategia de auditoría.",
+      badge: evidenceOk ? "antecedente" : "pendiente",
+    },
+    {
+      label: "Confirmar que usuarios operativos quedan para etapa posterior.",
+      badge: "requerido",
+    },
+    { label: "Confirmar rollback antes de cualquier SQL.", badge: "pendiente" },
+    { label: "Confirmar ambiente de prueba antes de cualquier SQL.", badge: "pendiente" },
   ];
 }
 
@@ -1906,6 +2150,86 @@ function buildFutureMigrationSpecPlainText(p: {
   lines.push("");
   lines.push("NOTA DE SEGURIDAD");
   lines.push(FUTURE_MIGRATION_SPEC_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
+function buildPreSqlReadinessAuditPlainText(p: {
+  meta: DraftMetadata;
+  latestSnapshot: SimulationSnapshotRow;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem;
+  packagePayload: Record<string, unknown>;
+}): string {
+  const { meta, latestSnapshot, latestAdvanceMeetingDecision, packagePayload } = p;
+  const snapShort = shortSnapshotId(latestSnapshot.id);
+  const checklistRows = computePreSqlReadinessChecklistRows({ packagePayload, latestSnapshot });
+
+  const lines: string[] = [];
+  lines.push("SUMMER87 — AUDITORÍA DE READINESS PRE-SQL");
+  lines.push("Documento informativo. Sin introspección automática de base ni queries desde esta pantalla.");
+  lines.push("");
+  lines.push("ESTADO DE LA AUDITORÍA");
+  for (const b of [
+    "Auditoría pre-SQL",
+    "No ejecuta queries",
+    "Sin SQL",
+    "Sin cambios de base",
+    "Requiere revisión manual",
+    "Futuro",
+  ]) {
+    lines.push(`- ${b}`);
+  }
+  lines.push("");
+  lines.push("REFERENCIA");
+  lines.push(`- Draft ID: ${meta.id}`);
+  lines.push(`- Snapshot: ${latestSnapshot.id} (${snapShort})`);
+  lines.push(`- Decisión reunión: ${latestAdvanceMeetingDecision.decisionLabel}`);
+  lines.push("");
+  lines.push("PROPÓSITO");
+  lines.push(PRE_SQL_READINESS_PURPOSE);
+  lines.push("");
+  lines.push("ÁREAS A AUDITAR ANTES DE SQL");
+  for (const a of PRE_SQL_READINESS_AUDIT_AREAS) {
+    lines.push(`- ${a.letter}. ${a.title}`);
+    lines.push("  Posible estructura a revisar:");
+    for (const s of a.possibleStructures) {
+      lines.push(`    · ${s}`);
+    }
+    lines.push("  Preguntas:");
+    for (const q of a.questions) {
+      lines.push(`    · ${q}`);
+    }
+    lines.push(`  Estado: ${a.statusLine}`);
+    lines.push("");
+  }
+  lines.push("CHECKLIST DE READINESS PRE-SQL");
+  for (const r of checklistRows) {
+    lines.push(`- [${futureUnlockBadgeLabel(r.badge)}] ${r.label}`);
+  }
+  lines.push("");
+  lines.push("PREGUNTAS TÉCNICAS ANTES DE MIGRAR");
+  for (const q of PRE_SQL_TECHNICAL_QUESTIONS) {
+    lines.push(`- ${q}`);
+  }
+  lines.push("");
+  lines.push(PRE_SQL_DECISION_PENDING_TITLE.toUpperCase());
+  lines.push(PRE_SQL_DECISION_PENDING_TEXT);
+  lines.push("Opciones documentales (sin selección automática):");
+  for (const o of PRE_SQL_DECISION_DOCUMENT_OPTIONS) {
+    lines.push(`- ${o}`);
+  }
+  lines.push("");
+  lines.push("RIESGOS PRE-SQL");
+  for (const r of PRE_SQL_READINESS_RISKS) {
+    lines.push(`- ${r}`);
+  }
+  lines.push("");
+  lines.push("ACCIONES BLOQUEADAS");
+  for (const c of PRE_SQL_READINESS_AUDIT_BLOCKED_CODES) {
+    lines.push(`- ${c}`);
+  }
+  lines.push("");
+  lines.push("NOTA DE SEGURIDAD");
+  lines.push(PRE_SQL_READINESS_SECURITY_NOTE);
   return lines.join("\n");
 }
 
@@ -2419,6 +2743,69 @@ function normalizePackagePayload(raw: unknown): Record<string, unknown> {
   return {};
 }
 
+type CollapsibleSectionProps = {
+  id: string;
+  title: string;
+  subtitle: string;
+  badges?: string[];
+  defaultOpen?: boolean;
+  children: ReactNode;
+};
+
+function CollapsibleSection({
+  id,
+  title,
+  subtitle,
+  badges,
+  defaultOpen = false,
+  children,
+}: CollapsibleSectionProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  const headingId = `${id}-heading`;
+  const panelId = `${id}-panel`;
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4" aria-labelledby={headingId}>
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 id={headingId} className="text-sm font-semibold text-slate-900">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{subtitle}</p>
+          {badges && badges.length > 0 ? (
+            <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Resumen de estado">
+              {badges.map((b) => (
+                <li
+                  key={`${id}-badge-${b}`}
+                  className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                >
+                  {b}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? "Ocultar" : "Ver detalle"}
+        </button>
+      </header>
+      <div
+        id={panelId}
+        role="region"
+        aria-labelledby={headingId}
+        className={open ? "mt-4" : "hidden"}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
 function JsonBlock({ title, value }: { title: string; value: unknown }) {
   const text =
     value === undefined
@@ -2485,6 +2872,7 @@ export default function PaqueteDraftDetailPage() {
   const [technicalPilotDesignCopied, setTechnicalPilotDesignCopied] = useState(false);
   const [realConfigBlueprintCopied, setRealConfigBlueprintCopied] = useState(false);
   const [futureMigrationSpecCopied, setFutureMigrationSpecCopied] = useState(false);
+  const [preSqlReadinessAuditCopied, setPreSqlReadinessAuditCopied] = useState(false);
   const [meetingDecisions, setMeetingDecisions] = useState<MeetingDecisionListItem[]>([]);
   const [meetingDecisionsLoading, setMeetingDecisionsLoading] = useState(false);
   const [meetingDecisionsError, setMeetingDecisionsError] = useState<string | null>(null);
@@ -3041,6 +3429,23 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setFutureMigrationSpecCopied(true);
       window.setTimeout(() => setFutureMigrationSpecCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [meta, latestSnapshot, data, latestAdvanceMeetingDecision, packagePayload]);
+
+  const copyPreSqlReadinessAudit = useCallback(async () => {
+    if (!meta || !latestSnapshot || !data || !latestAdvanceMeetingDecision || !navigator.clipboard?.writeText) return;
+    const text = buildPreSqlReadinessAuditPlainText({
+      meta,
+      latestSnapshot,
+      latestAdvanceMeetingDecision,
+      packagePayload,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setPreSqlReadinessAuditCopied(true);
+      window.setTimeout(() => setPreSqlReadinessAuditCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -4164,17 +4569,17 @@ export default function PaqueteDraftDetailPage() {
             </section>
 
             {showPostApprovalPilotPrep && meta && data ? (
-            <section
-              className="rounded-xl border border-slate-300 bg-slate-50/50 p-5"
-              aria-labelledby="manual-controlled-install-title"
-            >
-              <h2 id="manual-controlled-install-title" className="text-sm font-semibold text-slate-900">
-                Instalación manual controlada
-              </h2>
-              <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                Contrato visual de una futura fase. Solo lectura: no instala CRM, no crea tenant ni usuarios, no
-                escribe en Zeta y no guarda snapshots desde aquí.
-              </p>
+              <CollapsibleSection
+                id="manual-controlled-install"
+                title="Instalación manual controlada"
+                subtitle="Contrato visual de una futura fase. Solo lectura: no instala CRM, no crea tenant ni usuarios, no escribe en Zeta y no guarda snapshots desde aquí."
+                badges={[
+                  "No iniciada",
+                  "Bloqueada hasta aprobación final",
+                  ...(snapshots[0] ? ["Basada en evidencia guardada"] : []),
+                ]}
+                defaultOpen={false}
+              >
               <p className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
                 Esta sección define las condiciones para una futura instalación manual controlada. No ejecuta
                 acciones, no crea recursos y no escribe en sistemas externos.
@@ -4386,25 +4791,17 @@ export default function PaqueteDraftDetailPage() {
                 verificaciones o tickets, pero la ejecución sobre tenant/Zeta seguiría requiriendo confirmación
                 explícita y controles aparte.
               </p>
-            </section>
+              </CollapsibleSection>
             ) : null}
 
             {showExecutivePreManualReview && latestSnapshot && meta && data ? (
-              <section
-                className="rounded-xl border border-slate-300 bg-slate-50/40 p-5"
-                aria-labelledby="exec-pre-manual-review-title"
+              <CollapsibleSection
+                id="exec-pre-manual-review"
+                title="Revisión ejecutiva previa a instalación manual"
+                subtitle="Listo para revisión humana final: no implica instalación, no autoriza ejecución automática y no escribe en sistemas externos."
+                badges={["Revisión manual", "Sin ejecución automática"]}
+                defaultOpen={false}
               >
-                <h2
-                  id="exec-pre-manual-review-title"
-                  className="text-sm font-semibold text-slate-900"
-                >
-                  Revisión ejecutiva previa a instalación manual
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Listo para revisión humana final: no implica instalación, no autoriza ejecución automática y no
-                  escribe en sistemas externos.
-                </p>
-
                 <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     Estado ejecutivo
@@ -4988,22 +5385,21 @@ export default function PaqueteDraftDetailPage() {
                     )}
                   </div>
                 </div>
-              </section>
+              </CollapsibleSection>
             ) : null}
 
             {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
-              <section
-                className="rounded-xl border border-slate-300 bg-slate-50/30 p-5"
-                aria-labelledby="manual-controlled-prep-title"
+              <CollapsibleSection
+                id="manual-controlled-prep"
+                title="Preparación manual controlada"
+                subtitle="Vista operativa posterior a una decisión de reunión para avanzar. No crea entornos ni ejecuta acciones; solo resume qué falta antes de un piloto real."
+                badges={[
+                  "Preparación habilitada por decisión",
+                  "No ejecutada",
+                  "Instalación bloqueada",
+                ]}
+                defaultOpen={false}
               >
-                <h2 id="manual-controlled-prep-title" className="text-sm font-semibold text-slate-900">
-                  Preparación manual controlada
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Vista operativa posterior a una decisión de reunión para avanzar. No crea entornos ni ejecuta
-                  acciones; solo resume qué falta antes de un piloto real.
-                </p>
-
                 <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     Estado de preparación
@@ -5225,23 +5621,17 @@ export default function PaqueteDraftDetailPage() {
                   El registro de decisión habilita la preparación manual, no la instalación. Antes de crear recursos
                   reales se deben confirmar usuarios, permisos, alcance, acceso Kore y aprobación final.
                 </p>
-              </section>
+              </CollapsibleSection>
             ) : null}
 
             {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
-              <section
-                className="rounded-xl border border-slate-300 bg-slate-50/30 p-5"
-                aria-labelledby="pilot-env-creation-plan-title"
+              <CollapsibleSection
+                id="pilot-env-creation-plan"
+                title="Plan de creación de entorno piloto"
+                subtitle="Plan prospectivo · Sin creación de recursos · Acceso restringido en primera etapa"
+                badges={["Plan preliminar", "No ejecutado", "Requiere aprobación final"]}
+                defaultOpen={false}
               >
-                <h2 id="pilot-env-creation-plan-title" className="text-sm font-semibold text-slate-900">
-                  Plan de creación de entorno piloto
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Plan prospectivo: entorno, configuración, módulos, pipeline, campos, reportes, Kore read-only y
-                  validación de estructura con propietarios y Daniel / Summer87. Acceso restringido en primera etapa;
-                  usuarios operativos e invitaciones al final. No crea recursos ni ejecuta instalación.
-                </p>
-
                 <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     Estado del plan
@@ -5453,22 +5843,17 @@ export default function PaqueteDraftDetailPage() {
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   {PILOT_ENV_CREATION_PLAN_SECURITY_NOTE}
                 </p>
-              </section>
+              </CollapsibleSection>
             ) : null}
 
             {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
-              <section
-                className="rounded-xl border border-slate-400/50 bg-slate-100/40 p-5"
-                aria-labelledby="future-executable-plan-title"
+              <CollapsibleSection
+                id="future-executable-plan"
+                title="Plan ejecutable futuro"
+                subtitle="Futuro · Bloqueado · No ejecutado · Sin ejecución real en esta pantalla"
+                badges={["Bloqueado", "No ejecutado", "Requiere fase posterior"]}
+                defaultOpen={false}
               >
-                <h2 id="future-executable-plan-title" className="text-sm font-semibold text-slate-900">
-                  Plan ejecutable futuro
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Acciones técnicas prospectivas, todas bloqueadas en esta pantalla. Primera etapa restringida a
-                  propietarios + Daniel / Summer87; sin ejecución real.
-                </p>
-
                 <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     Estado del plan ejecutable
@@ -5636,23 +6021,18 @@ export default function PaqueteDraftDetailPage() {
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   {FUTURE_EXECUTABLE_PLAN_FINAL_SECURITY}
                 </p>
-              </section>
+              </CollapsibleSection>
             ) : null}
 
             {showManualControlledPrepSection && latestSnapshot && meta && data && latestAdvanceMeetingDecision ? (
               <>
-                <section
-                  className="rounded-xl border border-slate-300/80 bg-white p-5"
-                  aria-labelledby="pilot-tech-design-title"
+                <CollapsibleSection
+                  id="pilot-tech-design"
+                  title="Diseño técnico del entorno piloto"
+                  subtitle="Arquitectura en papel · Sin SQL · Primera etapa restringida"
+                  badges={["Diseño técnico", "No ejecutado", "Sin SQL"]}
+                  defaultOpen={false}
                 >
-                <h2 id="pilot-tech-design-title" className="text-sm font-semibold text-slate-900">
-                  Diseño técnico del entorno piloto
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Arquitectura propuesta en papel; sin SQL, sin recursos nuevos y sin ejecución. Primera etapa
-                  restringida; usuarios operativos al final.
-                </p>
-
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     Estado del diseño
@@ -5921,20 +6301,15 @@ export default function PaqueteDraftDetailPage() {
                   <span className="font-semibold text-slate-900">Seguridad: </span>
                   {PILOT_TECH_DESIGN_SECURITY_NOTE}
                 </p>
-                </section>
+                </CollapsibleSection>
 
-                <section
-                  className="mt-4 rounded-xl border border-slate-300/80 bg-white p-5"
-                  aria-labelledby="real-config-blueprint-title"
+                <CollapsibleSection
+                  id="real-config-blueprint"
+                  title="Blueprint técnico de configuración real"
+                  subtitle="Declarativo · Futuro · Sin aplicación real · Etapa restringida"
+                  badges={["Blueprint", "No aplicado", "Futuro"]}
+                  defaultOpen={false}
                 >
-                  <h2 id="real-config-blueprint-title" className="text-sm font-semibold text-slate-900">
-                    Blueprint técnico de configuración real
-                  </h2>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                    Mapa declarativo de configuraciones futuras; solo lectura y copia. Primera etapa restringida;
-                    usuarios operativos quedan para una fase posterior explícita.
-                  </p>
-
                   <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       Estado del blueprint
@@ -6121,20 +6496,15 @@ export default function PaqueteDraftDetailPage() {
                     <span className="font-semibold text-slate-900">Seguridad: </span>
                     {REAL_CONFIG_BLUEPRINT_SECURITY_NOTE}
                   </p>
-                </section>
+                </CollapsibleSection>
 
-                <section
-                  className="mt-4 rounded-xl border border-slate-300/80 bg-white p-5"
-                  aria-labelledby="future-migration-spec-title"
+                <CollapsibleSection
+                  id="future-migration-spec"
+                  title="Especificación de migración futura"
+                  subtitle="Documentación prospectiva · Sin SQL ejecutable · Sin migración aplicada"
+                  badges={["Especificación", "No ejecutada", "Futuro"]}
+                  defaultOpen={false}
                 >
-                  <h2 id="future-migration-spec-title" className="text-sm font-semibold text-slate-900">
-                    Especificación de migración futura
-                  </h2>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                    Documentación de posibles migraciones; sin SQL ejecutable, sin archivos y sin cambios en base.
-                    Usuarios operativos al final del roadmap.
-                  </p>
-
                   <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       Estado de la especificación
@@ -6305,7 +6675,203 @@ export default function PaqueteDraftDetailPage() {
                     <span className="font-semibold text-slate-900">Seguridad: </span>
                     {FUTURE_MIGRATION_SPEC_SECURITY_NOTE}
                   </p>
-                </section>
+                </CollapsibleSection>
+
+                <CollapsibleSection
+                  id="pre-sql-readiness-audit"
+                  title="Auditoría de readiness pre-SQL"
+                  subtitle="Guía manual · Sin introspección en runtime · Sin queries desde esta pantalla"
+                  badges={["Auditoría pre-SQL", "Revisión manual", "Futuro"]}
+                  defaultOpen={false}
+                >
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Estado de la auditoría
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {[
+                        "Auditoría pre-SQL",
+                        "No ejecuta queries",
+                        "Sin SQL",
+                        "Sin cambios de base",
+                        "Requiere revisión manual",
+                        "Futuro",
+                      ].map((label) => (
+                        <li
+                          key={label}
+                          className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                        >
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Propósito</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-800">{PRE_SQL_READINESS_PURPOSE}</p>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Áreas a auditar antes de SQL
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {PRE_SQL_READINESS_AUDIT_AREAS.map((area) => (
+                        <li
+                          key={area.letter}
+                          className="rounded-md border border-slate-200 bg-white px-2.5 py-2 shadow-sm"
+                        >
+                          <p className="text-xs font-semibold text-slate-900">
+                            {area.letter}. {area.title}
+                          </p>
+                          <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Posible estructura a revisar
+                          </p>
+                          <ul className="mt-1 flex flex-wrap gap-1">
+                            {area.possibleStructures.map((s) => (
+                              <li
+                                key={s}
+                                className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[9px] text-slate-700"
+                              >
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Preguntas
+                          </p>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs leading-relaxed text-slate-800">
+                            {area.questions.map((q) => (
+                              <li key={q}>{q}</li>
+                            ))}
+                          </ul>
+                          <p className="mt-2 text-[11px] text-slate-700">
+                            <span className="font-semibold text-slate-900">Estado: </span>
+                            {area.statusLine}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Checklist de readiness pre-SQL
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {computePreSqlReadinessChecklistRows({
+                        packagePayload,
+                        latestSnapshot,
+                      }).map((row) => (
+                        <li
+                          key={row.label}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                        >
+                          <span className="text-xs text-slate-800">{row.label}</span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${futureUnlockBadgeClass(row.badge)}`}
+                          >
+                            {futureUnlockBadgeLabel(row.badge)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Preguntas técnicas antes de migrar
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                      {PRE_SQL_TECHNICAL_QUESTIONS.map((q) => (
+                        <li key={q}>{q}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-sm font-semibold text-slate-900">{PRE_SQL_DECISION_PENDING_TITLE}</p>
+                    <p className="mt-2 text-xs leading-relaxed text-slate-800">{PRE_SQL_DECISION_PENDING_TEXT}</p>
+                    <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Opciones documentales
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                      No se elige automáticamente una opción en esta fase; solo se listan para decisión manual.
+                    </p>
+                    <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-slate-800">
+                      {PRE_SQL_DECISION_DOCUMENT_OPTIONS.map((opt) => (
+                        <li key={opt}>{opt}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Riesgos pre-SQL
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed text-slate-800">
+                      {PRE_SQL_READINESS_RISKS.map((risk) => (
+                        <li key={risk}>{risk}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Acciones bloqueadas
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                      {PRE_SQL_READINESS_AUDIT_BLOCKED_CODES.map((code) => (
+                        <li
+                          key={code}
+                          className="rounded-md border border-slate-300 bg-white px-2 py-0.5 font-mono text-[10px] text-slate-800"
+                        >
+                          {code}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-400 bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-600 opacity-95"
+                      >
+                        Ejecutar auditoría SQL — Bloqueado
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copyPreSqlReadinessAudit()}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                      >
+                        {preSqlReadinessAuditCopied ? (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        )}
+                        Copiar auditoría pre-SQL
+                      </button>
+                    </div>
+                    <div className="flex max-w-md flex-col gap-1">
+                      <p className="text-[11px] leading-relaxed text-slate-500">
+                        Este botón es informativo. La auditoría real de base requiere una fase posterior explícita y
+                        revisión manual.
+                      </p>
+                      {preSqlReadinessAuditCopied ? (
+                        <p className="text-[11px] font-medium text-slate-700">Auditoría copiada</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-700">
+                    <span className="font-semibold text-slate-900">Seguridad: </span>
+                    {PRE_SQL_READINESS_SECURITY_NOTE}
+                  </p>
+                </CollapsibleSection>
               </>
             ) : null}
 
@@ -6465,22 +7031,50 @@ export default function PaqueteDraftDetailPage() {
               ) : null}
             </section>
 
-            <JsonBlock title="Warnings" value={data.warnings} />
-            <JsonBlock title="Acciones bloqueadas (blocked_actions)" value={data.blockedActions} />
+            <CollapsibleSection
+              id="draft-warnings-json"
+              title="Warnings"
+              subtitle="Respuesta del borrador · Solo lectura · Sin modificación"
+              badges={
+                warningsCount > 0
+                  ? [`${warningsCount} advertencia(s)`]
+                  : ["Sin advertencias activas"]
+              }
+              defaultOpen={false}
+            >
+              <JsonBlock title="Warnings" value={data.warnings} />
+            </CollapsibleSection>
 
-            <div className="space-y-4">
-              <h2 className="text-sm font-semibold text-slate-800">Contenido del paquete (package_payload)</h2>
-              <p className="text-xs text-slate-500">
-                JSON solo lectura. Zeta no se edita desde aquí. No hay instalación ni escritura a sistemas
-                externos.
-              </p>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {PAYLOAD_SECTION_KEYS.map(({ key, label }) => (
-                  <JsonBlock key={key} title={label} value={packagePayload[key]} />
-                ))}
+            <CollapsibleSection
+              id="draft-blocked-actions-json"
+              title="Acciones bloqueadas (blocked_actions)"
+              subtitle="Códigos declarados por el constructor · Solo lectura"
+              badges={
+                blockedCount > 0
+                  ? [`${blockedCount} bloqueada(s)`]
+                  : ["Sin acciones bloqueadas listadas"]
+              }
+              defaultOpen={false}
+            >
+              <JsonBlock title="Acciones bloqueadas (blocked_actions)" value={data.blockedActions} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              id="package-payload-section"
+              title="Contenido del paquete (package_payload)"
+              subtitle="JSON solo lectura · Zeta no se edita desde aquí"
+              badges={["Solo lectura", "Sin escritura externa"]}
+              defaultOpen={false}
+            >
+              <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {PAYLOAD_SECTION_KEYS.map(({ key, label }) => (
+                    <JsonBlock key={key} title={label} value={packagePayload[key]} />
+                  ))}
+                </div>
+                <JsonBlock title="package_payload completo" value={packagePayload} />
               </div>
-              <JsonBlock title="package_payload completo" value={packagePayload} />
-            </div>
+            </CollapsibleSection>
           </div>
         ) : !loading && !error ? (
           <p className="text-sm text-slate-500">Sin datos.</p>
