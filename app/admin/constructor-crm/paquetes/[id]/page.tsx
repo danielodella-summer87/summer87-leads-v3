@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Copy, Check, Loader2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 
@@ -63,7 +63,37 @@ type SimulatePreinstallResponse = {
   simulatedActions: string[];
   blockedActions: string[];
   nextRecommendedAction: string;
+  technicalPreinstallContract?: Record<string, unknown>;
 };
+
+/** Extrae el contrato aunque venga en camelCase o snake_case (defensa en runtime). */
+function extractTechnicalPreinstallContract(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const c = o.technicalPreinstallContract ?? o.technical_preinstall_contract;
+  if (c && typeof c === "object" && !Array.isArray(c)) return c as Record<string, unknown>;
+  return undefined;
+}
+
+/** Reconstruye el estado con todas las claves del JSON (evita pérdida del contrato al tipar/castear). */
+function normalizeSimulateResponse(raw: unknown): SimulatePreinstallResponse {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    ok: o.ok === true,
+    packageId: String(o.packageId ?? ""),
+    mode: String(o.mode ?? ""),
+    simulationStatus: String(o.simulationStatus ?? ""),
+    canProceedToPilotPreparation: Boolean(o.canProceedToPilotPreparation),
+    riskLevel: String(o.riskLevel ?? ""),
+    summary: String(o.summary ?? ""),
+    checks: (Array.isArray(o.checks) ? o.checks : []) as SimulatePreinstallCheck[],
+    missingInputs: (Array.isArray(o.missingInputs) ? o.missingInputs : []) as string[],
+    simulatedActions: (Array.isArray(o.simulatedActions) ? o.simulatedActions : []) as string[],
+    blockedActions: (Array.isArray(o.blockedActions) ? o.blockedActions : []) as string[],
+    nextRecommendedAction: String(o.nextRecommendedAction ?? ""),
+    technicalPreinstallContract: extractTechnicalPreinstallContract(raw),
+  };
+}
 
 function simulateCheckBadgeClass(status: string): string {
   switch (status) {
@@ -205,6 +235,7 @@ export default function PaqueteDraftDetailPage() {
   const [simulateLoading, setSimulateLoading] = useState(false);
   const [simulateResult, setSimulateResult] = useState<SimulatePreinstallResponse | null>(null);
   const [simulateError, setSimulateError] = useState<string | null>(null);
+  const [contractJsonCopied, setContractJsonCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -235,6 +266,7 @@ export default function PaqueteDraftDetailPage() {
   useEffect(() => {
     setSimulateResult(null);
     setSimulateError(null);
+    setContractJsonCopied(false);
   }, [id]);
 
   async function copyId() {
@@ -309,6 +341,7 @@ export default function PaqueteDraftDetailPage() {
     if (!id || simulateLoading) return;
     setSimulateLoading(true);
     setSimulateError(null);
+    setContractJsonCopied(false);
     try {
       const res = await fetch(
         `/api/admin/constructor/installable-package/drafts/${encodeURIComponent(id)}/simulate-preinstall`,
@@ -318,14 +351,15 @@ export default function PaqueteDraftDetailPage() {
           body: JSON.stringify({}),
         }
       );
-      const json = (await res.json()) as SimulatePreinstallResponse & ApiErrJson;
-      if (!res.ok || !json.ok) {
-        const msg = [json?.code, json?.message].filter(Boolean).join(" — ") || `Error HTTP ${res.status}`;
+      const raw: unknown = await res.json();
+      const body = raw as Record<string, unknown>;
+      if (!res.ok || body.ok !== true) {
+        const msg = [body?.code, body?.message].filter(Boolean).join(" — ") || `Error HTTP ${res.status}`;
         setSimulateError(msg);
         setSimulateResult(null);
         return;
       }
-      setSimulateResult(json as SimulatePreinstallResponse);
+      setSimulateResult(normalizeSimulateResponse(raw));
     } catch (e: unknown) {
       setSimulateError(e instanceof Error ? e.message : "Error de red");
       setSimulateResult(null);
@@ -385,6 +419,14 @@ export default function PaqueteDraftDetailPage() {
   const blockedCount = Array.isArray(data?.blockedActions) ? data.blockedActions.length : 0;
   const busy = actionKind !== null;
   const packagePayload = meta && data ? normalizePackagePayload(data.packagePayload) : {};
+
+  const simulationContract = useMemo(() => {
+    if (!simulateResult) return null;
+    return (
+      simulateResult.technicalPreinstallContract ??
+      extractTechnicalPreinstallContract(simulateResult as unknown)
+    );
+  }, [simulateResult]);
 
   return (
     <PageContainer>
@@ -808,6 +850,146 @@ export default function PaqueteDraftDetailPage() {
                       <span className="font-semibold text-slate-900">Próximo paso sugerido: </span>
                       {simulateResult.nextRecommendedAction}
                     </p>
+
+                    <div className="mt-6 border-t border-slate-100 pt-5">
+                      <h3 className="text-sm font-semibold text-slate-900">Contrato técnico de preinstalación</h3>
+                      {simulationContract ? (
+                        <div className="mt-3 space-y-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs text-slate-500">
+                              Solo lectura. No ejecuta instalación ni escribe en sistemas externos.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void (async () => {
+                                  if (!simulationContract || !navigator.clipboard?.writeText) return;
+                                  await navigator.clipboard.writeText(
+                                    JSON.stringify(simulationContract, null, 2)
+                                  );
+                                  setContractJsonCopied(true);
+                                  window.setTimeout(() => setContractJsonCopied(false), 2000);
+                                })();
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                              {contractJsonCopied ? (
+                                <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                              )}
+                              Copiar contrato JSON
+                            </button>
+                          </div>
+                          {(() => {
+                            const tc = simulationContract;
+                            const ep = tc.executionPolicy as Record<string, unknown> | undefined;
+                            const rd = tc.readiness as Record<string, unknown> | undefined;
+                            const tr = tc.tenantResolution as Record<string, unknown> | undefined;
+                            const zp = tc.zetaPolicy as Record<string, unknown> | undefined;
+                            const bpa = Array.isArray(tc.blockedProductionActions)
+                              ? (tc.blockedProductionActions as string[])
+                              : [];
+                            const audit = Array.isArray(tc.auditNotes) ? (tc.auditNotes as string[]) : [];
+                            return (
+                              <>
+                                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      contractVersion
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">{String(tc.contractVersion ?? "—")}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      readinessScore
+                                    </dt>
+                                    <dd className="font-mono font-semibold text-slate-900">
+                                      {String(rd?.readinessScore ?? "—")}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      finalGoNoGo
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">{String(rd?.finalGoNoGo ?? "—")}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      executionPolicy.mode
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">{String(ep?.mode ?? "—")}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      executionPolicy.canExecuteInstallation
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">
+                                      {String(ep?.canExecuteInstallation ?? "—")}
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      tenantResolution.status
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">{String(tr?.status ?? "—")}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      zetaPolicy.mode
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">{String(zp?.mode ?? "—")}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      zetaPolicy.writeAllowed
+                                    </dt>
+                                    <dd className="font-mono text-slate-900">{String(zp?.writeAllowed ?? "—")}</dd>
+                                  </div>
+                                </dl>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    blockedProductionActions
+                                  </p>
+                                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                                    {bpa.map((code) => (
+                                      <li
+                                        key={code}
+                                        className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-800"
+                                      >
+                                        {code}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    auditNotes
+                                  </p>
+                                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                                    {audit.map((n) => (
+                                      <li key={n}>{n}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    JSON completo (technicalPreinstallContract)
+                                  </p>
+                                  <pre className="mt-2 max-h-[min(360px,45vh)] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-800">
+                                    {JSON.stringify(tc, null, 2)}
+                                  </pre>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                          Contrato técnico no disponible en esta respuesta.
+                        </p>
+                      )}
+                    </div>
                   </section>
                 ) : null}
               </>
