@@ -251,6 +251,62 @@ function riskListBadgeClass(v: string | null): string {
   }
 }
 
+/** Badge ejecutivo derivado del último snapshot (resumen ya agregado en el listado). */
+function consolidatedEvidenceRowBadge(es: EvidenceSummary): {
+  label: string;
+  helper: string;
+  pillClass: string;
+} {
+  if (es.snapshotCount === 0) {
+    return {
+      label: "Sin evidencia",
+      helper: "Todavía no hay snapshots guardados.",
+      pillClass: "border border-slate-200 bg-slate-100 text-slate-700",
+    };
+  }
+  const go = (es.latestFinalGoNoGo ?? "").trim();
+  switch (go) {
+    case "pending_inputs":
+      return {
+        label: "Pendiente de insumos",
+        helper: "Requiere completar configuración antes de avanzar.",
+        pillClass: "border border-amber-200 bg-amber-50 text-amber-950",
+      };
+    case "no_go":
+      return {
+        label: "No avanzar",
+        helper: "No conviene avanzar sin correcciones.",
+        pillClass: "border border-rose-200 bg-rose-50 text-rose-900",
+      };
+    case "ready_for_manual_install":
+      return {
+        label: "Lista para revisión manual",
+        helper: "Requiere aprobación humana final antes de ejecutar.",
+        pillClass: "border border-emerald-200/80 bg-emerald-50/90 text-emerald-900",
+      };
+    default:
+      return {
+        label: "Evidencia incompleta",
+        helper: "Snapshot guardado sin dictamen final.",
+        pillClass: "border border-slate-200 bg-slate-100 text-slate-600",
+      };
+  }
+}
+
+/** Texto alineado al badge para la línea de filtros combinados (sin cambiar la lógica de filtro). */
+function evidenceFilterDisplayLabel(tab: EvidenceFilterTab): string {
+  switch (tab) {
+    case "pending_inputs":
+      return "Pendiente de insumos";
+    case "no_go":
+      return "No avanzar";
+    case "ready_manual":
+      return "Lista para revisión manual";
+    default:
+      return EVIDENCE_TAB_LABELS.find((x) => x.id === tab)?.label ?? tab;
+  }
+}
+
 export default function PaquetesDraftsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -455,8 +511,7 @@ export default function PaquetesDraftsListPage() {
           <p className="text-xs text-slate-500">
             Filtros combinados:{" "}
             <span className="font-medium text-slate-700">
-              {TAB_LABELS.find((x) => x.id === filter)?.label} ·{" "}
-              {EVIDENCE_TAB_LABELS.find((x) => x.id === evidenceFilter)?.label}
+              {TAB_LABELS.find((x) => x.id === filter)?.label} · {evidenceFilterDisplayLabel(evidenceFilter)}
             </span>
           </p>
         </div>
@@ -508,7 +563,7 @@ export default function PaquetesDraftsListPage() {
                     <th className="px-3 py-2.5">constructor_id</th>
                     <th className="px-3 py-2.5">target_client_id</th>
                     <th className="px-3 py-2.5">Versión</th>
-                    <th className="min-w-[160px] px-3 py-2.5">Evidencia</th>
+                    <th className="min-w-[200px] px-3 py-2.5">Evidencia</th>
                     <th className="px-3 py-2.5">Señal</th>
                     <th className="px-3 py-2.5">Simulación</th>
                     <th className="px-3 py-2.5">Detalle</th>
@@ -522,11 +577,12 @@ export default function PaquetesDraftsListPage() {
                     const rejected = isRejectedRow(row);
                     const simOk = simulationAvailable(row);
 
-                    const ev = row.evidenceSummary;
+                    const ev = evidenceSummaryForRow(row);
                     const scoreLabel =
                       ev.latestReadinessScore !== null && ev.latestReadinessScore !== undefined
                         ? `${ev.latestReadinessScore}/100`
                         : "—";
+                    const consolidated = consolidatedEvidenceRowBadge(ev);
 
                     return (
                       <tr key={row.id} className="align-top hover:bg-slate-50/80">
@@ -570,7 +626,23 @@ export default function PaquetesDraftsListPage() {
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-700">{row.packageVersion}</td>
                         <td className="px-3 py-2.5">
-                          <div className="flex flex-col gap-1 text-[11px] leading-snug text-slate-700">
+                          <div className="flex max-w-[220px] flex-col gap-1.5 text-[11px] leading-snug text-slate-700">
+                            <div>
+                              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                                Evidencia consolidada
+                              </p>
+                              <span
+                                className={cx(
+                                  "mt-0.5 inline-flex max-w-full rounded-md px-2 py-0.5 text-[10px] font-semibold leading-tight",
+                                  consolidated.pillClass
+                                )}
+                              >
+                                {consolidated.label}
+                              </span>
+                              <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
+                                {consolidated.helper}
+                              </p>
+                            </div>
                             <span className="font-medium text-slate-800">{evidenceCountLabel(ev.snapshotCount)}</span>
                             <span>
                               <span className="text-slate-500">Score:</span>{" "}
