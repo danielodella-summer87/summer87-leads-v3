@@ -223,6 +223,48 @@ function isManualInstallPayloadSectionEmpty(v: unknown): boolean {
   return false;
 }
 
+function payloadCfg(pp: Record<string, unknown>, snake: string, camel: string): unknown {
+  return pp[snake] ?? pp[camel];
+}
+
+function isPackagePayloadPopulated(pp: Record<string, unknown>): boolean {
+  if (Object.keys(pp).length === 0) return false;
+  const keys = [
+    "installation_manifest",
+    "installationManifest",
+    "client_identity",
+    "clientIdentity",
+    "crm_modules_config",
+    "crmModulesConfig",
+    "pipeline_config",
+    "pipelineConfig",
+    "lead_fields_config",
+    "leadFieldsConfig",
+    "permissions_config",
+    "permissionsConfig",
+  ];
+  return keys.some((k) => !isManualInstallPayloadSectionEmpty(pp[k]));
+}
+
+function isKoreReadOnlyIntegration(pp: Record<string, unknown>): boolean {
+  const raw = payloadCfg(pp, "integrations_config", "integrationsConfig");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const rec = raw as Record<string, unknown>;
+  const list = rec.integrations;
+  if (!Array.isArray(list)) return false;
+  for (const item of list) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const o = item as Record<string, unknown>;
+    const sys = String(o.system ?? "").toLowerCase();
+    const mode = String(o.mode ?? "")
+      .toLowerCase()
+      .replaceAll("-", "_");
+    if (!sys.includes("kore")) continue;
+    if ((mode === "read_only" || mode === "readonly") && o.writeAllowed === false) return true;
+  }
+  return false;
+}
+
 type ManualCheckStatus = "cumplido" | "pendiente" | "bloqueado";
 
 function manualChecklistStatusBadgeClass(s: ManualCheckStatus): string {
@@ -679,6 +721,7 @@ export default function PaqueteDraftDetailPage() {
   const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
   const [snapshotSummaryCopiedId, setSnapshotSummaryCopiedId] = useState<string | null>(null);
   const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
+  const [preManualReviewSummaryCopied, setPreManualReviewSummaryCopied] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -819,6 +862,18 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setConsolidatedSummaryCopied(true);
       window.setTimeout(() => setConsolidatedSummaryCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, []);
+
+  const copyPreManualMeetingSummary = useCallback(async (text: string) => {
+    const t = typeof text === "string" ? text.trim() : "";
+    if (!t || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(t);
+      setPreManualReviewSummaryCopied(true);
+      window.setTimeout(() => setPreManualReviewSummaryCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -1057,6 +1112,10 @@ export default function PaqueteDraftDetailPage() {
   }, [simulateResult]);
 
   const latestSnapshot = snapshots.length > 0 ? snapshots[0] : null;
+  const showExecutivePreManualReview =
+    showPostApprovalPilotPrep &&
+    latestSnapshot !== null &&
+    latestSnapshot.finalGoNoGo === "ready_for_manual_install";
 
   return (
     <PageContainer>
@@ -2307,6 +2366,252 @@ export default function PaqueteDraftDetailPage() {
                 explícita y controles aparte.
               </p>
             </section>
+            ) : null}
+
+            {showExecutivePreManualReview && latestSnapshot && meta && data ? (
+              <section
+                className="rounded-xl border border-slate-300 bg-slate-50/40 p-5"
+                aria-labelledby="exec-pre-manual-review-title"
+              >
+                <h2
+                  id="exec-pre-manual-review-title"
+                  className="text-sm font-semibold text-slate-900"
+                >
+                  Revisión ejecutiva previa a instalación manual
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  Listo para revisión humana final: no implica instalación, no autoriza ejecución automática y no
+                  escribe en sistemas externos.
+                </p>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado ejecutivo
+                  </p>
+                  <ul className="mt-2 space-y-1.5 text-xs text-slate-800">
+                    <li>
+                      <span className="font-semibold text-slate-900">Estado: </span>
+                      Listo para revisión manual final
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-900">Score: </span>
+                      <span className="tabular-nums">
+                        {latestSnapshot.readinessScore != null &&
+                        !Number.isNaN(Number(latestSnapshot.readinessScore))
+                          ? `${String(latestSnapshot.readinessScore)}/100`
+                          : "—/100"}
+                      </span>
+                    </li>
+                    <li className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900">Riesgo: </span>
+                      {latestSnapshot.riskLevel ? (
+                        <span
+                          className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${snapshotRiskBadgeClass(latestSnapshot.riskLevel)}`}
+                        >
+                          {latestSnapshot.riskLevel}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-900">Evidencia: </span>
+                      <span className="font-mono text-[11px]" title={latestSnapshot.id}>
+                        {shortSnapshotId(latestSnapshot.id)}
+                      </span>
+                    </li>
+                    <li>
+                      <span className="font-semibold text-slate-900">Resumen ejecutivo: </span>
+                      {(() => {
+                        const hasText =
+                          typeof latestSnapshot.executiveSummaryText === "string" &&
+                          latestSnapshot.executiveSummaryText.trim().length > 0;
+                        if (hasText || latestSnapshot.hasExecutiveSummary) return "disponible";
+                        return "no disponible";
+                      })()}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Qué ya está listo
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {(() => {
+                      const pp = packagePayload;
+                      const secOk = (snake: string, camel: string): ManualCheckStatus =>
+                        isManualInstallPayloadSectionEmpty(payloadCfg(pp, snake, camel))
+                          ? "pendiente"
+                          : "cumplido";
+                      const row = (label: string, status: ManualCheckStatus) => (
+                        <li
+                          key={label}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                        >
+                          <span className="text-xs text-slate-800">{label}</span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${manualChecklistStatusBadgeClass(status)}`}
+                          >
+                            {status === "cumplido" ? "Cumplido" : status === "bloqueado" ? "Bloqueado" : "Pendiente"}
+                          </span>
+                        </li>
+                      );
+                      const execTextOk =
+                        typeof latestSnapshot.executiveSummaryText === "string" &&
+                        latestSnapshot.executiveSummaryText.trim().length > 0;
+                      return (
+                        <>
+                          {row("Draft aprobado", "cumplido")}
+                          {row("Package payload poblado", isPackagePayloadPopulated(pp) ? "cumplido" : "pendiente")}
+                          {row("Módulos CRM definidos", secOk("crm_modules_config", "crmModulesConfig"))}
+                          {row("Pipeline definido", secOk("pipeline_config", "pipelineConfig"))}
+                          {row("Campos de leads definidos", secOk("lead_fields_config", "leadFieldsConfig"))}
+                          {row("Permisos definidos", secOk("permissions_config", "permissionsConfig"))}
+                          {row(
+                            "Integración Kore definida como read-only",
+                            isKoreReadOnlyIntegration(pp) ? "cumplido" : "pendiente"
+                          )}
+                          {row("Snapshot técnico guardado", "cumplido")}
+                          {row(
+                            "Resumen ejecutivo guardado",
+                            execTextOk || latestSnapshot.hasExecutiveSummary ? "cumplido" : "pendiente"
+                          )}
+                        </>
+                      );
+                    })()}
+                  </ul>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Qué falta definir antes de instalar
+                  </p>
+                  <ul className="mt-2 space-y-2">
+                    {[
+                      "Responsable operativo de Pickup 4x4",
+                      "Usuarios reales del piloto",
+                      "Permisos por usuario",
+                      "Credenciales/acceso técnico Kore",
+                      "Alcance exacto del piloto",
+                      "Datos iniciales a sincronizar desde Kore",
+                      "Confirmación humana final de Summer87",
+                      "Confirmación humana final de Pickup 4x4",
+                    ].map((label) => (
+                      <li
+                        key={label}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-white px-2.5 py-2"
+                      >
+                        <span className="text-xs text-slate-800">{label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${manualChecklistStatusBadgeClass("pendiente")}`}
+                        >
+                          Pendiente
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Qué sigue bloqueado
+                  </p>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-xs leading-relaxed text-slate-700">
+                    <li>Crear tenant</li>
+                    <li>Crear usuarios</li>
+                    <li>Enviar invitaciones</li>
+                    <li>Escribir en Kore</li>
+                    <li>Escribir en Zeta</li>
+                    <li>Publicar en producción</li>
+                    <li>Instalar automáticamente</li>
+                  </ul>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs leading-relaxed text-slate-700">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Recomendación Summer87
+                  </p>
+                  <p className="mt-2">
+                    El paquete Pickup 4x4 está técnicamente preparado para revisión manual final. No debe
+                    instalarse todavía. El siguiente paso recomendado es una reunión breve de validación con Pickup
+                    4x4 y el responsable técnico para confirmar usuarios, permisos, acceso Kore y alcance del piloto.
+                  </p>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Decisión sugerida (solo lectura)
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    No ejecuta acciones desde esta pantalla.
+                  </p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border border-slate-800 bg-slate-50 px-3 py-2.5 shadow-sm">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                        Opción recomendada
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-slate-900">
+                        Avanzar a preparación manual controlada
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Alternativa
+                      </p>
+                      <p className="mt-1 text-xs text-slate-800">Esperar definición de accesos Kore</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Alternativa
+                      </p>
+                      <p className="mt-1 text-xs text-slate-800">Corregir alcance antes de instalar</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                  <div>
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-500 opacity-90"
+                    >
+                      Registrar decisión final — Próximamente
+                    </button>
+                    <p className="mt-1.5 max-w-md text-[11px] text-slate-500">
+                      Botón informativo. La decisión final todavía se documenta fuera del sistema.
+                    </p>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1.5 sm:max-w-sm sm:items-end">
+                    {typeof latestSnapshot.executiveSummaryText === "string" &&
+                    latestSnapshot.executiveSummaryText.trim().length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void copyPreManualMeetingSummary(latestSnapshot.executiveSummaryText!)}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+                        >
+                          {preManualReviewSummaryCopied ? (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-slate-700" aria-hidden />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          )}
+                          Copiar resumen para reunión
+                        </button>
+                        {preManualReviewSummaryCopied ? (
+                          <p className="text-[11px] text-slate-600 sm:text-right">Resumen copiado</p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="text-[11px] leading-relaxed text-slate-500 sm:text-right">
+                        Resumen ejecutivo no disponible para copiar.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
             ) : null}
 
             <section className="rounded-xl border border-slate-200 bg-white p-5" aria-labelledby="snapshots-history-title">
