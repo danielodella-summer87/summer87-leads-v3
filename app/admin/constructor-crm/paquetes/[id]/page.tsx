@@ -710,6 +710,58 @@ const PICKUP_FINAL_CASE_BLOCKED_BULLETS: string[] = [
   "Instalar automáticamente",
 ];
 
+const PILOT_DOC_CLOSURE_PARTIAL_NOTE =
+  "Cierre parcial: falta decisión de reunión para cerrar el piloto documentalmente.";
+
+const PILOT_DOC_CLOSURE_SYNTHESIS_PARAGRAPH =
+  "El caso Pickup 4x4 queda documentado como piloto técnicamente preparado para revisión y planificación controlada. La ejecución real continúa bloqueada hasta una fase posterior explícita.";
+
+const PILOT_DOC_CLOSURE_PREPARED_BULLETS: string[] = [
+  "Package CRM Pickup 4x4",
+  "Evidencia técnica",
+  "Snapshot de simulación",
+  "Resumen ejecutivo",
+  "Decisión de reunión, si existe",
+  "Plan de entorno piloto",
+  "Plan ejecutable bloqueado",
+  "Diseño técnico",
+  "Blueprint de configuración",
+  "Especificación de migración futura",
+  "Auditoría pre-SQL",
+];
+
+const PILOT_DOC_CLOSURE_PENDING_BULLETS: string[] = [
+  "Confirmar alcance final con propietarios",
+  "Confirmar canal de coordinación",
+  "Confirmar Kore read-only y documentación técnica",
+  "Confirmar criterio de éxito",
+  "Confirmar decisión explícita de pasar a ejecución real",
+  "Revisar estructuras existentes antes de SQL",
+  "Diseñar SQL real solo si corresponde",
+  "Mantener usuarios operativos para fase posterior",
+];
+
+const PILOT_DOC_CLOSURE_BLOCKED_BULLETS: string[] = [
+  "Crear tenant",
+  "Crear usuarios",
+  "Enviar invitaciones",
+  "Escribir en Kore",
+  "Escribir en Zeta",
+  "Publicar producción",
+  "Ejecutar SQL",
+  "Aplicar configuración real",
+  "Instalar automáticamente",
+];
+
+const PILOT_DOC_CLOSURE_NEXT_STEP_PARAGRAPH =
+  "Antes de avanzar a una fase real, se recomienda realizar una revisión de cierre con propietarios de Pickup 4x4 para confirmar alcance, coordinación, criterio de éxito, disponibilidad técnica de Kore y decisión explícita sobre el modelo de aislamiento.";
+
+const PILOT_DOC_CLOSURE_RECOMMENDED_STATE_LINE =
+  "Listo para revisión pre-ejecución, no listo para ejecución automática.";
+
+const PILOT_DOC_CLOSURE_SECURITY_NOTE =
+  "Este cierre documental no instala CRM, no crea tenant, no crea usuarios, no ejecuta SQL y no escribe en Kore ni en Zeta.";
+
 type PilotPlanDataRow = { label: string; status: ManualCheckStatus };
 
 function computePilotEnvironmentPlanDataRows(p: {
@@ -2679,6 +2731,71 @@ function buildFinalCaseExecutiveSummaryPlainText(params: {
   return lines.join("\n");
 }
 
+/** Texto plano para “Cierre documental del piloto” (solo lectura; no persiste). */
+function buildPilotDocumentalClosurePlainText(params: {
+  hasAdvanceMeetingDecision: boolean;
+  latestAdvanceMeetingDecision: MeetingDecisionListItem | null;
+}): string {
+  const { hasAdvanceMeetingDecision, latestAdvanceMeetingDecision } = params;
+  const lines: string[] = [];
+  lines.push("Cierre documental del piloto");
+  lines.push("");
+  lines.push("Estado de cierre");
+  lines.push("- Cierre documental");
+  lines.push("- Piloto preparado");
+  lines.push("- Ejecución bloqueada");
+  lines.push("- Pendiente de fase real");
+  if (hasAdvanceMeetingDecision && latestAdvanceMeetingDecision) {
+    lines.push("- Decisión registrada");
+    lines.push(
+      `  (${latestAdvanceMeetingDecision.decisionLabel} · ${formatDt(latestAdvanceMeetingDecision.createdAt)})`
+    );
+  } else {
+    lines.push("- Decisión pendiente");
+    lines.push(`  (${PILOT_DOC_CLOSURE_PARTIAL_NOTE})`);
+  }
+  lines.push("");
+  lines.push("Síntesis");
+  if (!hasAdvanceMeetingDecision) {
+    lines.push(PILOT_DOC_CLOSURE_PARTIAL_NOTE);
+    lines.push("");
+  }
+  lines.push(PILOT_DOC_CLOSURE_SYNTHESIS_PARAGRAPH);
+  lines.push("");
+  lines.push("Qué quedó preparado");
+  for (const item of PILOT_DOC_CLOSURE_PREPARED_BULLETS) {
+    if (item === "Decisión de reunión, si existe") {
+      lines.push(
+        hasAdvanceMeetingDecision && latestAdvanceMeetingDecision
+          ? `- Decisión de reunión registrada: ${latestAdvanceMeetingDecision.decisionLabel}`
+          : "- Decisión de reunión: pendiente de registrar"
+      );
+    } else {
+      lines.push(`- ${item}`);
+    }
+  }
+  lines.push("");
+  lines.push("Pendientes antes de fase real");
+  for (const item of PILOT_DOC_CLOSURE_PENDING_BULLETS) {
+    lines.push(`- ${item}`);
+  }
+  lines.push("");
+  lines.push("Bloqueos vigentes");
+  for (const item of PILOT_DOC_CLOSURE_BLOCKED_BULLETS) {
+    lines.push(`- ${item}`);
+  }
+  lines.push("");
+  lines.push("Próximo paso recomendado");
+  lines.push(PILOT_DOC_CLOSURE_NEXT_STEP_PARAGRAPH);
+  lines.push("");
+  lines.push("Estado recomendado del caso");
+  lines.push(PILOT_DOC_CLOSURE_RECOMMENDED_STATE_LINE);
+  lines.push("");
+  lines.push("Nota de seguridad");
+  lines.push(PILOT_DOC_CLOSURE_SECURITY_NOTE);
+  return lines.join("\n");
+}
+
 function crmSummaryPlainLine(crm: Record<string, unknown>): string {
   const pairs: [string, string][] = [
     ["Módulos", "modulesStatus"],
@@ -2959,6 +3076,7 @@ export default function PaqueteDraftDetailPage() {
   const [snapshotSummaryCopiedId, setSnapshotSummaryCopiedId] = useState<string | null>(null);
   const [consolidatedSummaryCopied, setConsolidatedSummaryCopied] = useState(false);
   const [finalCaseExecutiveCopied, setFinalCaseExecutiveCopied] = useState(false);
+  const [pilotDocumentalClosureCopied, setPilotDocumentalClosureCopied] = useState(false);
   const [preManualReviewSummaryCopied, setPreManualReviewSummaryCopied] = useState(false);
   const [meetingDocumentCopied, setMeetingDocumentCopied] = useState(false);
   const [meetingChecklistCopied, setMeetingChecklistCopied] = useState(false);
@@ -3034,6 +3152,7 @@ export default function PaqueteDraftDetailPage() {
     setSnapshotSummaryCopiedId(null);
     setConsolidatedSummaryCopied(false);
     setFinalCaseExecutiveCopied(false);
+    setPilotDocumentalClosureCopied(false);
   }, [id]);
 
   const loadSimulationSnapshots = useCallback(async () => {
@@ -3452,6 +3571,21 @@ export default function PaqueteDraftDetailPage() {
       await navigator.clipboard.writeText(text);
       setFinalCaseExecutiveCopied(true);
       window.setTimeout(() => setFinalCaseExecutiveCopied(false), 2200);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }, [latestAdvanceMeetingDecision]);
+
+  const copyPilotDocumentalClosure = useCallback(async () => {
+    if (!navigator.clipboard?.writeText) return;
+    const text = buildPilotDocumentalClosurePlainText({
+      hasAdvanceMeetingDecision: latestAdvanceMeetingDecision !== null,
+      latestAdvanceMeetingDecision,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setPilotDocumentalClosureCopied(true);
+      window.setTimeout(() => setPilotDocumentalClosureCopied(false), 2200);
     } catch {
       /* clipboard no disponible */
     }
@@ -4792,6 +4926,152 @@ export default function PaqueteDraftDetailPage() {
                 </div>
 
                 <p className="mt-3 text-[10px] leading-relaxed text-slate-500">{PICKUP_FINAL_CASE_SECURITY_NOTE}</p>
+              </section>
+            ) : null}
+
+            {showExecutivePreManualReview && meta && data && latestSnapshot ? (
+              <section
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                aria-labelledby="pilot-documental-closure-title"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h2
+                      id="pilot-documental-closure-title"
+                      className="text-sm font-semibold text-slate-900"
+                    >
+                      Cierre documental del piloto
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Solo lectura. Documenta el estado interno antes de una fase de ejecución real.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void copyPilotDocumentalClosure()}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                  >
+                    <Copy className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                    Copiar cierre documental
+                  </button>
+                </div>
+
+                {pilotDocumentalClosureCopied ? (
+                  <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Cierre copiado
+                  </p>
+                ) : null}
+
+                {!latestAdvanceMeetingDecision ? (
+                  <div
+                    className="mt-3 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-xs leading-snug text-amber-950"
+                    role="status"
+                  >
+                    {PILOT_DOC_CLOSURE_PARTIAL_NOTE}
+                  </div>
+                ) : null}
+
+                <div className="mt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado de cierre
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                      Cierre documental
+                    </span>
+                    <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                      Piloto preparado
+                    </span>
+                    <span className="inline-flex rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
+                      Ejecución bloqueada
+                    </span>
+                    <span className="inline-flex rounded-full border border-amber-200/90 bg-amber-50/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+                      Pendiente de fase real
+                    </span>
+                    {latestAdvanceMeetingDecision ? (
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                        Decisión registrada
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                        Decisión pendiente
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Síntesis de cierre
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-700">
+                    {PILOT_DOC_CLOSURE_SYNTHESIS_PARAGRAPH}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid gap-4 lg:grid-cols-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Qué quedó preparado
+                    </p>
+                    <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] leading-snug text-slate-700">
+                      {PILOT_DOC_CLOSURE_PREPARED_BULLETS.map((item) => (
+                        <li key={item} className="marker:text-slate-300">
+                          {item === "Decisión de reunión, si existe"
+                            ? latestAdvanceMeetingDecision
+                              ? `Decisión de reunión registrada (${latestAdvanceMeetingDecision.decisionLabel})`
+                              : "Decisión de reunión: pendiente de registrar"
+                            : item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Pendientes antes de fase real
+                    </p>
+                    <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] leading-snug text-slate-700">
+                      {PILOT_DOC_CLOSURE_PENDING_BULLETS.map((item) => (
+                        <li key={item} className="marker:text-slate-300">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Bloqueos vigentes
+                    </p>
+                    <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] leading-snug text-slate-700">
+                      {PILOT_DOC_CLOSURE_BLOCKED_BULLETS.map((item) => (
+                        <li key={item} className="marker:text-slate-300">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Próximo paso recomendado
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-800">
+                    {PILOT_DOC_CLOSURE_NEXT_STEP_PARAGRAPH}
+                  </p>
+                </div>
+
+                <div className="mt-3 rounded-md border border-slate-200/80 bg-white px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Estado recomendado del caso
+                  </p>
+                  <p className="mt-1 text-xs font-medium leading-relaxed text-slate-800">
+                    {PILOT_DOC_CLOSURE_RECOMMENDED_STATE_LINE}
+                  </p>
+                </div>
+
+                <p className="mt-3 text-[10px] leading-relaxed text-slate-500">{PILOT_DOC_CLOSURE_SECURITY_NOTE}</p>
               </section>
             ) : null}
 
