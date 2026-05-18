@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getInternalUserIdFromRequest } from "@/lib/auth/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { guardInternalRoleManagementByMode } from "@/lib/admin/internalRoleAccess";
 
 export async function POST(req: Request) {
+  const blocked = guardInternalRoleManagementByMode();
+  if (blocked) return blocked;
+
   const currentUserId = await getInternalUserIdFromRequest();
   if (!currentUserId) {
     return NextResponse.redirect(new URL("/login", req.url));

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePermission } from "@/lib/rbac/requirePermission";
+import { guardInternalRoleManagementByMode } from "@/lib/admin/internalRoleAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,9 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    const blocked = guardInternalRoleManagementByMode();
+    if (blocked) return blocked;
+
     // Requerir permiso de administración de configuración
     const user = await allowDevOrRequire(req, "config.admin");
     if (!user) {
@@ -160,6 +164,9 @@ export async function POST(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
+    const blocked = guardInternalRoleManagementByMode();
+    if (blocked) return blocked;
+
     // Requerir permiso de administración de configuración
     const user = await allowDevOrRequire(req, "config.admin");
     if (!user) {
