@@ -3,6 +3,7 @@ import { getInternalUserIdFromRequest } from "@/lib/auth/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { getResend } from "@/lib/email/resend";
 import { inviteEmailHtml, inviteEmailSubject } from "@/lib/email/templates";
+import { guardClientUserManagementByMode } from "@/lib/admin/internalRoleAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,9 @@ type Body = {
 };
 
 export async function POST(req: Request) {
+  const blocked = guardClientUserManagementByMode();
+  if (blocked) return blocked;
+
   try {
     const currentUserId = await getInternalUserIdFromRequest();
     if (!currentUserId) {

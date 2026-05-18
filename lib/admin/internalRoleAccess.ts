@@ -51,6 +51,31 @@ export function guardInternalImpersonationByMode(): NextResponse | null {
   return null;
 }
 
+/** Guard temporal por APP_MODE para bloquear mutaciones de usuarios en client_crm. No sustituye futura gestión de usuarios cliente por tenant/company_id. */
+
+export function isClientUserManagementBlockedByMode(): boolean {
+  return isClientCrmMode();
+}
+
+export function clientUserManagementForbiddenResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "CLIENT_USER_MANAGEMENT_DISABLED_IN_CLIENT_CRM",
+      message: "Client user management is not available in client CRM mode.",
+    },
+    { status: 403, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+/** Devuelve 403 en client_crm; null si el handler puede continuar (p. ej. constructor_base). */
+export function guardClientUserManagementByMode(): NextResponse | null {
+  if (isClientUserManagementBlockedByMode()) {
+    return clientUserManagementForbiddenResponse();
+  }
+  return null;
+}
+
 const CLIENT_ASSIGNABLE_ROLE_NAMES = new Set([
   "admin",
   "operador",
