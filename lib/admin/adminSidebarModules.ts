@@ -18,11 +18,44 @@
  *    se re-graban vía `sanitizeSidebarModulesForPersist` si reaparecieran en un PATCH.
  * 7) Logo del sidebar: **no** sale de `portal_config`. `AdminShell` usa fijo `src="/licencia.png"`
  *    (archivo en `public/`). `logo_url` en portal no altera ese `<img>` hoy.
+ * 8) `menuCategory` en defaults prepara filtrado por APP_MODE (12B-impl); no oculta ítems aún.
+ *    Filas persistidas sin categoría se infieren con `getAdminSidebarModuleCategory`.
  */
 
 import { APP_SUITE_CONFIG } from "@/lib/config/appSuiteConfig";
 
 export type SidebarModuleStatus = "activo" | "en_preparacion" | "oculto";
+
+/** Categoría conceptual para filtrado futuro por APP_MODE (12B); no oculta ítems todavía. */
+export type AdminSidebarMenuCategory =
+  | "internal_constructor"
+  | "internal_installer"
+  | "internal_bcr"
+  | "operational_crm"
+  | "operational_reports"
+  | "operational_config"
+  | "support"
+  | "system_danger";
+
+const ADMIN_SIDEBAR_MENU_CATEGORIES: readonly AdminSidebarMenuCategory[] = [
+  "internal_constructor",
+  "internal_installer",
+  "internal_bcr",
+  "operational_crm",
+  "operational_reports",
+  "operational_config",
+  "support",
+  "system_danger",
+] as const;
+
+function isAdminSidebarMenuCategory(
+  value: unknown
+): value is AdminSidebarMenuCategory {
+  return (
+    typeof value === "string" &&
+    (ADMIN_SIDEBAR_MENU_CATEGORIES as readonly string[]).includes(value)
+  );
+}
 
 export type AdminSidebarModule = {
   key: string;
@@ -30,13 +63,15 @@ export type AdminSidebarModule = {
   href: string;
   icon: string;
   status: SidebarModuleStatus;
+  /** Categoría para filtrado futuro por modo; opcional en datos persistidos (se infiere). */
+  menuCategory?: AdminSidebarMenuCategory;
   /** Si true, el texto visible usa `label_member_plural` (Personalización), no `label` guardado. */
   useMemberPluralLabel?: boolean;
   /** `footer`: bloque inferior del sidebar (p. ej. personalización / configuración). */
   navGroup?: "main" | "footer";
 };
 
-/** Fragmento persistido en JSON (solo deltas sobre el default). */
+/** Fragmento persistido en JSON (solo deltas sobre el default). Sin `menuCategory` obligatorio. */
 export type SidebarModulePersisted = {
   key: string;
   label?: string;
@@ -45,20 +80,70 @@ export type SidebarModulePersisted = {
 };
 
 export const DEFAULT_ADMIN_SIDEBAR_MODULES: AdminSidebarModule[] = [
-  { key: "dashboard_comercial", label: "Dashboard", href: "/admin/dashboard", icon: "📈", status: "activo" },
+  {
+    key: "dashboard_comercial",
+    label: "Dashboard",
+    href: "/admin/dashboard",
+    icon: "📈",
+    status: "activo",
+    menuCategory: "operational_crm",
+  },
   {
     key: "leads87",
     label: APP_SUITE_CONFIG.modules.leads.name,
     href: APP_SUITE_CONFIG.modules.leads.href,
     icon: "🎯",
     status: APP_SUITE_CONFIG.modules.leads.enabled ? "activo" : "en_preparacion",
+    menuCategory: "operational_crm",
   },
-  { key: "entidades", label: "Iniciativas", href: "/admin/empresas", icon: "🏢", status: "activo" },
-  { key: "socios", label: "Clientes", href: "/admin/socios", icon: "👥", status: "activo" },
-  { key: "agenda", label: "Agenda", href: "/admin/agenda", icon: "📅", status: "activo" },
-  { key: "reportes", label: "Reportes", href: "/admin/reportes", icon: "📊", status: "activo" },
-  { key: "ia", label: "IA", href: "/admin/ia", icon: "🧠", status: "activo" },
-  { key: "mesa_ayuda", label: "Mesa de ayuda", href: "/admin/mesa-de-ayuda", icon: "🆘", status: "activo" },
+  {
+    key: "entidades",
+    label: "Iniciativas",
+    href: "/admin/empresas",
+    icon: "🏢",
+    status: "activo",
+    menuCategory: "operational_crm",
+  },
+  {
+    key: "socios",
+    label: "Clientes",
+    href: "/admin/socios",
+    icon: "👥",
+    status: "activo",
+    menuCategory: "operational_crm",
+  },
+  {
+    key: "agenda",
+    label: "Agenda",
+    href: "/admin/agenda",
+    icon: "📅",
+    status: "activo",
+    menuCategory: "operational_crm",
+  },
+  {
+    key: "reportes",
+    label: "Reportes",
+    href: "/admin/reportes",
+    icon: "📊",
+    status: "activo",
+    menuCategory: "operational_reports",
+  },
+  {
+    key: "ia",
+    label: "IA",
+    href: "/admin/ia",
+    icon: "🧠",
+    status: "activo",
+    menuCategory: "operational_config",
+  },
+  {
+    key: "mesa_ayuda",
+    label: "Mesa de ayuda",
+    href: "/admin/mesa-de-ayuda",
+    icon: "🆘",
+    status: "activo",
+    menuCategory: "support",
+  },
   {
     key: "neuroventas",
     label: "Manual de neuroventas",
@@ -66,6 +151,7 @@ export const DEFAULT_ADMIN_SIDEBAR_MODULES: AdminSidebarModule[] = [
     icon: "📘",
     status: "activo",
     navGroup: "footer",
+    menuCategory: "support",
   },
   {
     key: "personalizacion",
@@ -74,6 +160,7 @@ export const DEFAULT_ADMIN_SIDEBAR_MODULES: AdminSidebarModule[] = [
     icon: "🎨",
     status: "activo",
     navGroup: "footer",
+    menuCategory: "operational_config",
   },
   {
     key: "configuracion",
@@ -82,8 +169,124 @@ export const DEFAULT_ADMIN_SIDEBAR_MODULES: AdminSidebarModule[] = [
     icon: "🛠️",
     status: "activo",
     navGroup: "footer",
+    menuCategory: "operational_config",
   },
 ];
+
+function hrefStartsWith(href: string, prefix: string): boolean {
+  return href === prefix || href.startsWith(`${prefix}/`);
+}
+
+/**
+ * Resuelve la categoría de un ítem del sidebar (explícita o inferida).
+ * Prepara filtrado por APP_MODE; no oculta módulos. Guards de rutas/APIs: fase posterior.
+ */
+export function getAdminSidebarModuleCategory(
+  module: AdminSidebarModule
+): AdminSidebarMenuCategory {
+  if (isAdminSidebarMenuCategory(module.menuCategory)) {
+    return module.menuCategory;
+  }
+
+  const key = module.key.trim().toLowerCase();
+  const href = module.href.trim().toLowerCase();
+
+  if (
+    key.includes("reset") ||
+    key.includes("danger") ||
+    key.includes("destructive") ||
+    key.includes("system_danger") ||
+    href.includes("reset-db") ||
+    href.includes("/danger") ||
+    href.includes("/destructive")
+  ) {
+    return "system_danger";
+  }
+
+  if (
+    key.includes("constructor") ||
+    hrefStartsWith(href, "/admin/constructor-crm") ||
+    hrefStartsWith(href, "/admin/constructor")
+  ) {
+    return "internal_constructor";
+  }
+
+  if (
+    key.includes("paquete") ||
+    key.includes("installer") ||
+    key.includes("installable") ||
+    href.includes("/paquetes")
+  ) {
+    return "internal_installer";
+  }
+
+  if (
+    key.includes("bcr") ||
+    key.includes("conocimiento") ||
+    key.includes("base_conocimiento") ||
+    href.includes("base-conocimiento") ||
+    href.includes("conocimiento-rubro")
+  ) {
+    return "internal_bcr";
+  }
+
+  if (key === "reportes" || hrefStartsWith(href, "/admin/reportes")) {
+    return "operational_reports";
+  }
+
+  if (
+    key === "configuracion" ||
+    key === "personalizacion" ||
+    key === "rubros" ||
+    key === "roles" ||
+    key === "usuarios" ||
+    key === "servicios" ||
+    key === "pipelines" ||
+    key === "ia" ||
+    hrefStartsWith(href, "/admin/configuracion") ||
+    hrefStartsWith(href, "/admin/personalizacion")
+  ) {
+    return "operational_config";
+  }
+
+  if (
+    key === "mesa_ayuda" ||
+    key.includes("helpdesk") ||
+    key.includes("support") ||
+    key === "neuroventas" ||
+    hrefStartsWith(href, "/admin/mesa-de-ayuda") ||
+    hrefStartsWith(href, "/admin/neuroventas")
+  ) {
+    return "support";
+  }
+
+  if (
+    key.includes("lead") ||
+    key === "dashboard" ||
+    key === "dashboard_comercial" ||
+    key === "entidades" ||
+    key === "socios" ||
+    key === "clientes" ||
+    key === "empresas" ||
+    key === "oportunidades" ||
+    key === "agenda" ||
+    key === "eventos" ||
+    key === "reuniones" ||
+    key === "operaciones" ||
+    key === "copilot" ||
+    hrefStartsWith(href, "/admin/leads") ||
+    hrefStartsWith(href, "/admin/dashboard") ||
+    hrefStartsWith(href, "/admin/empresas") ||
+    hrefStartsWith(href, "/admin/socios") ||
+    hrefStartsWith(href, "/admin/clientes") ||
+    hrefStartsWith(href, "/admin/oportunidades") ||
+    hrefStartsWith(href, "/admin/agenda")
+  ) {
+    return "operational_crm";
+  }
+
+  return "operational_crm";
+}
 
 const ALLOWED_KEYS = new Set(DEFAULT_ADMIN_SIDEBAR_MODULES.map((m) => m.key));
 
