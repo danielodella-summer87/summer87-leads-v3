@@ -1,6 +1,7 @@
 // app/api/admin/users/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardInternalSensitiveReadByMode } from "@/lib/admin/internalRoleAccess";
 
 type ApiResp<T> = { data: T | null; error: string | null };
 
@@ -12,6 +13,9 @@ function supabaseAdmin() {
 }
 
 export async function GET(req: Request) {
+  const blocked = guardInternalSensitiveReadByMode();
+  if (blocked) return blocked;
+
   try {
     // ✅ Permitir a cualquier usuario autenticado con permiso base (ej: comercial)
     const { requirePermission } = await import("@/lib/rbac/requirePermission");
