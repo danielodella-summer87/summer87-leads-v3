@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardSystemDangerByMode } from "@/lib/admin/systemDangerAccess";
 import { requireAnyPermission } from "@/lib/rbac/requirePermission";
 import { getInternalUserIdFromRequest } from "@/lib/auth/server";
 
@@ -239,6 +240,9 @@ async function requireSetupAccess(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = guardSystemDangerByMode();
+  if (blocked) return blocked;
+
   try {
     const sb = supabaseAdmin();
     const auth = await requireSetupAccess(req);
@@ -253,6 +257,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = guardSystemDangerByMode();
+  if (blocked) return blocked;
+
   try {
     const sb = supabaseAdmin();
     const auth = await requireSetupAccess(req);
