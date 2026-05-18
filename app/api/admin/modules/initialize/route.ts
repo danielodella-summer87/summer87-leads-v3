@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardSystemDangerByMode } from "@/lib/admin/systemDangerAccess";
 import { requirePermission } from "@/lib/rbac/requirePermission";
 import { initializeModule } from "@/lib/modules/initializeModule";
 import { MODULE_IDS, type ModuleId } from "@/lib/modules/types";
@@ -28,6 +29,9 @@ function permissionForInit(moduleId: ModuleId): string {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = guardSystemDangerByMode();
+  if (blocked) return blocked;
+
   const body = await req.json().catch(() => ({}));
   const moduleId = parseModule(body?.module);
   if (!moduleId) {
