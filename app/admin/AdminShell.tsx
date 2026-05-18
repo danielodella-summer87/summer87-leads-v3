@@ -76,6 +76,8 @@ function getBreadcrumbParts(
     const last = breadcrumbSegment?.trim() || "Oportunidad";
     return [suite, leadsName, last];
   }
+  if (pathname === "/admin/constructor-crm/manual-cliente")
+    return [suite, "Constructor CRM", "Manual cliente"];
   if (pathname.startsWith("/admin/leads87")) return [suite, leadsName];
   if (pathname.startsWith("/admin/leadsok")) return [suite, "Recorrido comercial guiado"];
   if (pathname.startsWith("/admin/leads")) return [suite, "Leads", "Gestión operativa"];

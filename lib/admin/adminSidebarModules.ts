@@ -181,6 +181,14 @@ export const DEFAULT_ADMIN_SIDEBAR_MODULES: AdminSidebarModule[] = [
     navGroup: "footer",
     menuCategory: "operational_config",
   },
+  {
+    key: "constructor_manual_cliente",
+    label: "Manual cliente",
+    href: "/admin/constructor-crm/manual-cliente",
+    icon: "📘",
+    status: "activo",
+    menuCategory: "internal_constructor",
+  },
 ];
 
 function hrefStartsWith(href: string, prefix: string): boolean {
