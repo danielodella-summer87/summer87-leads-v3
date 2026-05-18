@@ -38,22 +38,22 @@ export const LEAD_FLOW_STEP_IDS: LeadFlowStep["id"][] = [
 
 export const LEAD_FLOW_LABELS: Record<LeadFlowStep["id"], string> = {
   lead: "Lead",
-  datos: "Datos del prospecto",
-  investigacion: "Visita",
+  datos: "Datos del lead",
+  investigacion: "Revisión",
   diagnostico: "Evaluación",
   acciones: "Servicios",
-  servicios: "Costeo",
+  servicios: "Cotización",
   propuesta: "Cotización / Propuesta",
   presentacion: "Presentación",
 };
 
 export const LEAD_FLOW_DESCRIPTIONS: Record<LeadFlowStep["id"], string> = {
-  lead: "El prospecto ya fue dado de alta dentro del CRM.",
-  datos: "Se cuenta con la información mínima del prospecto y su instalación para avanzar.",
-  investigacion: "La visita técnica ya fue realizada y el relevamiento del lugar quedó registrado.",
-  diagnostico: "Ya existe una evaluación de necesidades, riesgos y oportunidades del servicio.",
-  acciones: "Ya fueron definidos los servicios de limpieza o facility services a cotizar.",
-  servicios: "Ya existe una base para estimar alcance, frecuencia y costo del servicio.",
+  lead: "El lead ya fue dado de alta dentro del CRM.",
+  datos: "Se cuenta con la información mínima del lead para avanzar.",
+  investigacion: "La revisión o reunión de seguimiento quedó registrada.",
+  diagnostico: "Ya existe una evaluación de necesidades, riesgos y oportunidades.",
+  acciones: "Ya fueron definidos los productos o servicios a cotizar.",
+  servicios: "Ya existe una base para preparar la cotización.",
   propuesta: "La cotización o propuesta comercial ya está preparada para revisión.",
   presentacion: "Ya existe una salida lista para compartir, presentar o exportar.",
 };
@@ -132,7 +132,7 @@ function getServicesCount(leadServicesOrCount: { length: number } | number): num
   return typeof leadServicesOrCount === "number" ? leadServicesOrCount : leadServicesOrCount.length;
 }
 
-// ─── Casalimpia flow helpers ──────────────────────────────────────────────────
+// ─── Lead flow helpers (relevamiento / servicios operativos) ─────────────────
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -362,15 +362,15 @@ export function getLeadNextAction(step: LeadFlowStep | null): string {
     case "lead":
       return "Crear lead correctamente";
     case "datos":
-      return "Completar datos del prospecto e instalación";
+      return "Completar datos operativos del lead";
     case "investigacion":
-      return "Completar relevamiento de visita";
+      return "Registrar revisión o seguimiento";
     case "diagnostico":
       return "Completar evaluación de necesidades";
     case "acciones":
-      return "Definir servicios de limpieza requeridos";
+      return "Definir productos o servicios a cotizar";
     case "servicios":
-      return "Preparar base de costeo";
+      return "Preparar cotización";
     case "propuesta":
       return "Preparar cotización / propuesta";
     case "presentacion":

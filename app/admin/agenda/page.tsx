@@ -831,7 +831,7 @@ export default function AgendaPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Agenda</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Acciones pendientes de leads y socios (últimos 30 días + próximos 14 días)
+            Acciones pendientes de leads y actividades comerciales (últimos 30 días + próximos 14 días)
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import RubroSelect from "@/app/admin/empresas/RubroSelect";
+import { useLeadsClientCrmMode } from "@/app/admin/leads/LeadsClientCrmContext";
 
 type PipelineRow = {
   id: string;
@@ -114,6 +115,7 @@ function normDateTimeLocal(v: string): string | null {
 
 export default function NuevoLeadPage() {
   const router = useRouter();
+  const isClientCrmUi = useLeadsClientCrmMode();
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -436,9 +438,9 @@ export default function NuevoLeadPage() {
         </div>
 
         <div className="mt-6 rounded-2xl border p-4">
-          <h2 className="text-sm font-semibold text-slate-800">Datos Casalimpia</h2>
+          <h2 className="text-sm font-semibold text-slate-800">Datos operativos del lead</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Estos datos permiten preparar la visita, estimar alcance y avanzar hacia evaluación/costeo.
+            Estos datos ayudan a entender la necesidad, preparar el seguimiento y avanzar hacia una cotización.
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -454,30 +456,34 @@ export default function NuevoLeadPage() {
               </div>
             </div>
 
-            <Input
-              label="Cantidad de personal"
-              value={cantidadPersonal}
-              onChange={setCantidadPersonal}
-              disabled={saving}
-              type="number"
-              min="0"
-              step="1"
-            />
+            {!isClientCrmUi ? (
+              <Input
+                label="Cantidad de personal"
+                value={cantidadPersonal}
+                onChange={setCantidadPersonal}
+                disabled={saving}
+                type="number"
+                min="0"
+                step="1"
+              />
+            ) : null}
 
-            <Input
-              label="Superficie m²"
-              value={superficieM2}
-              onChange={setSuperficieM2}
-              disabled={saving}
-              type="number"
-              min="0"
-              step="0.01"
-            />
+            {!isClientCrmUi ? (
+              <Input
+                label="Superficie m²"
+                value={superficieM2}
+                onChange={setSuperficieM2}
+                disabled={saving}
+                type="number"
+                min="0"
+                step="0.01"
+              />
+            ) : null}
 
             <Input label="Dirección" value={direccion} onChange={setDireccion} disabled={saving} />
 
             <Input
-              label="Fecha de visita"
+              label="Fecha de revisión / visita"
               value={visitaScheduledAt}
               onChange={setVisitaScheduledAt}
               disabled={saving}

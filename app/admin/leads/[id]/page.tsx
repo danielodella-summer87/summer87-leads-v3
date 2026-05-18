@@ -27,6 +27,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { List, LayoutGrid, FileText, Search, Share2, Megaphone, Target, Compass, Star, Wrench, Lightbulb } from "lucide-react";
 import { useSetBreadcrumbSegment } from "@/app/admin/context/BreadcrumbContext";
+import { useLeadsClientCrmMode } from "@/app/admin/leads/LeadsClientCrmContext";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_LABELS, fetchLabels, type Labels } from "@/lib/labels";
@@ -836,6 +837,7 @@ function getVisibleLeadTabs(role: string | null): ReadonlyArray<(typeof LEAD_TAB
 
 export default function LeadDetailPage() {
   const router = useRouter();
+  const isClientCrmUi = useLeadsClientCrmMode();
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -4490,6 +4492,7 @@ export default function LeadDetailPage() {
                 </div>
               </div>
 
+              {!isClientCrmUi ? (
               <div id="relevamiento-visita" className="rounded-2xl border bg-white p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -4915,6 +4918,7 @@ export default function LeadDetailPage() {
                   )}
                 </div>
               </div>
+              ) : null}
 
               {/* PROCESO COMERCIAL — flujo configurable */}
               <div id="proceso-comercial" className="rounded-2xl border-2 border-slate-200 bg-white p-6 shadow-sm">
