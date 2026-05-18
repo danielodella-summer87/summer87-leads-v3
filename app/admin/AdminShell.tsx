@@ -7,7 +7,12 @@ import { PanelLeftOpen, PanelLeftClose } from "lucide-react";
 import UserMenu from "@/app/admin/components/UserMenu";
 import { usePersonalizacion } from "@/lib/personalizacion";
 import { BreadcrumbContext } from "@/app/admin/context/BreadcrumbContext";
-import { mergeAdminSidebarModules, type AdminSidebarModule } from "@/lib/admin/adminSidebarModules";
+import {
+  filterAdminSidebarModulesByMode,
+  mergeAdminSidebarModules,
+  type AdminSidebarModeFilterOptions,
+  type AdminSidebarModule,
+} from "@/lib/admin/adminSidebarModules";
 import { APP_SUITE_CONFIG } from "@/lib/config/appSuiteConfig";
 
 const SIDEBAR_STORAGE_KEY = "admin_sidebar_collapsed";
@@ -147,7 +152,14 @@ function filterNavByRole(role: RoleKey | null, nav: AdminSidebarModule[]): Admin
   );
 }
 
-export default function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({
+  children,
+  /** Snapshot de APP_MODE desde el layout (server); el cliente no lee process.env.APP_MODE. */
+  sidebarModeFilter,
+}: {
+  children: React.ReactNode;
+  sidebarModeFilter?: AdminSidebarModeFilterOptions;
+}) {
   const pathname = usePathname();
   const { clientePlural } = usePersonalizacion();
   const [sidebarModules, setSidebarModules] = useState<AdminSidebarModule[]>(() =>
@@ -222,8 +234,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   const filteredNav = useMemo(() => {
     const visible = sidebarModules.filter((m) => m.status !== "oculto");
-    return filterNavByRole(role, visible);
-  }, [role, sidebarModules]);
+    const byMode = filterAdminSidebarModulesByMode(visible, sidebarModeFilter);
+    return filterNavByRole(role, byMode);
+  }, [role, sidebarModules, sidebarModeFilter]);
 
   const mainNav = useMemo(
     () => filteredNav.filter((m) => m.navGroup !== "footer"),

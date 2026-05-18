@@ -18,15 +18,25 @@
  *    se re-graban vía `sanitizeSidebarModulesForPersist` si reaparecieran en un PATCH.
  * 7) Logo del sidebar: **no** sale de `portal_config`. `AdminShell` usa fijo `src="/licencia.png"`
  *    (archivo en `public/`). `logo_url` en portal no altera ese `<img>` hoy.
- * 8) `menuCategory` en defaults prepara filtrado por APP_MODE (12B-impl); no oculta ítems aún.
+ * 8) `menuCategory` + `filterAdminSidebarModulesByMode` filtran por APP_MODE (solo menú; no guard de rutas/API).
  *    Filas persistidas sin categoría se infieren con `getAdminSidebarModuleCategory`.
+ * 9) Sin APP_MODE en env → constructor_base; con defaults de flags el menú coincide con el histórico.
  */
 
 import { APP_SUITE_CONFIG } from "@/lib/config/appSuiteConfig";
+import type { AppMode } from "@/lib/config/appMode";
+import {
+  getAppMode,
+  getClientVisibleModules,
+  isBcrEnabled,
+  isConstructorEnabled,
+  isInstallerEnabled,
+  shouldShowInternalMenus,
+} from "@/lib/config/appMode";
 
 export type SidebarModuleStatus = "activo" | "en_preparacion" | "oculto";
 
-/** Categoría conceptual para filtrado futuro por APP_MODE (12B); no oculta ítems todavía. */
+/** Categoría conceptual para filtrado por APP_MODE (12B). */
 export type AdminSidebarMenuCategory =
   | "internal_constructor"
   | "internal_installer"
@@ -286,6 +296,136 @@ export function getAdminSidebarModuleCategory(
   }
 
   return "operational_crm";
+}
+
+export type AdminSidebarModeFilterOptions = {
+  appMode?: AppMode;
+  constructorEnabled?: boolean;
+  installerEnabled?: boolean;
+  bcrEnabled?: boolean;
+  showInternalMenus?: boolean;
+  clientVisibleModules?: string[];
+};
+
+type ResolvedAdminSidebarModeFilter = {
+  appMode: AppMode;
+  constructorEnabled: boolean;
+  installerEnabled: boolean;
+  bcrEnabled: boolean;
+  showInternalMenus: boolean;
+  clientVisibleModules: string[];
+};
+
+const CLIENT_CRM_ALLOWLIST_CATEGORIES: readonly AdminSidebarMenuCategory[] = [
+  "operational_crm",
+  "operational_reports",
+  "operational_config",
+  "support",
+];
+
+function resolveAdminSidebarModeFilter(
+  options?: AdminSidebarModeFilterOptions
+): ResolvedAdminSidebarModeFilter {
+  return {
+    appMode: options?.appMode ?? getAppMode(),
+    constructorEnabled: options?.constructorEnabled ?? isConstructorEnabled(),
+    installerEnabled: options?.installerEnabled ?? isInstallerEnabled(),
+    bcrEnabled: options?.bcrEnabled ?? isBcrEnabled(),
+    showInternalMenus: options?.showInternalMenus ?? shouldShowInternalMenus(),
+    clientVisibleModules:
+      options?.clientVisibleModules ?? getClientVisibleModules(),
+  };
+}
+
+function passesClientVisibleModulesAllowlist(
+  module: AdminSidebarModule,
+  category: AdminSidebarMenuCategory,
+  allowlist: string[]
+): boolean {
+  if (allowlist.length === 0) {
+    return true;
+  }
+  if (
+    !(CLIENT_CRM_ALLOWLIST_CATEGORIES as readonly string[]).includes(category)
+  ) {
+    return true;
+  }
+  return allowlist.includes(module.key);
+}
+
+function shouldIncludeSidebarModuleByMode(
+  module: AdminSidebarModule,
+  filter: ResolvedAdminSidebarModeFilter
+): boolean {
+  const category = getAdminSidebarModuleCategory(module);
+
+  if (filter.appMode === "constructor_base") {
+    if (!filter.showInternalMenus) {
+      if (
+        category === "internal_constructor" ||
+        category === "internal_installer" ||
+        category === "internal_bcr" ||
+        category === "system_danger"
+      ) {
+        return false;
+      }
+    }
+    if (category === "internal_constructor") {
+      return filter.constructorEnabled;
+    }
+    if (category === "internal_installer") {
+      return filter.installerEnabled;
+    }
+    if (category === "internal_bcr") {
+      return filter.bcrEnabled;
+    }
+    return true;
+  }
+
+  if (filter.appMode === "installation_prep") {
+    if (category === "internal_constructor") {
+      return filter.constructorEnabled && filter.showInternalMenus;
+    }
+    if (category === "internal_installer") {
+      return filter.installerEnabled && filter.showInternalMenus;
+    }
+    if (category === "internal_bcr") {
+      return filter.bcrEnabled && filter.showInternalMenus;
+    }
+    if (category === "system_danger") {
+      return filter.showInternalMenus;
+    }
+    return true;
+  }
+
+  if (
+    category === "internal_constructor" ||
+    category === "internal_installer" ||
+    category === "internal_bcr" ||
+    category === "system_danger"
+  ) {
+    return false;
+  }
+
+  return passesClientVisibleModulesAllowlist(
+    module,
+    category,
+    filter.clientVisibleModules
+  );
+}
+
+/**
+ * Filtra ítems del sidebar por APP_MODE y flags. No muta el array de entrada.
+ * Solo UX de menú; rutas/APIs se bloquean en fase posterior (12C/12E).
+ */
+export function filterAdminSidebarModulesByMode(
+  modules: AdminSidebarModule[],
+  options?: AdminSidebarModeFilterOptions
+): AdminSidebarModule[] {
+  const filter = resolveAdminSidebarModeFilter(options);
+  return modules.filter((module) =>
+    shouldIncludeSidebarModuleByMode(module, filter)
+  );
 }
 
 const ALLOWED_KEYS = new Set(DEFAULT_ADMIN_SIDEBAR_MODULES.map((m) => m.key));
