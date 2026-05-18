@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardSystemDangerByMode } from "@/lib/admin/systemDangerAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,9 @@ type ResetResponse = {
  * - failed?: [tablas que fallaron]
  */
 export async function POST(req: NextRequest) {
+  const blocked = guardSystemDangerByMode();
+  if (blocked) return blocked;
+
   try {
     // Requerir permiso system.danger (más restrictivo que config.admin)
     const { requirePermission } = await import("@/lib/rbac/requirePermission");
