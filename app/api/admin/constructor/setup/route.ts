@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,9 @@ function requireConstructorSetupAccess() {
  * 404 si la tabla está vacía (instancia sin seed).
  */
 export async function GET() {
+  const blocked = guardConstructorApiByMode();
+  if (blocked) return blocked;
+
   try {
     const accessError = requireConstructorSetupAccess();
     if (accessError) return accessError;
@@ -112,6 +116,9 @@ export async function GET() {
  *   | { step: "meta", data: { status?, readiness_score?, current_step?, completed_steps?, meta? } }
  */
 export async function PATCH(req: NextRequest) {
+  const blocked = guardConstructorApiByMode();
+  if (blocked) return blocked;
+
   try {
     const accessError = requireConstructorSetupAccess();
     if (accessError) return accessError;

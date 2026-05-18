@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
 import {
   jsonError,
   requireConstructorInstallablePackageAccess,
@@ -180,6 +181,9 @@ function buildWarningsAndIds(params: {
  * Preview en memoria o persistencia de borrador (draft) en installer_package_drafts. Sin instalación CRM.
  */
 export async function POST(req: NextRequest) {
+  const blocked = guardConstructorApiByMode();
+  if (blocked) return blocked;
+
   const user = await requireConstructorInstallablePackageAccess(req);
   if (!user) {
     return jsonError(403, "FORBIDDEN", "Not authorized to generate installable package preview.");

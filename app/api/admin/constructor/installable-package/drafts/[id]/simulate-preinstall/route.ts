@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
 import {
   jsonError,
   requireConstructorInstallablePackageAccess,
@@ -296,6 +297,9 @@ export async function POST(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const blocked = guardConstructorApiByMode();
+  if (blocked) return blocked;
+
   const user = await requireConstructorInstallablePackageAccess(_req);
   if (!user) {
     return jsonError(

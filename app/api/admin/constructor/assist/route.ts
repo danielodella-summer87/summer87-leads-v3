@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
 import type {
   ConstructorAISuggestion,
   ConstructorAssistMode,
@@ -665,6 +666,9 @@ function unauthorizedError() {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = guardConstructorApiByMode();
+  if (blocked) return blocked;
+
   // BYPASS TEMPORAL DE PROTOTIPO:
   // Mantenemos el guard pero deshabilitado por bypass mientras dura la fase de prototipo interno.
   if (!CONSTRUCTOR_ASSIST_AUTH_BYPASS) {

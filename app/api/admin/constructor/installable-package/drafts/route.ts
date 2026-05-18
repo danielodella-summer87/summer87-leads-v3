@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
 import {
   jsonError,
   requireConstructorInstallablePackageAccess,
@@ -89,6 +90,9 @@ const SNAPSHOTS_FETCH_CAP = 8000;
  * Lista borradores persistidos (solo lectura; service role encapsulado en servidor).
  */
 export async function GET(req: NextRequest) {
+  const blocked = guardConstructorApiByMode();
+  if (blocked) return blocked;
+
   const user = await requireConstructorInstallablePackageAccess(req);
   if (!user) {
     return jsonError(
