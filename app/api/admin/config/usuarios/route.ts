@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePermission } from "@/lib/rbac/requirePermission";
+import { guardInternalSensitiveReadByMode } from "@/lib/admin/internalRoleAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,9 @@ async function allowDevOrRequire(req: NextRequest, perm: string) {
 }
 
 export async function GET(req: NextRequest) {
+  const blocked = guardInternalSensitiveReadByMode();
+  if (blocked) return blocked;
+
   try {
     const user = await allowDevOrRequire(req, "config.read");
     if (!user) {

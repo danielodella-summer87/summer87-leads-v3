@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { getInternalUserIdFromRequest } from "@/lib/auth/server";
 import { extractPermissionKeys } from "@/lib/rbac/extractPermissionKeys";
 import { normalizeRole } from "@/app/lib/rbac";
+import { filterPermissionKeysForClientCrm } from "@/lib/admin/internalRoleAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +136,8 @@ export async function GET(req: NextRequest) {
       if (permsErr) throw permsErr;
       keys = extractPermissionKeys((perms ?? null) as Parameters<typeof extractPermissionKeys>[0]).filter(Boolean);
     }
+
+    keys = filterPermissionKeysForClientCrm(keys);
 
     const userPayload = {
       id: appUser.id,

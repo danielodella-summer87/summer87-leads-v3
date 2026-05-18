@@ -76,6 +76,64 @@ export function guardClientUserManagementByMode(): NextResponse | null {
   return null;
 }
 
+/** Guard temporal por APP_MODE para bloquear lecturas internas en client_crm. No sustituye futura lectura acotada por tenant/company_id. */
+
+export function isInternalSensitiveReadBlockedByMode(): boolean {
+  return isClientCrmMode();
+}
+
+export function internalSensitiveReadForbiddenResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "INTERNAL_SENSITIVE_READ_DISABLED_IN_CLIENT_CRM",
+      message: "Internal sensitive reads are not available in client CRM mode.",
+    },
+    { status: 403, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+/** Devuelve 403 en client_crm; null si el handler puede continuar (p. ej. constructor_base). */
+export function guardInternalSensitiveReadByMode(): NextResponse | null {
+  if (isInternalSensitiveReadBlockedByMode()) {
+    return internalSensitiveReadForbiddenResponse();
+  }
+  return null;
+}
+
+const BLOCKED_PERMISSION_KEYS_EXACT = new Set([
+  "system.danger",
+  "config.admin",
+  "config.update",
+  "config.read",
+]);
+
+const BLOCKED_PERMISSION_KEY_SUBSTRINGS = [
+  "constructor",
+  "installer",
+  "bcr",
+  "roles",
+  "users",
+  "permissions",
+  "portal.internal",
+  "support.act_as",
+  "danger",
+] as const;
+
+/** True si la permission key no debe exponerse en permissions/me en client_crm. */
+export function isInternalPermissionKeyForClientCrm(key: string): boolean {
+  const k = key.trim().toLowerCase();
+  if (!k) return true;
+  if (BLOCKED_PERMISSION_KEYS_EXACT.has(k)) return true;
+  return BLOCKED_PERMISSION_KEY_SUBSTRINGS.some((p) => k === p || k.includes(p));
+}
+
+/** Filtra keys internas del array de permisos efectivos (solo en client_crm). */
+export function filterPermissionKeysForClientCrm(keys: string[]): string[] {
+  if (!isClientCrmMode()) return keys;
+  return keys.filter((k) => !isInternalPermissionKeyForClientCrm(k));
+}
+
 const CLIENT_ASSIGNABLE_ROLE_NAMES = new Set([
   "admin",
   "operador",
