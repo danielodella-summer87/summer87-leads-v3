@@ -4,7 +4,7 @@
 **Plan origen:** `plan-correccion-ux-copy-pickup4x4-client-crm-12S-ux-fix-plan.md`  
 **Auditoría origen:** `auditoria-ui-copy-heredado-pickup4x4-client-crm-12S-ux-audit.md`
 
-**Estado validación documental:** build local OK; **validación visual en Vercel / client_crm pendiente** (checklist §5).
+**Estado validación documental:** build local OK tras parche residual; **revalidación visual final en Vercel pendiente** (checklist §5–§6).
 
 ---
 
@@ -56,6 +56,14 @@ Se aplicó la corrección mínima **12S-ux-fix-impl-1** para que la demo `client
 | UXFIX-11 | «Datos del prospecto» → «Datos del lead» (flujo) | ✅ vía `leadFlow.ts` |
 | UXFIX-12 | Tabs Técnico/Consultor | ⬜ Fase posterior |
 
+### Parche residual (post-validación Vercel)
+
+| Ítem | Detalle | Estado |
+|------|---------|--------|
+| **Siguiente paso recomendado** — paso `datos` | Texto y checklist sin prospecto / superficie / visita (`NEXT_STEP_CONFIG` en `[id]/page.tsx`) | ✅ Código |
+| **Siguiente paso recomendado** — paso `investigacion` | Copy de revisión/seguimiento (mismo objeto de config) | ✅ Código |
+| Revalidación visual ficha Demo | Confirmar bloque en runtime Vercel | ⬜ Pendiente |
+
 ---
 
 ## 4. Qué no se tocó
@@ -77,7 +85,8 @@ Se aplicó la corrección mínima **12S-ux-fix-impl-1** para que la demo `client
 
 | Comando | Resultado |
 |---------|-----------|
-| `npm run build` | ✅ **OK** (Next.js 16, compilación y TypeScript sin error) |
+| `npm run build` (impl-1 inicial) | ✅ **OK** (Next.js 16, compilación y TypeScript sin error) |
+| `npm run build` (parche residual) | ✅ **OK** |
 
 ---
 
@@ -93,6 +102,7 @@ Ejecutar con `APP_MODE=client_crm` en `https://pickup4x4-crm-demo.vercel.app` (o
 - [ ] **Ficha lead:** no aparece bloque «Relevamiento de visita»
 - [ ] **Lista leads:** sin columna «Pipeline (DEBUG)»; etapa sigue en badge del nombre
 - [ ] **Flujo lista/ficha:** sin texto «servicios de limpieza»; pasos Revisión / Cotización si aplica
+- [ ] **Ficha — Siguiente paso recomendado (paso datos):** sin prospecto, superficie ni visita en descripción/checklist
 - [ ] **Agenda:** subtítulo «leads y actividades comerciales…»
 
 ### Regresión funcional

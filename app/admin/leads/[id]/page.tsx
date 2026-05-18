@@ -693,22 +693,33 @@ const NEXT_STEP_CONFIG: Record<
     tab: "datos",
     section: "lead-data-base",
     generar: {
-      description: "Falta completar o validar información mínima del prospecto. Revisá datos clave como contacto, teléfono, dirección, rubro/sector, superficie y visita antes de continuar.",
+      description:
+        "Falta completar o validar información mínima del lead. Revisá datos clave como contacto, teléfono, dirección, rubro/sector y próxima acción antes de continuar.",
       cta: "Revisar datos del lead",
-      checklist: ["Verificar nombre, contacto y teléfono", "Completar dirección, rubro/sector y contexto operativo relevante", "Confirmar visita o reunión si corresponde"],
+      checklist: [
+        "Verificar nombre, contacto y teléfono",
+        "Completar dirección, rubro/sector y contexto operativo relevante",
+        "Confirmar revisión o seguimiento si corresponde",
+      ],
     },
   },
   investigacion: {
-    label: "Preparación de visita",
+    label: "Preparación de revisión",
     tab: "comercial",
     section: "ia-report-block",
     generar: {
-      description: "Aún no está preparada la visita. Prepará el checklist de visita para construir la base necesaria antes de la evaluación.",
-      cta: "Preparar visita",
-      checklist: ["Preparar checklist de visita", "Revisar datos del prospecto y contexto operativo relevante", "Validar información mínima antes de la evaluación"],
+      description:
+        "Aún no está registrada la revisión o reunión de seguimiento. Completá el contexto necesario antes de avanzar con la evaluación.",
+      cta: "Preparar revisión",
+      checklist: [
+        "Registrar contexto del lead",
+        "Revisar datos operativos relevantes",
+        "Validar información mínima antes de la evaluación",
+      ],
     },
     revisar: {
-      description: "Ya existe una base preparada para la visita. Revisá la información del lead antes de avanzar a la evaluación de necesidades.",
+      description:
+        "Ya existe una base preparada para la revisión. Revisá la información del lead antes de avanzar a la evaluación de necesidades.",
       cta: "Revisar preparación",
       checklist: ["Abrir el informe en el tab Comercial", "Validar oportunidades y contexto", "Confirmar que la base está lista para la evaluación"],
     },
