@@ -15,9 +15,18 @@ type OwnerOption = {
   nombre: string;
 };
 
+/** Usuarios CRM activos para invitados en Agenda (sin role_id ni permisos). */
+type AgendaInviteUserOption = {
+  id: string;
+  nombre: string;
+  email: string | null;
+  role: string | null;
+};
+
 type OwnersResponse = {
   leads: OwnerOption[];
   socios: OwnerOption[];
+  users: AgendaInviteUserOption[];
 };
 
 type ApiResp<T> = { data?: T | null; error?: string | null };
@@ -38,10 +47,19 @@ function toErrorMessage(e: unknown): string {
 
 /**
  * GET /api/admin/agenda/owners
- * Devuelve lista de leads y socios para llenar selects
+ * Devuelve leads, socios y usuarios activos (invitados Agenda).
  */
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { requirePermission } = await import("@/lib/rbac/requirePermission");
+    const allowed = await requirePermission(req, "leads.read");
+    if (!allowed) {
+      return NextResponse.json(
+        { data: null, error: "No autorizado" } satisfies ApiResp<null>,
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
     const supabase = supabaseAdmin();
 
     // Leads
@@ -74,7 +92,35 @@ export async function GET() {
       nombre: toStr((row as Record<string, unknown>).nombre, "(Sin nombre)") || "(Sin nombre)",
     }));
 
-    const response: OwnersResponse = { leads, socios };
+    const usersRes = await supabase
+      .from("app_users")
+      .select("id,nombre,email,roles:role_id(name)")
+      .eq("is_active", true)
+      .order("nombre", { ascending: true });
+
+    if (usersRes.error) {
+      console.error("[Agenda Owners] Error query app_users:", usersRes.error);
+    }
+
+    const users: AgendaInviteUserOption[] = (usersRes.data ?? []).map((row) => {
+      const r = row as Record<string, unknown>;
+      const rel = r.roles as { name?: string } | { name?: string }[] | null | undefined;
+      const roleName =
+        rel == null
+          ? null
+          : Array.isArray(rel)
+            ? rel[0]?.name ?? null
+            : rel.name ?? null;
+
+      return {
+        id: toStr(r.id),
+        nombre: toStr(r.nombre, "(Sin nombre)") || "(Sin nombre)",
+        email: typeof r.email === "string" ? r.email : null,
+        role: roleName != null ? String(roleName) : null,
+      };
+    });
+
+    const response: OwnersResponse = { leads, socios, users };
 
     return NextResponse.json({ data: response, error: null } satisfies ApiResp<OwnersResponse>, {
       status: 200,

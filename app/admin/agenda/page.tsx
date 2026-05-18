@@ -79,8 +79,20 @@ export default function AgendaPage() {
   const [comerciales, setComerciales] = useState<Array<{ id: string; nombre: string }>>([]);
   const [loadingComerciales, setLoadingComerciales] = useState(false);
 
-  // Usuarios para invitados (app_users)
+  // Usuarios para invitados (app_users vía GET /api/admin/agenda/owners)
   type UserOption = { id: string; nombre: string | null; email: string | null; role: string | null };
+
+  function mapAgendaOwnersUsers(data: unknown): UserOption[] {
+    const users = (data as { users?: Array<{ id: string; nombre?: string; email?: string | null; role?: string | null }> })
+      ?.users;
+    if (!Array.isArray(users)) return [];
+    return users.map((u) => ({
+      id: u.id,
+      nombre: u.nombre ?? null,
+      email: u.email ?? null,
+      role: u.role ?? null,
+    }));
+  }
   const [usersList, setUsersList] = useState<UserOption[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [currentAppUserId, setCurrentAppUserId] = useState<string | null>(null);
@@ -311,17 +323,10 @@ export default function AgendaPage() {
   useEffect(() => {
     async function loadUsersForCards() {
       try {
-        const res = await fetch("/api/admin/users", { cache: "no-store" });
-        const json = (await res.json()) as { data?: UserOption[] };
-        if (res.ok && Array.isArray(json?.data)) {
-          setUsersList(
-            json.data.map((u) => ({
-              id: u.id,
-              nombre: u.nombre ?? null,
-              email: u.email ?? null,
-              role: u.role ?? null,
-            }))
-          );
+        const res = await fetch("/api/admin/agenda/owners", { cache: "no-store" });
+        const json = (await res.json()) as { data?: unknown };
+        if (res.ok && json?.data) {
+          setUsersList(mapAgendaOwnersUsers(json.data));
         }
       } catch (e) {
         console.error("Error cargando usuarios para cards:", e);
@@ -368,27 +373,20 @@ export default function AgendaPage() {
       async function loadUsersAndAuth() {
         setLoadingUsers(true);
         try {
-          const [authRes, usersRes] = await Promise.all([
+          const [authRes, ownersRes] = await Promise.all([
             fetch("/api/auth/me", { cache: "no-store" }),
-            fetch("/api/admin/users", { cache: "no-store" }),
+            fetch("/api/admin/agenda/owners", { cache: "no-store" }),
           ]);
           const authJson = (await authRes.json()) as { app_user?: { id?: string } };
           const appUserId = authJson?.app_user?.id ?? null;
           setCurrentAppUserId(appUserId);
-          // GET /api/admin/users devuelve usuarios activos (id, nombre, email, role). Fallback: array vacío si el endpoint no existe aún.
           let list: UserOption[] = [];
           try {
-            const usersJson = (await usersRes.json()) as { data?: UserOption[] };
-            if (usersRes.ok && Array.isArray(usersJson?.data)) {
-              list = usersJson.data.map((u) => ({
-                id: u.id,
-                nombre: u.nombre ?? null,
-                email: u.email ?? null,
-                role: u.role ?? null,
-              }));
+            const ownersJson = (await ownersRes.json()) as { data?: unknown };
+            if (ownersRes.ok && ownersJson?.data) {
+              list = mapAgendaOwnersUsers(ownersJson.data);
             }
           } catch {
-            // TODO: fallback cuando backend/migración no esté listo; conectar GET /api/admin/users en paso 2
             list = [];
           }
           setUsersList(list);
