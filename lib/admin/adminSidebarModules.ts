@@ -504,3 +504,106 @@ export function sanitizeSidebarModulesForPersist(raw: unknown): SidebarModulePer
   }
   return out;
 }
+
+function readOptionalHrefFromRawEntry(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const href = (raw as { href?: string }).href;
+  return typeof href === "string" && href.trim() ? href.trim() : undefined;
+}
+
+/** Bloqueo conservador por key/href antes de inferir categoría (client_crm). */
+function isSidebarBlockedKeyOrHrefInClientCrm(key: string, href: string): boolean {
+  const k = key.trim().toLowerCase();
+  const h = href.trim().toLowerCase();
+
+  if (
+    k.includes("constructor") ||
+    k.includes("paquete") ||
+    k.includes("installer") ||
+    k.includes("installable") ||
+    k.includes("bcr") ||
+    k.includes("conocimiento") ||
+    k.includes("reset") ||
+    k.includes("danger") ||
+    k.includes("destructive") ||
+    k.includes("system_danger")
+  ) {
+    return true;
+  }
+
+  if (
+    hrefStartsWith(h, "/admin/constructor-crm") ||
+    hrefStartsWith(h, "/admin/constructor") ||
+    h.includes("reset-db") ||
+    h.includes("/danger") ||
+    h.includes("/destructive") ||
+    h.includes("/paquetes") ||
+    h.includes("base-conocimiento") ||
+    h.includes("conocimiento-rubro")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function persistedRowToModuleForCategory(
+  row: SidebarModulePersisted,
+  hrefOverride?: string
+): AdminSidebarModule {
+  const def = DEFAULT_ADMIN_SIDEBAR_MODULES.find((m) => m.key === row.key);
+  const href = hrefOverride ?? def?.href ?? `/admin/${row.key}`;
+  return {
+    key: row.key,
+    label: row.label ?? def?.label ?? row.key,
+    href,
+    icon: row.icon ?? def?.icon ?? "•",
+    status: row.status ?? def?.status ?? "activo",
+    menuCategory: def?.menuCategory,
+  };
+}
+
+function isSidebarModuleAllowedInClientCrmPersist(
+  row: SidebarModulePersisted,
+  hrefOverride?: string
+): boolean {
+  const module = persistedRowToModuleForCategory(row, hrefOverride);
+  if (isSidebarBlockedKeyOrHrefInClientCrm(module.key, module.href)) {
+    return false;
+  }
+  const category = getAdminSidebarModuleCategory(module);
+  return (CLIENT_CRM_ALLOWLIST_CATEGORIES as readonly string[]).includes(category);
+}
+
+/**
+ * Sanitiza sidebar_modules antes de persistir en portal_config (solo client_crm).
+ * Descarta internal_* y system_danger; no muta el array de entrada.
+ */
+export function sanitizeSidebarModulesForClientCrmPersist(
+  modules: SidebarModulePersisted[] | unknown
+): SidebarModulePersisted[] {
+  const base = sanitizeSidebarModulesForPersist(modules);
+  if (!Array.isArray(modules)) {
+    return base;
+  }
+
+  const hrefByKey = new Map<string, string>();
+  for (const entry of modules) {
+    if (!entry || typeof entry !== "object") continue;
+    const key =
+      typeof (entry as { key?: string }).key === "string"
+        ? (entry as { key: string }).key.trim()
+        : "";
+    const href = readOptionalHrefFromRawEntry(entry);
+    if (key && href) hrefByKey.set(key, href);
+  }
+
+  const out: SidebarModulePersisted[] = [];
+  for (const row of base) {
+    if (!isSidebarModuleAllowedInClientCrmPersist(row, hrefByKey.get(row.key))) {
+      continue;
+    }
+    out.push({ ...row });
+  }
+  return out;
+}

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { sanitizeSidebarModulesForPersist, type SidebarModulePersisted } from "@/lib/admin/adminSidebarModules";
+import {
+  sanitizeSidebarModulesForClientCrmPersist,
+  sanitizeSidebarModulesForPersist,
+  type SidebarModulePersisted,
+} from "@/lib/admin/adminSidebarModules";
+import { isClientCrmMode } from "@/lib/config/appMode";
 
 export const dynamic = "force-dynamic";
 
@@ -118,8 +123,10 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const sb = supabaseAdmin();
-    
+
     const body = await req.json().catch(() => ({}));
+    const clientCrmMode = isClientCrmMode();
+    let clientCrmSanitized = false;
 
     // Validar y normalizar campos
     const updates: Partial<PortalConfig> = {};
@@ -157,7 +164,18 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (Array.isArray(body.sidebar_modules)) {
-      updates.sidebar_modules = sanitizeSidebarModulesForPersist(body.sidebar_modules);
+      const baseSanitized = sanitizeSidebarModulesForPersist(body.sidebar_modules);
+      if (clientCrmMode) {
+        const clientSanitized = sanitizeSidebarModulesForClientCrmPersist(
+          body.sidebar_modules
+        );
+        if (clientSanitized.length !== baseSanitized.length) {
+          clientCrmSanitized = true;
+        }
+        updates.sidebar_modules = clientSanitized;
+      } else {
+        updates.sidebar_modules = baseSanitized;
+      }
     }
 
     if (body.admin_landing_path === null) {
@@ -218,12 +236,18 @@ export async function PATCH(req: NextRequest) {
     try {
       const savedConfig = JSON.parse(data.value) as PortalConfig;
       return NextResponse.json(
-        { data: { ...DEFAULT_CONFIG, ...savedConfig } },
+        {
+          data: { ...DEFAULT_CONFIG, ...savedConfig },
+          ...(clientCrmSanitized ? { clientCrmSanitized: true as const } : {}),
+        },
         { status: 200, headers: { "Cache-Control": "no-store" } }
       );
     } catch {
       return NextResponse.json(
-        { data: mergedConfig },
+        {
+          data: mergedConfig,
+          ...(clientCrmSanitized ? { clientCrmSanitized: true as const } : {}),
+        },
         { status: 200, headers: { "Cache-Control": "no-store" } }
       );
     }
