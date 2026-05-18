@@ -26,6 +26,31 @@ export function guardInternalRoleManagementByMode(): NextResponse | null {
   return null;
 }
 
+/** Guard por APP_MODE para impersonación interna / soporte. No sustituye auditoría futura ni soporte L3 controlado. */
+
+export function isInternalImpersonationBlockedByMode(): boolean {
+  return isClientCrmMode();
+}
+
+export function internalImpersonationForbiddenResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "INTERNAL_IMPERSONATION_DISABLED_IN_CLIENT_CRM",
+      message: "Internal impersonation is not available in client CRM mode.",
+    },
+    { status: 403, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+/** Devuelve 403 en client_crm; null si el handler puede continuar (p. ej. constructor_base). */
+export function guardInternalImpersonationByMode(): NextResponse | null {
+  if (isInternalImpersonationBlockedByMode()) {
+    return internalImpersonationForbiddenResponse();
+  }
+  return null;
+}
+
 const CLIENT_ASSIGNABLE_ROLE_NAMES = new Set([
   "admin",
   "operador",

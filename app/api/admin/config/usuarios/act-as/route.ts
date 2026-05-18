@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePermission } from "@/lib/rbac/requirePermission";
+import { guardInternalImpersonationByMode } from "@/lib/admin/internalRoleAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ async function allowDevOrRequire(req: NextRequest, perm: string) {
  * - user_id null => borra cookie (vuelve a fallback admin)
  */
 export async function POST(req: NextRequest) {
+  const blocked = guardInternalImpersonationByMode();
+  if (blocked) return blocked;
+
   try {
     const user = await allowDevOrRequire(req, "config.admin");
     if (!user) {
