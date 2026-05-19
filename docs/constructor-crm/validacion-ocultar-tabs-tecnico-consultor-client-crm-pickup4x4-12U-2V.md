@@ -2,9 +2,44 @@
 
 **Versión:** 12U-2 — quick win ocultar tabs Técnico / Consultor y CTAs hacia Consultor en ficha lead (`client_crm`)  
 **Auditoría origen:** `auditoria-brecha-constructor-vs-crm-operativo-pickup4x4-12U.md`  
-**Fase anterior:** `validacion-ocultar-iniciativa-client-crm-pickup4x4-12U-1V.md` (12U-1)
+**Fase anterior:** `validacion-ocultar-iniciativa-client-crm-pickup4x4-12U-1V.md` (12U-1)  
+**Commit funcional:** `0b3eefd`
 
-**Estado validación:** build local **OK**; validación visual Vercel **pendiente** (checklist §10).
+**Estado validación:** build local **OK**; validación visual Vercel **OK** para tabs Técnico/Consultor y CTAs hacia Consultor en `client_crm`.
+
+---
+
+## Validación visual Vercel — 2026-05-18
+
+| Campo | Valor |
+|-------|--------|
+| **Entorno** | Pickup 4x4 CRM demo — Vercel production (`pickup4x4-crm-demo.vercel.app`) |
+| **Commit funcional** | `0b3eefd` |
+| **Usuario** | Daniel (admin) |
+| **Lead** | Demo — Lona marítima Hilux |
+| **URL ficha** | https://pickup4x4-crm-demo.vercel.app/admin/leads/9e8c9b61-371d-43a6-a048-5d6cf848c8df |
+| **Resultado** | **OK** |
+
+### Observaciones en ficha (`client_crm`)
+
+| Criterio | Resultado |
+|----------|-----------|
+| Tab **Técnico** | No visible |
+| Tab **Consultor** | No visible |
+| Botón cabecera **Propuesta comercial** | No visible |
+| Tabs **Datos** y **Comercial** | Visibles |
+| **Contactos** y **Acciones** (cabecera) | Visibles |
+| **Flujo comercial** | Visible |
+| **Siguiente paso recomendado** | Visible |
+| **Seguimiento piloto** | Visible |
+| **Datos del lead** | Visible |
+| **Iniciativa** / **Datos de Iniciativa** | No visibles (12U-1 sigue vigente) |
+
+### Dictamen
+
+**12U-2 queda visualmente validado para la ficha principal en `client_crm`.** La demo ya no expone superficies Técnico/Consultor ni CTAs hacia Consultor para admin.
+
+Durante esta validación **tampoco se observó Iniciativa / Datos de Iniciativa**, confirmando que **12U-1 sigue vigente** en el mismo despliegue.
 
 ---
 
@@ -34,8 +69,8 @@ La auditoría 12U prioriza quick wins mientras el CRM operativo no consume el pa
 
 | Fase | Alcance |
 |------|---------|
-| **12U-1** | Iniciativa (alerta + bloque + copiar desde iniciativa) — ✅ validado Vercel |
-| **12U-2** | Tabs **Técnico** / **Consultor** + CTAs hacia Consultor en `client_crm` |
+| **12U-1** | Iniciativa (alerta + bloque + copiar desde iniciativa) — ✅ validado Vercel; reconfirmado en sesión 12U-2 (2026-05-18) |
+| **12U-2** | Tabs **Técnico** / **Consultor** + CTAs hacia Consultor en `client_crm` — ✅ validado Vercel (2026-05-18) |
 
 No se solapan: 12U-1 no tocó tabs; 12U-2 no tocó iniciativa.
 
@@ -98,6 +133,8 @@ Cuando `isClientCrmUi === false` (`constructor_base`, etc.):
 - Contenido de esos tabs sin cambios.
 - **Todos los CTAs** de cabecera y flujo hacia Consultor siguen visibles y funcionales.
 
+*Validación visual de modos internos: fuera de alcance de esta sesión Vercel (solo `client_crm` en pickup4x4-crm-demo).*
+
 ---
 
 ## 8. Qué no se tocó
@@ -124,27 +161,29 @@ Cuando `isClientCrmUi === false` (`constructor_base`, etc.):
 
 ---
 
-## 10. Checklist visual pendiente — Vercel
+## 10. Checklist visual — Vercel
 
-Entorno: `https://pickup4x4-crm-demo.vercel.app` · usuario **admin** · ficha **Demo — Lona marítima Hilux**  
+Entorno: `https://pickup4x4-crm-demo.vercel.app` · usuario **admin** (Daniel) · ficha **Demo — Lona marítima Hilux** · commit `0b3eefd`  
 `https://pickup4x4-crm-demo.vercel.app/admin/leads/9e8c9b61-371d-43a6-a048-5d6cf848c8df`
+
+Referencia detallada: [Validación visual Vercel — 2026-05-18](#validación-visual-vercel--2026-05-18).
 
 | # | Criterio | Estado |
 |---|----------|--------|
-| 1 | Ficha **no** muestra tab **Técnico** | ☐ |
-| 2 | Ficha **no** muestra tab **Consultor** | ☐ |
-| 3 | Ficha **sí** muestra tab **Datos** | ☐ |
-| 4 | Ficha **sí** muestra tab **Comercial** | ☐ |
-| 5 | Ficha **sí** muestra **Contactos** (cabecera) | ☐ |
-| 6 | Ficha **sí** muestra **Acciones** (cabecera) | ☐ |
-| 7 | **Flujo comercial** visible | ☐ |
-| 8 | **Siguiente paso recomendado** visible (cuando aplica y no apunta a Técnico/Consultor) | ☐ |
-| 9 | **Datos del lead** / seguimiento piloto / producto visibles | ☐ |
-| 10 | Si URL o estado previo tenía `tab=tecnico` o `tab=consultor`, cae en **Datos** u otro tab válido | ☐ |
-| 11 | Cabecera **no** muestra botón **Propuesta comercial** | ☐ |
-| 12 | Flujo comercial **no** muestra CTAs hacia propuesta/exportación del tab Consultor (paso 4 → services-proposal; paso 6 → proposal-export) | ☐ |
+| 1 | Ficha **no** muestra tab **Técnico** | ✅ § Vercel 2026-05-18 |
+| 2 | Ficha **no** muestra tab **Consultor** | ✅ § Vercel 2026-05-18 |
+| 3 | Ficha **sí** muestra tab **Datos** | ✅ § Vercel 2026-05-18 |
+| 4 | Ficha **sí** muestra tab **Comercial** | ✅ § Vercel 2026-05-18 |
+| 5 | Ficha **sí** muestra **Contactos** (cabecera) | ✅ § Vercel 2026-05-18 |
+| 6 | Ficha **sí** muestra **Acciones** (cabecera) | ✅ § Vercel 2026-05-18 |
+| 7 | **Flujo comercial** visible | ✅ § Vercel 2026-05-18 |
+| 8 | **Siguiente paso recomendado** visible (cuando aplica y no apunta a Técnico/Consultor) | ✅ § Vercel 2026-05-18 |
+| 9 | **Datos del lead** / seguimiento piloto / producto visibles | ✅ § Vercel 2026-05-18 |
+| 10 | Si URL o estado previo tenía `tab=tecnico` o `tab=consultor`, cae en **Datos** u otro tab válido | ☐ Pendiente (no probado explícitamente en esta sesión) |
+| 11 | Cabecera **no** muestra botón **Propuesta comercial** | ✅ § Vercel 2026-05-18 |
+| 12 | Flujo comercial **no** muestra CTAs hacia propuesta/exportación del tab Consultor (paso 4 → services-proposal; paso 6 → proposal-export) | ✅ § Vercel 2026-05-18 |
 
-**Modo interno (`constructor_base`):** tabs Técnico/Consultor y todos los CTAs anteriores **sí** deben verse.
+**Modo interno (`constructor_base`):** tabs Técnico/Consultor y todos los CTAs anteriores **sí** deben verse — no validado en esta sesión.
 
 ---
 
@@ -159,8 +198,9 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` · usuario **admin** · ficha *
 | Middleware | ❌ No |
 | Migraciones | ❌ No |
 | Constructor / Installer | ❌ No |
+| Código modificado en esta pasada (solo doc) | ❌ No |
 | Commit desde esta pasada | ❌ No |
 
 ---
 
-*Validación 12U-2V — Tabs Técnico/Consultor y CTAs hacia Consultor ocultos en client_crm; verificación runtime Vercel pendiente.*
+*Validación 12U-2V — Tabs Técnico/Consultor y CTAs hacia Consultor ocultos en `client_crm`; validación visual Vercel OK (2026-05-18, commit `0b3eefd`). Pendiente opcional: ítem 10 (redirect URL con `tab=tecnico` / `tab=consultor`).*
