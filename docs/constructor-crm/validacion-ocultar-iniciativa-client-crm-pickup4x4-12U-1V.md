@@ -4,7 +4,9 @@
 **Auditoría origen:** `auditoria-brecha-constructor-vs-crm-operativo-pickup4x4-12U.md`  
 **Patrón:** mismo enfoque que 12S (`useLeadsClientCrmMode` / `LeadsClientCrmContext`)
 
-**Estado validación:** build local **OK**; validación visual Vercel **pendiente** (checklist §6).
+**Estado validación:** build local **OK**; validación visual Vercel **OK** para ocultamiento de Iniciativa en `client_crm`; pendiente **12U-2** tabs Técnico/Consultor.
+
+**Commit funcional validado (Vercel):** `73aa5c7`
 
 ---
 
@@ -93,23 +95,67 @@ Cuando `isClientCrmUi === false` (p. ej. `constructor_base`):
 
 ---
 
-## 9. Checklist visual pendiente — Vercel
+## 9. Checklist visual — Vercel
 
-Entorno: `https://pickup4x4-crm-demo.vercel.app` · ficha Demo **Demo — Lona marítima Hilux** (buscar `lona` o usar UUID conocido post-deploy)
+Ficha validada: **Demo — Lona marítima Hilux** · evidencia en §10.
 
 | # | Criterio | Estado |
 |---|----------|--------|
-| 1 | Ficha **no** muestra alerta de iniciativa no vinculada | ☐ |
-| 2 | Ficha **no** muestra bloque **«Datos de Iniciativa»** | ☐ |
-| 3 | Acordeón **«Datos del lead»** sigue visible | ☐ |
-| 4 | **Producto / servicio** y bloques comerciales siguen visibles | ☐ |
-| 5 | **Siguiente paso recomendado** sigue visible | ☐ |
-| 6 | **Flujo comercial** (pasos / barra) sigue visible | ☐ |
-| 7 | En modo interno (si se prueba): bloque Iniciativa **sigue** visible | ☐ |
+| 1 | Ficha **no** muestra alerta de iniciativa no vinculada | ✅ §10 |
+| 2 | Ficha **no** muestra bloque **«Datos de Iniciativa»** | ✅ §10 |
+| 3 | Acordeón **«Datos del lead»** sigue visible | ✅ §10 |
+| 4 | **Producto / servicio** y bloques comerciales siguen visibles | ✅ §10 |
+| 5 | **Siguiente paso recomendado** sigue visible | ✅ §10 |
+| 6 | **Flujo comercial** (pasos / barra) sigue visible | ✅ §10 |
+| 7 | En modo interno (si se prueba): bloque Iniciativa **sigue** visible | ☐ No revalidado en esta pasada |
 
 ---
 
-## 10. Confirmación de alcance
+## 10. Validación visual Vercel — 2026-05-18
+
+| Campo | Valor |
+|-------|--------|
+| **Entorno** | Vercel production — `pickup4x4-crm-demo` |
+| **Commit funcional** | `73aa5c7` |
+| **URL validada** | https://pickup4x4-crm-demo.vercel.app/admin/leads/9e8c9b61-371d-43a6-a048-5d6cf848c8df |
+| **Lead usado** | **Demo — Lona marítima Hilux** |
+| **Usuario** | Sesión admin (Daniel) |
+
+### Nota de ejecución
+
+En una **primera captura** aún aparecían la alerta de iniciativa y el bloque «Datos de Iniciativa» — **inferido**: vista anterior, caché del navegador o deploy aún no propagado. Tras recarga con deploy actualizado (`73aa5c7`), el ocultamiento de Iniciativa se confirmó.
+
+### Resultado — alcance 12U-1
+
+| Criterio | Resultado |
+|----------|-----------|
+| **No** aparece alerta «Este lead no está vinculado a una iniciativa» | ✅ OK |
+| **No** aparece texto «Vincula este lead a una iniciativa…» | ✅ OK |
+| **No** aparece bloque **«Datos de Iniciativa»** | ✅ OK |
+| Acordeón **«Datos del lead»** sigue visible | ✅ OK |
+| **Producto / servicio consultado** sigue visible | ✅ OK |
+| **Seguimiento piloto** sigue visible | ✅ OK |
+| **Siguiente paso recomendado** sigue visible | ✅ OK |
+| **Flujo comercial** sigue visible | ✅ OK |
+
+### Dictamen visual 12U-1
+
+**OK** — El objetivo **12U-1** (ocultar Iniciativa en `client_crm`) queda cumplido en Vercel production.
+
+---
+
+## 11. Hallazgo fuera de alcance 12U-1
+
+| Hallazgo | Detalle |
+|----------|---------|
+| Tabs **Técnico** / **Consultor** | Siguen **visibles** para usuario **admin** en `client_crm` |
+| Contenido al abrirlos | Superficies heredadas de **consultoría / EASY / IA / propuesta** no adecuadas para demo limpia Pickup 4x4 |
+| Fase | Resolver en **12U-2** |
+| Impacto en 12U-1 | **Ninguno** — 12U-1 solo cubría ocultamiento de **Iniciativa**; no afecta el dictamen de esta fase |
+
+---
+
+## 12. Confirmación de alcance
 
 | Ítem | Estado |
 |------|--------|
@@ -123,4 +169,4 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` · ficha Demo **Demo — Lona m
 
 ---
 
-*Validación 12U-1V — Iniciativa oculta en client_crm; verificación runtime Vercel pendiente.*
+*Validación 12U-1V — Iniciativa oculta en client_crm verificada en Vercel (`73aa5c7`); tabs Técnico/Consultor → 12U-2.*
