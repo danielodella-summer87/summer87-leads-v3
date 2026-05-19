@@ -5,7 +5,7 @@
 **Fases previas:** 12U-1 (Iniciativa), 12U-2 (tabs Técnico/Consultor + CTAs)  
 **Commit funcional:** `8bbac17`
 
-**Estado validación:** build local **OK**; validación visual Vercel **OK** para Agenda principal en `client_crm`; pendiente modal crear actividad.
+**Estado validación:** build local **OK**; validación visual Vercel **OK** para Agenda principal y modal crear actividad en `client_crm`.
 
 ---
 
@@ -17,9 +17,9 @@
 | **Commit funcional** | `8bbac17` |
 | **Usuario** | Daniel (admin) |
 | **URL** | https://pickup4x4-crm-demo.vercel.app/admin/agenda |
-| **Resultado** | **OK** Agenda principal |
+| **Resultado** | **OK** Agenda principal y modal **+ Agregar actividad** |
 
-### Observaciones
+### Observaciones — Agenda principal
 
 | Criterio | Resultado |
 |----------|-----------|
@@ -32,17 +32,29 @@
 | Menú lateral | ✅ Summer87 Leads, Agenda, Reportes |
 | Constructor / Configuración | ✅ No reabiertos |
 
+### Validación modal + Agregar actividad
+
+Modal: **+ Agregar actividad** · misma URL y commit `8bbac17`.
+
+| Criterio | Resultado |
+|----------|-----------|
+| Selector **Dueño** Lead/Socio | ✅ **No visible** (solo flujo lead) |
+| Campo dueño visible | ✅ **Lead \*** |
+| Lead seleccionado (demo) | ✅ «Demo — Barra antivuelco Ranger» |
+| Texto «Socio» / «Socios» | ✅ No aparece |
+| Campos del formulario | ✅ Tipo, Fecha, Hora, Nota, Lugar, Comercial, Invitados visibles |
+| Orientación del formulario | ✅ Actividad de lead (sin opción socio) |
+
 ### Pendiente en esta sesión
 
 | Ítem | Motivo |
 |------|--------|
-| Modal **+ Agregar actividad** | No se abrió en la captura — validar que selector Dueño no muestre Socio (checklist §10 ítem 7) |
-| Chips vencidas / hoy / próximas | No validados explícitamente en captura (ítem 6) |
-| Ficha lead 12U-1 / 12U-2 | No revisada en esta pasada (ítem 10) |
+| Chips vencidas / hoy / próximas | No validados explícitamente en captura (checklist §10 ítem 6) |
+| Ficha lead 12U-1 / 12U-2 | No revisada en esta pasada Agenda (ítem 10; ver docs 12U-1V / 12U-2V) |
 
 ### Dictamen
 
-**12U-3 queda visualmente validado para la Agenda principal en `client_crm`.** El modal de creación queda pendiente de validación puntual.
+**12U-3 queda visualmente validado para Agenda principal y modal de creación de actividad en `client_crm`.**
 
 ---
 
@@ -72,7 +84,7 @@ La auditoría 12U (§ Agenda, quick win **12U-3**) señalaba `OwnerType = "lead"
 |------|---------|-------------|
 | **12U-1** | Iniciativa en ficha lead | Sin solapamiento; ficha no revalidada en sesión Agenda 2026-05-18 |
 | **12U-2** | Tabs Técnico/Consultor + CTAs Consultor | Sin solapamiento; idem |
-| **12U-3** | Agenda — Socio/Socios | Solo `app/admin/agenda/*` — ✅ Agenda principal Vercel |
+| **12U-3** | Agenda — Socio/Socios | Solo `app/admin/agenda/*` — ✅ Agenda principal + modal crear (Vercel 2026-05-18) |
 
 ---
 
@@ -92,7 +104,7 @@ La auditoría 12U (§ Agenda, quick win **12U-3**) señalaba `OwnerType = "lead"
 
 | Superficie | Antes | Después (`client_crm`) |
 |------------|-------|-------------------------|
-| Modal crear — selector Dueño | Lead + label personalización (default Socio) | Solo **Lead** |
+| Modal crear — dueño | Selector Lead + Socio (default Socio) | Solo campo **Lead \***; sin selector Dueño ni Socio |
 | Filtro Dueño | Todos / Leads / label plural (default Socios) | **Todos** / **Leads** |
 | Badge en tarjeta | `SOCIO:` | `CLIENTE:` si `owner_type === "socio"` |
 | `getOwnerLabel` (socio) | Socio / personalización | **Cliente** |
@@ -163,7 +175,7 @@ Referencia detallada: [Validación visual Vercel — 2026-05-18](#validación-vi
 | 4 | No aparece «Socios» | ✅ § Vercel 2026-05-18 |
 | 5 | Actividades de leads siguen visibles | ✅ § Vercel 2026-05-18 |
 | 6 | Filtros vencidas / hoy / próximas funcionan | ☐ Pendiente (no validados explícitamente en captura) |
-| 7 | Crear actividad de lead no muestra «Socio» | ☐ Pendiente (modal «+ Agregar actividad» no abierto) |
+| 7 | Crear actividad de lead no muestra «Socio» | ✅ § Vercel 2026-05-18 (modal + Agregar actividad) |
 | 8 | Menú lateral: Summer87 Leads, Agenda, Reportes | ✅ § Vercel 2026-05-18 |
 | 9 | No se reabren Constructor / Configuración | ✅ § Vercel 2026-05-18 |
 | 10 | Ficha lead: sin Iniciativa, Técnico ni Consultor (12U-1 / 12U-2) | ☐ Pendiente (no revisada en esta pasada Agenda) |
@@ -186,4 +198,4 @@ Referencia detallada: [Validación visual Vercel — 2026-05-18](#validación-vi
 
 ---
 
-*Validación 12U-3V — Agenda principal sin Socio/Socios en UI `client_crm` (Vercel OK, 2026-05-18, `8bbac17`); pendiente: modal crear actividad (§10 ítem 7), chips fecha (ítem 6), revalidación ficha lead (ítem 10).*
+*Validación 12U-3V — Agenda principal y modal crear sin Socio/Socios en UI `client_crm` (Vercel OK, 2026-05-18, `8bbac17`); pendiente opcional: chips fecha (§10 ítem 6), revalidación ficha lead en pasada Agenda (ítem 10).*
