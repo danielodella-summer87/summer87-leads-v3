@@ -33,7 +33,7 @@ export function TopOpportunities({ leads }: Props) {
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Top oportunidades</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Por avance LEADS87, rating y actividad (máx. 5; sin proceso completo al 100%)
+        Por avance del proceso, rating y actividad (máx. 5; sin proceso completo al 100%)
       </p>
       <ul className="mt-4 space-y-2">
         {leads.length === 0 ? (
