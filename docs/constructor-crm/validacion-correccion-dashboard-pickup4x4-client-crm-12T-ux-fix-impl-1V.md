@@ -4,7 +4,9 @@
 **Plan origen:** `plan-correccion-dashboard-pickup4x4-client-crm-12T-ux-fix-plan.md`  
 **Auditoría origen:** `auditoria-dashboard-reportes-shell-pickup4x4-client-crm-12T-ux-audit.md`
 
-**Estado validación:** build local **OK**; validación visual Vercel **pendiente** (checklist §6).
+**Estado validación:** build local **OK**; **validación visual final en Vercel OK** (§10, 2026-05-18).
+
+**Commit funcional validado:** `729410d` — *Neutralize dashboard LEADS87 copy*
 
 ---
 
@@ -27,7 +29,7 @@ Se aplicó **12T-ux-fix-impl-1**: neutralización del copy **LEADS87** y lenguaj
 | `components/crm/dashboard/CommercialFlowKpis.tsx` | **Modificado** — 12T-FIX-01 a 04 |
 | `components/crm/dashboard/TopOpportunities.tsx` | **Modificado** — 12T-FIX-05 |
 | `components/crm/dashboard/PipelineSummary.tsx` | **Modificado** — 12T-FIX-06 |
-| `docs/constructor-crm/validacion-correccion-dashboard-pickup4x4-client-crm-12T-ux-fix-impl-1V.md` | **Creado** — este documento |
+| `docs/constructor-crm/validacion-correccion-dashboard-pickup4x4-client-crm-12T-ux-fix-impl-1V.md` | **Creado / actualizado** — este documento |
 
 **No modificado:** `app/admin/dashboard/page.tsx`, libs de métricas, reportes, agenda, ficha lead, APIs, middleware, `.env.local`.
 
@@ -53,7 +55,7 @@ Se aplicó **12T-ux-fix-impl-1**: neutralización del copy **LEADS87** y lenguaj
 | Lógica KPIs / `dashboardCommercialFlow` / `metrics` | Intacta |
 | Variables internas `leads87Flow`, `leads87StageLabel`, `leads87Progress` | Sin renombrar (no son copy visible «LEADS87») |
 | APIs `/api/admin/leads` | Sin cambio |
-| Middleware / hardening 403 `client_crm` | Sin cambio |
+| Middleware / hardening 403 `client_crm` | Sin cambio en impl-1 |
 | Reportes, Agenda, ficha lead | Fuera de alcance 12T |
 | White-label / `appSuiteConfig` / logo | Sin cambio |
 | SQL / Supabase / datos demo | Sin cambio |
@@ -78,47 +80,87 @@ Se aplicó **12T-ux-fix-impl-1**: neutralización del copy **LEADS87** y lenguaj
 
 ---
 
-## 7. Confirmaciones de alcance
+## 7. Confirmaciones de alcance (impl-1)
 
 | Ítem | Estado |
 |------|--------|
 | SQL ejecutado | ❌ No |
-| Supabase / datos modificados | ❌ No |
+| Supabase directo / datos modificados | ❌ No |
 | Migraciones | ❌ No |
 | APIs / middleware | ❌ No |
-| Commit desde esta pasada | ❌ No (según restricción de tarea) |
 
 ---
 
-## 8. Checklist pendiente — Vercel (`client_crm`)
+## 8. Checklist Vercel — Dashboard (completado §10)
 
-Entorno esperado: `https://pickup4x4-crm-demo.vercel.app` · ruta `/admin/dashboard`
+Los ítems de copy y carga del dashboard quedaron **validados en Vercel** (§10).
 
-### Copy / Dashboard
+### Regresión funcional (pendiente o no revalidado en esta pasada)
 
-- [ ] Dashboard **no** muestra «LEADS87»
-- [ ] **No** aparece «Diagnóstico, estrategia, servicios» en hint Activas
-- [ ] **No** aparece «CRM cerrado o flujo 100%» en hint Cerradas
-- [ ] Título del bloque: **«Flujo comercial»**
-- [ ] Tarjetas KPI (Nuevas, Activas, En propuesta, etc.) siguen visibles con números
-
-### Regresión funcional
-
-- [ ] Dashboard carga sin error
-- [ ] **Leads** — 12 leads Demo visibles en lista
-- [ ] **Reportes → Comercial → Leads** — 12/12 + export CSV
+- [ ] **Leads** — 12 leads Demo visibles en **lista** `/admin/leads` (no revalidado explícitamente post-729410d)
+- [ ] **Reportes → Comercial → Leads** — 12/12 + export CSV (no revalidado en esta pasada)
 
 ### Seguridad (opcional)
 
-- [ ] Smoke 403 APIs críticas en `client_crm` (si se desea paridad 12S-1V)
+- [ ] Smoke 403 APIs críticas en `client_crm` (paridad 12S-1V; opcional)
 
 ---
 
-## 9. Dictamen (pre-Vercel)
+## 9. Dictamen
 
 > **GO técnico impl-1** — build OK, diff acotado a copy, sin `LEADS87` en strings del directorio dashboard.  
-> **GO visual** — pendiente completar checklist §8 en Vercel post-deploy.
+> **GO visual para Dashboard post 12T-ux-fix-impl-1** — validación Vercel §10 (commit `729410d`, deploy Ready / Current).
 
 ---
 
-*Validación 12T-ux-fix-impl-1V — copy dashboard neutralizado; verificación runtime en Vercel pendiente.*
+## 10. Validación visual final en Vercel
+
+| Campo | Valor |
+|-------|--------|
+| **Fecha** | 2026-05-18 |
+| **Entorno** | Vercel production — `pickup4x4-crm-demo` |
+| **Commit validado** | `729410d` — *Neutralize dashboard LEADS87 copy* |
+| **Estado deploy** | Ready / Current |
+| **URL validada** | https://pickup4x4-crm-demo.vercel.app/admin/dashboard |
+
+### Checks visuales — Dashboard
+
+| Criterio | Resultado |
+|----------|-----------|
+| Dashboard carga sin error | ✅ OK |
+| Título bloque principal **«Flujo comercial»** | ✅ OK |
+| **No** aparece «Flujo comercial LEADS87» | ✅ OK |
+| **No** aparece «Diagnóstico, estrategia, servicios» | ✅ OK |
+| **No** aparece «CRM cerrado o flujo 100%» | ✅ OK |
+| Pipeline total — sin «avance real LEADS87»; copy **«avance real del proceso»** | ✅ OK |
+| Top oportunidades — sin «avance LEADS87»; copy **«avance del proceso»** | ✅ OK |
+| Métricas / tarjetas KPI visibles | ✅ OK |
+| 12 leads activos visibles en dashboard | ✅ OK |
+
+### Dictamen visual
+
+**OK** — El dashboard en `client_crm` cumple el objetivo **12T-ux-fix-impl-1**: sin copy LEADS87 ni hints consultivos heredados en la superficie validada.
+
+### Pendientes fuera de alcance (sin cambio en 12T)
+
+| Ítem | Nota |
+|------|------|
+| White-label Pickup 4x4 | Fase posterior |
+| Dashboard específico `client_crm` | No creado |
+| Tabs Técnico / Consultor (ficha lead) | Fase posterior |
+| Bloque **Datos de Iniciativa** (ficha lead) | Fase posterior |
+| Reportes hub «próximamente» | Tolerable; sin cambio 12T |
+| Smoke 403 post-deploy | Opcional; paridad 12S-1V |
+
+### Confirmación de esta actualización documental
+
+| Ítem | Estado |
+|------|--------|
+| Código funcional modificado en esta pasada | ❌ No — solo este `.md` |
+| SQL / Supabase / datos | ❌ No |
+| APIs / migraciones / middleware | ❌ No |
+| Commit desde esta pasada | ❌ No |
+
+---
+
+*Validación 12T-ux-fix-impl-1V — copy dashboard neutralizado y verificado en Vercel production (`729410d`).*
