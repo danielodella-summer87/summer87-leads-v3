@@ -2,9 +2,47 @@
 
 **Versión:** 12U-3 — neutralizar etiquetas y opciones «Socio/Socios» en Agenda (`client_crm`)  
 **Auditoría origen:** `auditoria-brecha-constructor-vs-crm-operativo-pickup4x4-12U.md`  
-**Fases previas:** 12U-1 (Iniciativa), 12U-2 (tabs Técnico/Consultor + CTAs)
+**Fases previas:** 12U-1 (Iniciativa), 12U-2 (tabs Técnico/Consultor + CTAs)  
+**Commit funcional:** `8bbac17`
 
-**Estado validación:** build local **OK**; validación visual Vercel **pendiente** (checklist §10).
+**Estado validación:** build local **OK**; validación visual Vercel **OK** para Agenda principal en `client_crm`; pendiente modal crear actividad.
+
+---
+
+## Validación visual Vercel — 2026-05-18
+
+| Campo | Valor |
+|-------|--------|
+| **Entorno** | Pickup 4x4 CRM demo — Vercel production (`pickup4x4-crm-demo.vercel.app`) |
+| **Commit funcional** | `8bbac17` |
+| **Usuario** | Daniel (admin) |
+| **URL** | https://pickup4x4-crm-demo.vercel.app/admin/agenda |
+| **Resultado** | **OK** Agenda principal |
+
+### Observaciones
+
+| Criterio | Resultado |
+|----------|-----------|
+| Agenda carga | ✅ |
+| Subtítulo | ✅ «Acciones pendientes de leads y actividades comerciales…» |
+| Filtro **Dueño** | ✅ «Todos» (y Leads); **no** aparece «Socios» |
+| Texto «Socio» / «Socios» | ✅ No observado en pantalla principal |
+| Actividades de leads | ✅ Visibles |
+| Acciones en tarjetas | ✅ Abrir Lead / Editar / Marcar realizada visibles |
+| Menú lateral | ✅ Summer87 Leads, Agenda, Reportes |
+| Constructor / Configuración | ✅ No reabiertos |
+
+### Pendiente en esta sesión
+
+| Ítem | Motivo |
+|------|--------|
+| Modal **+ Agregar actividad** | No se abrió en la captura — validar que selector Dueño no muestre Socio (checklist §10 ítem 7) |
+| Chips vencidas / hoy / próximas | No validados explícitamente en captura (ítem 6) |
+| Ficha lead 12U-1 / 12U-2 | No revisada en esta pasada (ítem 10) |
+
+### Dictamen
+
+**12U-3 queda visualmente validado para la Agenda principal en `client_crm`.** El modal de creación queda pendiente de validación puntual.
 
 ---
 
@@ -32,9 +70,9 @@ La auditoría 12U (§ Agenda, quick win **12U-3**) señalaba `OwnerType = "lead"
 
 | Fase | Alcance | Interacción |
 |------|---------|-------------|
-| **12U-1** | Iniciativa en ficha lead | Sin solapamiento |
-| **12U-2** | Tabs Técnico/Consultor + CTAs Consultor | Sin solapamiento |
-| **12U-3** | Agenda — Socio/Socios | Solo `app/admin/agenda/*` |
+| **12U-1** | Iniciativa en ficha lead | Sin solapamiento; ficha no revalidada en sesión Agenda 2026-05-18 |
+| **12U-2** | Tabs Técnico/Consultor + CTAs Consultor | Sin solapamiento; idem |
+| **12U-3** | Agenda — Socio/Socios | Solo `app/admin/agenda/*` — ✅ Agenda principal Vercel |
 
 ---
 
@@ -84,7 +122,7 @@ Cuando `isClientCrmUi === false`:
 | `owner_type` en BD | ❌ No |
 | Constructor / Installer | ❌ No |
 | Seguridad `client_crm` | ❌ No |
-| 12U-1 / 12U-2 | ❌ No |
+| 12U-1 / 12U-2 (código) | ❌ No |
 | `.env.local` | ❌ No |
 
 ---
@@ -93,7 +131,7 @@ Cuando `isClientCrmUi === false`:
 
 | Comando | Resultado |
 |---------|-----------|
-| `npm run build` | ✅ **OK** (ver salida de la pasada de implementación) |
+| `npm run build` | ✅ **OK** (commit funcional `8bbac17`) |
 
 ---
 
@@ -111,22 +149,24 @@ Cuando `isClientCrmUi === false`:
 
 ---
 
-## 10. Checklist visual pendiente — Vercel
+## 10. Checklist visual — Vercel
 
-Entorno: `https://pickup4x4-crm-demo.vercel.app` · usuario **admin** · **Agenda**
+Entorno: `https://pickup4x4-crm-demo.vercel.app/admin/agenda` · usuario **admin** (Daniel) · commit `8bbac17`
+
+Referencia detallada: [Validación visual Vercel — 2026-05-18](#validación-visual-vercel--2026-05-18).
 
 | # | Criterio | Estado |
 |---|----------|--------|
-| 1 | Agenda carga | ☐ |
-| 2 | Subtítulo dice «leads y actividades comerciales» | ☐ |
-| 3 | No aparece «Socio» | ☐ |
-| 4 | No aparece «Socios» | ☐ |
-| 5 | Actividades de leads siguen visibles | ☐ |
-| 6 | Filtros vencidas / hoy / próximas funcionan | ☐ |
-| 7 | Crear actividad de lead no muestra «Socio» | ☐ |
-| 8 | Menú lateral: Summer87 Leads, Agenda, Reportes | ☐ |
-| 9 | No se reabren Constructor / Configuración | ☐ |
-| 10 | Ficha lead: sin Iniciativa, Técnico ni Consultor (12U-1 / 12U-2) | ☐ |
+| 1 | Agenda carga | ✅ § Vercel 2026-05-18 |
+| 2 | Subtítulo dice «leads y actividades comerciales» | ✅ § Vercel 2026-05-18 |
+| 3 | No aparece «Socio» | ✅ § Vercel 2026-05-18 |
+| 4 | No aparece «Socios» | ✅ § Vercel 2026-05-18 |
+| 5 | Actividades de leads siguen visibles | ✅ § Vercel 2026-05-18 |
+| 6 | Filtros vencidas / hoy / próximas funcionan | ☐ Pendiente (no validados explícitamente en captura) |
+| 7 | Crear actividad de lead no muestra «Socio» | ☐ Pendiente (modal «+ Agregar actividad» no abierto) |
+| 8 | Menú lateral: Summer87 Leads, Agenda, Reportes | ✅ § Vercel 2026-05-18 |
+| 9 | No se reabren Constructor / Configuración | ✅ § Vercel 2026-05-18 |
+| 10 | Ficha lead: sin Iniciativa, Técnico ni Consultor (12U-1 / 12U-2) | ☐ Pendiente (no revisada en esta pasada Agenda) |
 
 ---
 
@@ -141,8 +181,9 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` · usuario **admin** · **Agend
 | Middleware | ❌ No |
 | Migraciones | ❌ No |
 | Constructor / Installer | ❌ No |
+| Código modificado en esta pasada (solo doc) | ❌ No |
 | Commit desde esta pasada | ❌ No |
 
 ---
 
-*Validación 12U-3V — Agenda sin Socio/Socios en UI `client_crm`; verificación runtime Vercel pendiente.*
+*Validación 12U-3V — Agenda principal sin Socio/Socios en UI `client_crm` (Vercel OK, 2026-05-18, `8bbac17`); pendiente: modal crear actividad (§10 ítem 7), chips fecha (ítem 6), revalidación ficha lead (ítem 10).*
