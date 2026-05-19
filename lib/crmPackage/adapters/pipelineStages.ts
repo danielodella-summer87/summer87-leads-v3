@@ -1,6 +1,6 @@
 /**
  * Adapter: pipeline.stages[] → etapas normalizadas (12W-4).
- * No importar desde app/admin hasta 12W-4b (integración fallback-safe).
+ * Consumido vía snapshot en LeadsClientCrmContext (12W-4b); select Pipeline legacy hasta materialización DB.
  */
 
 import type { CrmPackageConfig } from "../types";

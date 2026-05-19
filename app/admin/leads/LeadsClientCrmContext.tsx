@@ -31,27 +31,49 @@ export const LEGACY_LEAD_FIELDS: LeadFieldsSnapshot = {
   source: "legacy",
 };
 
+/** Snapshot serializable de pipeline.stages (12W-4b); calculado en layout server. */
+export type PipelineStagesSnapshot = {
+  stages: {
+    key: string;
+    label: string;
+    order: number;
+    terminal?: "won" | "lost";
+  }[];
+  stageKeys: string[];
+  source: "contract" | "legacy";
+};
+
+export const LEGACY_PIPELINE_STAGES: PipelineStagesSnapshot = {
+  stages: [],
+  stageKeys: [],
+  source: "legacy",
+};
+
 type LeadsClientCrmContextValue = {
   isClientCrm: boolean;
   leadDetailVisibility: LeadDetailVisibilitySnapshot;
   leadFields: LeadFieldsSnapshot;
+  pipelineStages: PipelineStagesSnapshot;
 };
 
 const LeadsClientCrmContext = createContext<LeadsClientCrmContextValue>({
   isClientCrm: false,
   leadDetailVisibility: LEGACY_LEAD_DETAIL_VISIBILITY,
   leadFields: LEGACY_LEAD_FIELDS,
+  pipelineStages: LEGACY_PIPELINE_STAGES,
 });
 
 export function LeadsClientCrmProvider({
   isClientCrm,
   leadDetailVisibility,
   leadFields,
+  pipelineStages,
   children,
 }: {
   isClientCrm: boolean;
   leadDetailVisibility?: LeadDetailVisibilitySnapshot;
   leadFields?: LeadFieldsSnapshot;
+  pipelineStages?: PipelineStagesSnapshot;
   children: React.ReactNode;
 }) {
   return (
@@ -60,6 +82,7 @@ export function LeadsClientCrmProvider({
         isClientCrm,
         leadDetailVisibility: leadDetailVisibility ?? LEGACY_LEAD_DETAIL_VISIBILITY,
         leadFields: leadFields ?? LEGACY_LEAD_FIELDS,
+        pipelineStages: pipelineStages ?? LEGACY_PIPELINE_STAGES,
       }}
     >
       {children}
@@ -80,4 +103,9 @@ export function useLeadDetailVisibility(): LeadDetailVisibilitySnapshot {
 /** Grupos/campos lead_fields desde contrato activo o legacy (12W-3b). */
 export function useLeadFieldsConfig(): LeadFieldsSnapshot {
   return useContext(LeadsClientCrmContext).leadFields;
+}
+
+/** Etapas pipeline.stages desde contrato activo o legacy (12W-4b). */
+export function usePipelineStagesConfig(): PipelineStagesSnapshot {
+  return useContext(LeadsClientCrmContext).pipelineStages;
 }

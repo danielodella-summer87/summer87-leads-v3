@@ -8,6 +8,7 @@ import RubroSelect from "@/app/admin/empresas/RubroSelect";
 import {
   useLeadFieldsConfig,
   useLeadsClientCrmMode,
+  usePipelineStagesConfig,
 } from "@/app/admin/leads/LeadsClientCrmContext";
 
 type PipelineRow = {
@@ -121,6 +122,8 @@ export default function NuevoLeadPage() {
   const isClientCrmUi = useLeadsClientCrmMode();
   // 12W-3b: snapshot contrato disponible; formulario legacy y payload POST sin cambios hasta 12W-3c/12W-4.
   const leadFields = useLeadFieldsConfig();
+  // 12W-4b: snapshot pipeline.stages; select Pipeline y POST legacy sin cambios hasta materialización DB.
+  const pipelineStages = usePipelineStagesConfig();
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -294,6 +297,8 @@ export default function NuevoLeadPage() {
         className="rounded-2xl border bg-white p-6"
         data-crm-package-lead-fields-source={leadFields.source}
         data-crm-package-lead-fields-count={leadFields.allFields.length}
+        data-crm-package-pipeline-source={pipelineStages.source}
+        data-crm-package-pipeline-count={pipelineStages.stages.length}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
