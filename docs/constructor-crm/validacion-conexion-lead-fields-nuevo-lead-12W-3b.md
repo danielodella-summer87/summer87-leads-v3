@@ -2,7 +2,62 @@
 
 **Versión:** 12W-3b — wiring contrato `lead_fields` → Nuevo Lead (fallback-safe, sin cambio de guardado)  
 **Base:** 12W-3 adapter (`aafb879`), patrón 12W-2b ficha (`eb63540`)  
-**Estado:** build local **OK** (2026-05-19); validación visual Vercel **pendiente** (§10).
+**Commit funcional validado:** `c56259f` — Connect lead fields snapshot to new lead form  
+**Estado:** build local **OK** + validación visual Vercel **OK** (2026-05-19); inspección DOM `data-*` **pendiente opcional**.
+
+---
+
+## Validación visual Vercel — 2026-05-19
+
+| Campo | Valor |
+|-------|--------|
+| **Entorno** | Pickup 4x4 CRM demo — Vercel production (`pickup4x4-crm-demo.vercel.app`) |
+| **Ruta** | `/admin/leads/nuevo` |
+| **Commit validado** | `c56259f` |
+| **Resultado** | **OK visual** |
+
+Evidencia: capturas de pantalla del formulario Nuevo lead en deploy Vercel.
+
+### Checks observados
+
+| Criterio | Resultado |
+|----------|-----------|
+| Pantalla Nuevo lead carga | ✅ |
+| Formulario se ve igual que antes | ✅ |
+| Nombre | ✅ Visible |
+| Contacto | ✅ Visible |
+| Teléfono | ✅ Visible |
+| Email | ✅ Visible |
+| Origen | ✅ Visible |
+| Producto / servicio consultado | ✅ Visible |
+| Pipeline | ✅ Visible (etapas **legacy** — ver nota abajo) |
+| Seguimiento inicial / Próxima acción | ✅ Visible (opciones **legacy** — ver nota abajo) |
+| Fecha de próximo seguimiento | ✅ Visible |
+| Comercial | ✅ Visible |
+| Datos operativos del lead | ✅ Visible |
+| Rubro | ✅ Visible (catálogo **legacy** — ver nota abajo) |
+| Dirección | ✅ Visible |
+| Fecha de revisión o seguimiento | ✅ Visible |
+| Notas | ✅ Visible |
+| Campos nuevos Vehículo (marca, modelo, matrícula, …) | ✅ **No** aparecen |
+| Campos nuevos Kore | ✅ **No** aparecen |
+| Sidebar (Summer87 Leads, Agenda, Reportes) | ✅ Sin cambio aparente |
+| Error visual evidente | ✅ Ninguno en captura |
+| Inspección DOM `data-crm-package-lead-fields-source` / `count` | ☐ No validado en captura (pendiente técnico opcional) |
+| Guardar lead / redirección a ficha | ☐ No ejercido en esta pasada de capturas |
+| Ficha lead (regresión 12W-2b) | ☐ Fuera de captura; sin evidencia nueva en esta validación |
+
+### Notas de alcance (no son regresiones)
+
+| Observación en captura | Interpretación |
+|------------------------|----------------|
+| Pipeline muestra etapas legacy | **Esperado.** 12W-3b **no** conecta `pipeline_config`; la fase de pipeline del contrato queda para una fase dedicada (`packageToPipeline` / wiring posterior). |
+| Rubro muestra opciones legacy | **Esperado.** 12W-3b **no** oculta campos legacy ni sustituye catálogos; alineación rubros/catálogos → fase futura de campos o configuración operativa. |
+| Próxima acción muestra opciones legacy | **Esperado.** 12W-3b **no** conecta `activity_types` del contrato; wiring de tipos de actividad → fase futura. |
+
+### Dictamen visual
+
+**12W-3b queda GO visual para Nuevo Lead:** la pantalla recibe el snapshot `leadFields` en código sin cambiar la UI ni el payload esperado en esta fase. Pipeline, rubros y próxima acción en modo legacy **no** cuentan como regresión frente al alcance acordado.
 
 ---
 
@@ -119,20 +174,20 @@ npm run build
 
 ---
 
-## 10. Checklist visual pendiente Vercel
+## 10. Checklist visual Vercel
 
-Validar en deploy con commit 12W-3b:
+Validado en deploy `pickup4x4-crm-demo` — commit `c56259f` (2026-05-19). Detalle en sección **Validación visual Vercel**.
 
-- [ ] `/admin/leads/nuevo` carga sin error
-- [ ] Formulario se ve **igual** que antes
-- [ ] Campos actuales siguen visibles (nombre, contacto, pipeline, comercial, notas, …)
-- [ ] **No** aparecen campos Vehículo / Kore nuevos
-- [ ] Comercial obligatorio sigue funcionando
-- [ ] Pipeline y seguimiento inicial intactos
-- [ ] Guardar lead sigue redirigiendo a ficha
-- [ ] Ficha lead no regresó (12W-2b intacto)
-- [ ] Inspección DOM: `data-crm-package-lead-fields-source=contract` en demo Pickup
-- [ ] Sin error visual en consola (muestreo)
+- [x] `/admin/leads/nuevo` carga sin error
+- [x] Formulario se ve **igual** que antes
+- [x] Campos actuales siguen visibles (nombre, contacto, teléfono, email, origen, producto/servicio, pipeline, seguimiento, comercial, rubro, dirección, fechas, notas)
+- [x] **No** aparecen campos Vehículo / Kore nuevos
+- [x] Comercial visible (obligatorio en UI; guardado no ejercido en captura)
+- [x] Pipeline y seguimiento inicial intactos (valores legacy — esperado)
+- [ ] Guardar lead sigue redirigiendo a ficha — no validado en captura
+- [ ] Ficha lead no regresó (12W-2b intacto) — fuera de captura
+- [ ] Inspección DOM: `data-crm-package-lead-fields-source=contract` y `count=25` en demo Pickup — **pendiente técnico opcional**
+- [x] Sin error visual evidente en captura (consola no revisada)
 
 ---
 
@@ -159,4 +214,5 @@ Validar en deploy con commit 12W-3b:
 | `nuevo/page.tsx` sin import loader | Sí |
 | Sin commits en esta pasada | Según instrucción de sesión |
 
-**Dictamen técnico local:** GO wiring preparatorio. **Dictamen visual producto:** pendiente checklist §10 en Vercel.
+**Dictamen técnico local:** GO wiring preparatorio (`npm run build` OK).  
+**Dictamen visual producto:** GO — validación Vercel 2026-05-19 (commit `c56259f`); Nuevo Lead recibe snapshot sin cambio de UI ni payload en esta fase. Pipeline / rubros / próxima acción legacy son comportamiento esperado, no regresión. Inspección DOM `data-*` opcional pendiente.
