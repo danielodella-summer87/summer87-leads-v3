@@ -4,7 +4,7 @@
 **Plan origen:** `plan-correccion-ux-copy-pickup4x4-client-crm-12S-ux-fix-plan.md`  
 **Auditoría origen:** `auditoria-ui-copy-heredado-pickup4x4-client-crm-12S-ux-audit.md`
 
-**Estado validación documental:** build local OK; **validación visual final en Vercel OK para superficies Leads principales** (commit `4221ade`, §10).
+**Estado validación documental:** build local OK; **validación visual final en Vercel OK para superficies Leads principales** (commit `4221ade`, §10); **smoke de seguridad post-fix OK** (§11, 2026-05-18).
 
 ---
 
@@ -157,11 +157,11 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` (`APP_MODE=client_crm`).
 - [ ] Reporte Comercial → Leads 12/12 + CSV
 - [ ] Crear lead Demo de prueba (smoke)
 
-### Seguridad (smoke recomendado post-deploy)
+### Seguridad (smoke post-deploy)
 
-- [ ] Constructor / Configuración → 403
-- [ ] APIs críticas 8/8 → 403
-- [ ] `permissions/me` flags internas `false`
+- [ ] Constructor / Configuración → 403 (navegación UI — no revalidado en §11)
+- [x] APIs críticas 8/8 → 403 (§11, DevTools)
+- [x] `permissions/me` status 200; flags internas en `false` (§11)
 
 ---
 
@@ -183,15 +183,16 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` (`APP_MODE=client_crm`).
 
 > **GO técnico de implementación** (build OK, alcance acotado al plan).  
 > **GO visual** para superficies Leads principales en Vercel (`4221ade`, §10).  
-> Demo comercial **pulida en nuevo lead / lista / ficha**; ítems de fase 2 y smoke extendido siguen pendientes (§10).
+> **GO seguridad** post-fix: hardening `client_crm` se mantiene (APIs críticas 8/8 → 403, flags internas `false`, §11).  
+> Demo comercial **pulida en nuevo lead / lista / ficha**; ítems de fase 2 y regresión funcional extendida siguen pendientes (§6, §10).
 
 ---
 
 ## 9. Próximo paso
 
 1. ~~Desplegar a Vercel demo y completar checklist copy/UI Leads~~ ✅ §10.
-2. Opcional: revalidar Agenda, tooltip proceso comercial y regresión funcional (§6).
-3. Opcional: smoke 403 post-fix (seguridad).
+2. ~~Smoke 403 post-fix (APIs críticas + `permissions/me`)~~ ✅ §11.
+3. Opcional: revalidar Agenda, tooltip proceso comercial, regresión funcional y 403 navegación Constructor (§6).
 4. Fase 2: UXFIX-10 (dashboard LEADS87), UXFIX-12 (tabs), bloque Datos de Iniciativa, white-label Pickup 4x4.
 
 ---
@@ -261,7 +262,7 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` (`APP_MODE=client_crm`).
 | Tabs Técnico / Consultor | UXFIX-12 — fase posterior |
 | Bloque «Datos de Iniciativa» | Fase 2 — acordeón ficha |
 | White-label Pickup 4x4 | Branding / personalización — no cubierto por este fix |
-| Smoke 403 post-fix | Opcional — revalidar Constructor, APIs críticas, `permissions/me` |
+| Smoke 403 APIs + `permissions/me` | ✅ §11 — Constructor UI no revalidado en esta pasada |
 | Agenda copy | No inspeccionada en esta pasada visual |
 | Regresión: CSV, crear lead, dashboard | Checklist §6 — pendiente |
 
@@ -278,4 +279,82 @@ Entorno: `https://pickup4x4-crm-demo.vercel.app` (`APP_MODE=client_crm`).
 
 ---
 
-*12S-ux-fix-impl-1V — registro post-implementación y validación visual Vercel 2026-05-18.*
+## 11. Smoke de seguridad post-fix
+
+| Campo | Valor |
+|-------|--------|
+| **Fecha** | 2026-05-18 |
+| **Entorno** | Vercel production — `pickup4x4-crm-demo` |
+| **URL sesión** | https://pickup4x4-crm-demo.vercel.app/admin/dashboard |
+| **Usuario** | Daniel (sesión activa) |
+| **Commit funcional validado** | `4221ade` — *Polish residual client CRM lead copy* |
+| **Documentación posterior** | `0bef754` (registro validación visual §10) |
+| **Método** | DevTools — llamadas manuales con sesión `client_crm` |
+
+### Resultado agregado
+
+| Criterio | Resultado |
+|----------|-----------|
+| APIs críticas | **8 / 8 → 403** |
+| APIs sensibles con 200/201 | **Ninguna** |
+| `GET /api/admin/permissions/me` | **200** (esperado para sesión operativa) |
+| Flags de permisos internos | **Todas `false`** (ver tabla) |
+
+### APIs críticas
+
+| Método | Endpoint | Status |
+|--------|----------|--------|
+| GET | `/api/admin/config/roles` | 403 |
+| GET | `/api/admin/config/usuarios` | 403 |
+| GET | `/api/admin/users` | 403 |
+| POST | `/api/admin/config/reset-db` | 403 |
+| GET | `/api/admin/setup/minimal-seed` | 403 |
+| POST | `/api/admin/modules/initialize` | 403 |
+| POST | `/api/admin/config/usuarios/act-as` | 403 |
+| POST | `/api/admin/users/delete` | 403 |
+
+### `permissions/me`
+
+| Campo | Valor observado |
+|-------|-----------------|
+| HTTP status | 200 |
+| `has_system_danger` | `false` |
+| `has_config_admin` | `false` |
+| `has_config_update` | `false` |
+| `has_config_read` | `false` |
+| `has_constructor` | `false` |
+| `has_roles` | `false` |
+| `has_users` | `false` |
+
+### Dictamen
+
+**OK** — La seguridad de `client_crm` **se mantiene correcta post-fix** 12S-ux-fix-impl-1.
+
+Los cambios de UX/copy **no reabrieron** rutas ni permisos internos: las APIs críticas siguen respondiendo **403** y el usuario demo no obtiene flags de administración/constructor.
+
+### Pendientes fuera de alcance (sin cambio)
+
+| Ítem | Nota |
+|------|------|
+| Dashboard LEADS87 | UXFIX-10 — fase posterior |
+| Tabs Técnico / Consultor | UXFIX-12 — fase posterior |
+| Bloque «Datos de Iniciativa» | Fase 2 |
+| White-label Pickup 4x4 | Branding — no cubierto por este fix |
+| 403 navegación Constructor / Configuración (UI) | No inspeccionado en §11 — solo APIs vía DevTools |
+| Agenda copy, regresión CSV/crear lead | §6 — pendiente |
+
+### Confirmación de esta validación (solo documental)
+
+| Ítem | Estado |
+|------|--------|
+| SQL ejecutado | ❌ No |
+| Supabase directo | ❌ No |
+| Datos modificados | ❌ No |
+| Nuevas migraciones | ❌ No |
+| APIs modificadas | ❌ No |
+| Middleware modificado | ❌ No |
+| Código funcional modificado en esta pasada | ❌ No — solo este `.md` |
+
+---
+
+*12S-ux-fix-impl-1V — registro post-implementación, validación visual Vercel y smoke seguridad post-fix — 2026-05-18.*
