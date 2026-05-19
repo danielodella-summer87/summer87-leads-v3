@@ -15,23 +15,43 @@ const LEGACY_LEAD_DETAIL_VISIBILITY: LeadDetailVisibilitySnapshot = {
   source: "legacy",
 };
 
+/** Snapshot serializable de lead_fields (12W-3b); calculado en layout server. */
+export type LeadFieldsSnapshot = {
+  groups: {
+    group: string;
+    fields: string[];
+  }[];
+  allFields: string[];
+  source: "contract" | "legacy";
+};
+
+export const LEGACY_LEAD_FIELDS: LeadFieldsSnapshot = {
+  groups: [],
+  allFields: [],
+  source: "legacy",
+};
+
 type LeadsClientCrmContextValue = {
   isClientCrm: boolean;
   leadDetailVisibility: LeadDetailVisibilitySnapshot;
+  leadFields: LeadFieldsSnapshot;
 };
 
 const LeadsClientCrmContext = createContext<LeadsClientCrmContextValue>({
   isClientCrm: false,
   leadDetailVisibility: LEGACY_LEAD_DETAIL_VISIBILITY,
+  leadFields: LEGACY_LEAD_FIELDS,
 });
 
 export function LeadsClientCrmProvider({
   isClientCrm,
   leadDetailVisibility,
+  leadFields,
   children,
 }: {
   isClientCrm: boolean;
   leadDetailVisibility?: LeadDetailVisibilitySnapshot;
+  leadFields?: LeadFieldsSnapshot;
   children: React.ReactNode;
 }) {
   return (
@@ -39,6 +59,7 @@ export function LeadsClientCrmProvider({
       value={{
         isClientCrm,
         leadDetailVisibility: leadDetailVisibility ?? LEGACY_LEAD_DETAIL_VISIBILITY,
+        leadFields: leadFields ?? LEGACY_LEAD_FIELDS,
       }}
     >
       {children}
@@ -54,4 +75,9 @@ export function useLeadsClientCrmMode(): boolean {
 /** Reglas de visibilidad ficha desde contrato activo o legacy (12W-2b). */
 export function useLeadDetailVisibility(): LeadDetailVisibilitySnapshot {
   return useContext(LeadsClientCrmContext).leadDetailVisibility;
+}
+
+/** Grupos/campos lead_fields desde contrato activo o legacy (12W-3b). */
+export function useLeadFieldsConfig(): LeadFieldsSnapshot {
+  return useContext(LeadsClientCrmContext).leadFields;
 }

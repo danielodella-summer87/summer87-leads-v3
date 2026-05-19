@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import RubroSelect from "@/app/admin/empresas/RubroSelect";
-import { useLeadsClientCrmMode } from "@/app/admin/leads/LeadsClientCrmContext";
+import {
+  useLeadFieldsConfig,
+  useLeadsClientCrmMode,
+} from "@/app/admin/leads/LeadsClientCrmContext";
 
 type PipelineRow = {
   id: string;
@@ -116,6 +119,8 @@ function normDateTimeLocal(v: string): string | null {
 export default function NuevoLeadPage() {
   const router = useRouter();
   const isClientCrmUi = useLeadsClientCrmMode();
+  // 12W-3b: snapshot contrato disponible; formulario legacy y payload POST sin cambios hasta 12W-3c/12W-4.
+  const leadFields = useLeadFieldsConfig();
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,7 +290,11 @@ export default function NuevoLeadPage() {
 
   return (
     <PageContainer>
-      <div className="rounded-2xl border bg-white p-6">
+      <div
+        className="rounded-2xl border bg-white p-6"
+        data-crm-package-lead-fields-source={leadFields.source}
+        data-crm-package-lead-fields-count={leadFields.allFields.length}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Nuevo lead</h1>

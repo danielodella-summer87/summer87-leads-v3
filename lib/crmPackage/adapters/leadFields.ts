@@ -1,6 +1,6 @@
 /**
  * Adapter: lead_fields.groups[] → configuración consumible por formularios (12W-3).
- * No importar desde app/admin hasta 12W-3b (integración fallback-safe).
+ * Consumido vía snapshot en LeadsClientCrmContext (12W-3b); sin render de campos en formulario hasta 12W-3c+.
  */
 
 import type { CrmPackageConfig } from "../types";
