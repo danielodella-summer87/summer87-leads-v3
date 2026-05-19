@@ -27,7 +27,14 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { List, LayoutGrid, FileText, Search, Share2, Megaphone, Target, Compass, Star, Wrench, Lightbulb } from "lucide-react";
 import { useSetBreadcrumbSegment } from "@/app/admin/context/BreadcrumbContext";
-import { useLeadsClientCrmMode } from "@/app/admin/leads/LeadsClientCrmContext";
+import {
+  useLeadDetailVisibility,
+  useLeadsClientCrmMode,
+} from "@/app/admin/leads/LeadsClientCrmContext";
+import {
+  isLeadDetailBlockHidden,
+  isLeadDetailTabHidden,
+} from "@/lib/crmPackage/adapters/leadDetailVisibility";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_LABELS, fetchLabels, type Labels } from "@/lib/labels";
@@ -849,6 +856,7 @@ function getVisibleLeadTabs(role: string | null): ReadonlyArray<(typeof LEAD_TAB
 export default function LeadDetailPage() {
   const router = useRouter();
   const isClientCrmUi = useLeadsClientCrmMode();
+  const leadDetailVisibility = useLeadDetailVisibility();
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -989,15 +997,19 @@ export default function LeadDetailPage() {
     }
   }
 
-  // ✅ Tabs (por rol); en client_crm ocultar Técnico/Consultor incluso para admin (12U-2)
+  // ✅ Tabs (por rol); client_crm: 12U-2 + contrato visibility_rules.lead_detail (12W-2b)
   const [activeTab, setActiveTab] = useState<LeadTabId>("datos");
+  const shouldHideLeadTab = (tabId: LeadTabId): boolean => {
+    if (isClientCrmUi && (tabId === "tecnico" || tabId === "consultor")) return true;
+    return isLeadDetailTabHidden(leadDetailVisibility, tabId);
+  };
+  const hideIniciativaSurfaces =
+    isClientCrmUi || isLeadDetailBlockHidden(leadDetailVisibility, "iniciativa_link");
+  const hideConsultorSurfaces = shouldHideLeadTab("consultor");
   const visibleTabs = useMemo(() => {
     const tabs = getVisibleLeadTabs(role);
-    if (isClientCrmUi) {
-      return tabs.filter((t) => t.id !== "tecnico" && t.id !== "consultor");
-    }
-    return tabs;
-  }, [role, isClientCrmUi]);
+    return tabs.filter((t) => !shouldHideLeadTab(t.id));
+  }, [role, isClientCrmUi, leadDetailVisibility]);
   const visibleTabIds = useMemo(() => visibleTabs.map((t) => t.id), [visibleTabs]);
   /** Tabs que se muestran en la barra inferior (solo áreas de trabajo); Contactos y Acciones están en la cabecera. */
   const workAreaTabs = useMemo(
@@ -3442,7 +3454,7 @@ export default function LeadDetailPage() {
               >
                 Meet asistido
               </button>
-              {!isClientCrmUi ? (
+              {!hideConsultorSurfaces ? (
               <button
                 type="button"
                 onClick={() => id && router.push(`/admin/leads/${id}?tab=consultor&section=services-proposal`)}
@@ -3776,9 +3788,7 @@ export default function LeadDetailPage() {
                                       </Link>
                                     )
                                   ) : null}
-                                  {!isPresentacion &&
-                                  (!isClientCrmUi ||
-                                    (display.tab !== "consultor" && display.tab !== "tecnico")) ? (
+                                  {!isPresentacion && !shouldHideLeadTab(display.tab as LeadTabId) ? (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -3858,8 +3868,8 @@ export default function LeadDetailPage() {
             </div>
           )}
 
-          {/* Warning si no está vinculado a empresa (oculto en client_crm — 12U-1) */}
-          {!isClientCrmUi && !hasIniciativaVinculada && activeTab === "datos" && (
+          {/* Warning si no está vinculado a empresa (oculto client_crm / contrato — 12U-1, 12W-2b) */}
+          {!hideIniciativaSurfaces && !hasIniciativaVinculada && activeTab === "datos" && (
             <div className="mt-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -4006,7 +4016,7 @@ export default function LeadDetailPage() {
                     </div>
                   </div>
                 </div>
-                {!isClientCrmUi ? (
+                {!hideIniciativaSurfaces ? (
                 <>
                 <div className="text-xs font-semibold text-slate-500 mt-6 mb-3">Datos de Iniciativa</div>
                 <div className="mt-3 space-y-3">
@@ -4281,7 +4291,7 @@ export default function LeadDetailPage() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <div className="text-xs text-slate-500">Website</div>
-                      {!isClientCrmUi && editing && !lead?.website?.trim() && lead?.empresas?.web?.trim() && (
+                      {!hideIniciativaSurfaces && editing && !lead?.website?.trim() && lead?.empresas?.web?.trim() && (
                         <button
                           type="button"
                           onClick={async () => {
@@ -5081,7 +5091,7 @@ export default function LeadDetailPage() {
                         </span>
                       </Tooltip>
                     )}
-                    {currentStep === 4 && id && !isClientCrmUi && (
+                    {currentStep === 4 && id && !hideConsultorSurfaces && (
                       <Tooltip content="Lleva al tab Consultor para definir la tabla de servicios, alcance y costos. Es la base económica de la propuesta comercial." maxWidth="320px">
                         <span className="inline-block">
                           <button
@@ -5151,7 +5161,7 @@ export default function LeadDetailPage() {
                             {nextStepConfig.ctaLabel}
                           </button>
                         )}
-                        {!isClientCrmUi ? (
+                        {!hideConsultorSurfaces ? (
                         <button
                           type="button"
                           onClick={() => router.push(`/admin/leads/${id}?tab=consultor&section=proposal-export`)}
