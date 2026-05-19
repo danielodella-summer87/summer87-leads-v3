@@ -4,7 +4,7 @@
 **Plan origen:** `plan-correccion-dashboard-pickup4x4-client-crm-12T-ux-fix-plan.md`  
 **Auditoría origen:** `auditoria-dashboard-reportes-shell-pickup4x4-client-crm-12T-ux-audit.md`
 
-**Estado validación:** build local **OK**; **validación visual final en Vercel OK** (§10, 2026-05-18).
+**Estado validación:** build local **OK**; **validación visual final en Vercel OK** (§10, 2026-05-18); **smoke de seguridad post-12T OK** (§11, 2026-05-18).
 
 **Commit funcional validado:** `729410d` — *Neutralize dashboard LEADS87 copy*
 
@@ -100,16 +100,17 @@ Los ítems de copy y carga del dashboard quedaron **validados en Vercel** (§10)
 - [ ] **Leads** — 12 leads Demo visibles en **lista** `/admin/leads` (no revalidado explícitamente post-729410d)
 - [ ] **Reportes → Comercial → Leads** — 12/12 + export CSV (no revalidado en esta pasada)
 
-### Seguridad (opcional)
+### Seguridad
 
-- [ ] Smoke 403 APIs críticas en `client_crm` (paridad 12S-1V; opcional)
+- [x] Smoke 403 APIs críticas en `client_crm` — ✅ §11 (2026-05-18, post-`729410d`)
 
 ---
 
 ## 9. Dictamen
 
 > **GO técnico impl-1** — build OK, diff acotado a copy, sin `LEADS87` en strings del directorio dashboard.  
-> **GO visual para Dashboard post 12T-ux-fix-impl-1** — validación Vercel §10 (commit `729410d`, deploy Ready / Current).
+> **GO visual para Dashboard post 12T-ux-fix-impl-1** — validación Vercel §10 (commit `729410d`, deploy Ready / Current).  
+> **GO seguridad post-12T** — smoke 403 §11: hardening `client_crm` se mantiene; el fix de copy del dashboard **no** reabrió rutas ni permisos internos.
 
 ---
 
@@ -150,17 +151,79 @@ Los ítems de copy y carga del dashboard quedaron **validados en Vercel** (§10)
 | Tabs Técnico / Consultor (ficha lead) | Fase posterior |
 | Bloque **Datos de Iniciativa** (ficha lead) | Fase posterior |
 | Reportes hub «próximamente» | Tolerable; sin cambio 12T |
-| Smoke 403 post-deploy | Opcional; paridad 12S-1V |
 
-### Confirmación de esta actualización documental
+### Confirmación de actualización documental (§10)
 
 | Ítem | Estado |
 |------|--------|
-| Código funcional modificado en esta pasada | ❌ No — solo este `.md` |
+| Código funcional modificado | ❌ No — solo este `.md` |
+| SQL / Supabase / datos | ❌ No |
+| APIs / migraciones / middleware | ❌ No |
+| Commit desde esa pasada | ❌ No |
+
+---
+
+## 11. Smoke de seguridad post-12T
+
+Verificación de que el deploy **729410d** (solo copy dashboard) **no** degradó el hardening `client_crm`. Método: DevTools con sesión activa en producción Vercel.
+
+| Campo | Valor |
+|-------|--------|
+| **Fecha** | 2026-05-18 |
+| **Entorno** | Vercel production — `pickup4x4-crm-demo` |
+| **URL sesión** | https://pickup4x4-crm-demo.vercel.app/admin/dashboard |
+| **Usuario** | Daniel (sesión activa) |
+| **Commit funcional validado** | `729410d` — *Neutralize dashboard LEADS87 copy* |
+| **Método** | Llamadas manuales DevTools con sesión `client_crm` |
+
+### Resultado agregado
+
+| Criterio | Resultado |
+|----------|-----------|
+| APIs críticas | **8 / 8 → 403** |
+| APIs sensibles con 200/201 | **Ninguna** |
+| `GET /api/admin/permissions/me` | **200** (esperado para sesión operativa) |
+| Flags de permisos internos | **Todas `false`** (ver tabla) |
+
+### APIs críticas
+
+| Método | Endpoint | Status |
+|--------|----------|--------|
+| GET | `/api/admin/config/roles` | 403 |
+| GET | `/api/admin/config/usuarios` | 403 |
+| GET | `/api/admin/users` | 403 |
+| POST | `/api/admin/config/reset-db` | 403 |
+| GET | `/api/admin/setup/minimal-seed` | 403 |
+| POST | `/api/admin/modules/initialize` | 403 |
+| POST | `/api/admin/config/usuarios/act-as` | 403 |
+| POST | `/api/admin/users/delete` | 403 |
+
+### `permissions/me`
+
+| Campo / flag | Valor observado |
+|--------------|-----------------|
+| HTTP status | **200** |
+| `has_system_danger` | `false` |
+| `has_config_admin` | `false` |
+| `has_config_update` | `false` |
+| `has_config_read` | `false` |
+| `has_constructor` | `false` |
+| `has_roles` | `false` |
+| `has_users` | `false` |
+
+### Dictamen seguridad
+
+**OK** — La seguridad **`client_crm` se mantiene** tras **12T-ux-fix-impl-1**. Los cambios de copy del Dashboard **no** modificaron middleware, rutas admin internas ni políticas de API; no se observó reapertura de endpoints críticos.
+
+### Confirmación de esta actualización documental (§11)
+
+| Ítem | Estado |
+|------|--------|
+| Código funcional modificado | ❌ No — solo este `.md` |
 | SQL / Supabase / datos | ❌ No |
 | APIs / migraciones / middleware | ❌ No |
 | Commit desde esta pasada | ❌ No |
 
 ---
 
-*Validación 12T-ux-fix-impl-1V — copy dashboard neutralizado y verificado en Vercel production (`729410d`).*
+*Validación 12T-ux-fix-impl-1V — copy dashboard neutralizado (§10) y hardening verificado post-deploy (`729410d`, §11).*
