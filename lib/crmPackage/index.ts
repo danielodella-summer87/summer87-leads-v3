@@ -1,6 +1,6 @@
 /**
- * Paquete crm_package_config v1 — tipos y demo local (12V-2).
- * Loader y adapters: fase 12W (no exportados aquí).
+ * Paquete crm_package_config v1 — tipos, demo local (12V-2) y loader (12W-1).
+ * Adapters y provider UI: fases 12W-2+ (no conectar pantallas desde aquí).
  */
 
 export type {
@@ -38,3 +38,11 @@ export {
   validateCrmPackageConfigShape,
   type CrmPackageValidationResult,
 } from "./validate";
+
+export {
+  getActiveCrmPackageConfig,
+  getActiveCrmPackageConfigFromEnvironment,
+  type GetActiveCrmPackageConfigOptions,
+  type ActiveCrmPackageConfigResult,
+  type ActiveCrmPackageConfigSource,
+} from "./getActiveCrmPackageConfig";
