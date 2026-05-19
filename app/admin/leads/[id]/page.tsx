@@ -3848,8 +3848,8 @@ export default function LeadDetailPage() {
             </div>
           )}
 
-          {/* Warning si no está vinculado a empresa */}
-          {!hasIniciativaVinculada && activeTab === "datos" && (
+          {/* Warning si no está vinculado a empresa (oculto en client_crm — 12U-1) */}
+          {!isClientCrmUi && !hasIniciativaVinculada && activeTab === "datos" && (
             <div className="mt-4 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -3996,6 +3996,8 @@ export default function LeadDetailPage() {
                     </div>
                   </div>
                 </div>
+                {!isClientCrmUi ? (
+                <>
                 <div className="text-xs font-semibold text-slate-500 mt-6 mb-3">Datos de Iniciativa</div>
                 <div className="mt-3 space-y-3">
                   <Field
@@ -4103,6 +4105,8 @@ export default function LeadDetailPage() {
                     />
                   )}
                 </div>
+                </>
+                ) : null}
                 </div>
                 )}
               </div>
@@ -4267,7 +4271,7 @@ export default function LeadDetailPage() {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <div className="text-xs text-slate-500">Website</div>
-                      {editing && !lead?.website?.trim() && lead?.empresas?.web?.trim() && (
+                      {!isClientCrmUi && editing && !lead?.website?.trim() && lead?.empresas?.web?.trim() && (
                         <button
                           type="button"
                           onClick={async () => {
