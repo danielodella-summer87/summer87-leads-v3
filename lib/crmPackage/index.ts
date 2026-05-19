@@ -68,3 +68,15 @@ export {
   type LeadFieldsAdapterConfig,
   type LeadFieldsAdapterSource,
 } from "./adapters/leadFields";
+
+export {
+  packageToPipelineStages,
+  getPipelineStageKeys,
+  isPipelineStageEnabled,
+  getPipelineStageByKey,
+  getTerminalPipelineStages,
+  type PipelineStageTerminal,
+  type PipelineStageConfig,
+  type PipelineStagesAdapterConfig,
+  type PipelineStagesAdapterSource,
+} from "./adapters/pipelineStages";
