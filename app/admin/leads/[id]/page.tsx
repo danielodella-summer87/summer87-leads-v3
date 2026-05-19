@@ -989,9 +989,15 @@ export default function LeadDetailPage() {
     }
   }
 
-  // ✅ Tabs (por rol)
+  // ✅ Tabs (por rol); en client_crm ocultar Técnico/Consultor incluso para admin (12U-2)
   const [activeTab, setActiveTab] = useState<LeadTabId>("datos");
-  const visibleTabs = useMemo(() => getVisibleLeadTabs(role), [role]);
+  const visibleTabs = useMemo(() => {
+    const tabs = getVisibleLeadTabs(role);
+    if (isClientCrmUi) {
+      return tabs.filter((t) => t.id !== "tecnico" && t.id !== "consultor");
+    }
+    return tabs;
+  }, [role, isClientCrmUi]);
   const visibleTabIds = useMemo(() => visibleTabs.map((t) => t.id), [visibleTabs]);
   /** Tabs que se muestran en la barra inferior (solo áreas de trabajo); Contactos y Acciones están en la cabecera. */
   const workAreaTabs = useMemo(
@@ -3436,6 +3442,7 @@ export default function LeadDetailPage() {
               >
                 Meet asistido
               </button>
+              {!isClientCrmUi ? (
               <button
                 type="button"
                 onClick={() => id && router.push(`/admin/leads/${id}?tab=consultor&section=services-proposal`)}
@@ -3454,6 +3461,7 @@ export default function LeadDetailPage() {
               >
                 Propuesta comercial
               </button>
+              ) : null}
               {visibleTabIds.includes("contactos") && (
                 <button
                   type="button"
@@ -3768,7 +3776,9 @@ export default function LeadDetailPage() {
                                       </Link>
                                     )
                                   ) : null}
-                                  {!isPresentacion ? (
+                                  {!isPresentacion &&
+                                  (!isClientCrmUi ||
+                                    (display.tab !== "consultor" && display.tab !== "tecnico")) ? (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -5071,7 +5081,7 @@ export default function LeadDetailPage() {
                         </span>
                       </Tooltip>
                     )}
-                    {currentStep === 4 && id && (
+                    {currentStep === 4 && id && !isClientCrmUi && (
                       <Tooltip content="Lleva al tab Consultor para definir la tabla de servicios, alcance y costos. Es la base económica de la propuesta comercial." maxWidth="320px">
                         <span className="inline-block">
                           <button
@@ -5141,6 +5151,7 @@ export default function LeadDetailPage() {
                             {nextStepConfig.ctaLabel}
                           </button>
                         )}
+                        {!isClientCrmUi ? (
                         <button
                           type="button"
                           onClick={() => router.push(`/admin/leads/${id}?tab=consultor&section=proposal-export`)}
@@ -5148,6 +5159,7 @@ export default function LeadDetailPage() {
                         >
                           Abrir Consultor — propuesta
                         </button>
+                        ) : null}
                       </span>
                     )}
                   </div>
