@@ -47,7 +47,7 @@ const NEXT_ACTIVITY_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
   { label: "Contactar por WhatsApp", value: "whatsapp" },
   { label: "Llamar", value: "call" },
   { label: "Enviar cotización", value: "proposal" },
-  { label: "Coordinar visita", value: "meeting" },
+  { label: "Coordinar reunión", value: "meeting" },
   { label: "Consultar stock", value: "email" },
   { label: "Hacer seguimiento", value: "followup" },
   { label: "Otro", value: "followup" },
@@ -342,7 +342,7 @@ export default function NuevoLeadPage() {
               className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 disabled:opacity-50"
             />
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-              Ayuda a identificar qué busca el prospecto y luego ordenar reportes por demanda.
+              Ayuda a identificar qué busca el contacto y luego ordenar reportes por demanda.
             </p>
           </div>
 
@@ -483,7 +483,7 @@ export default function NuevoLeadPage() {
             <Input label="Dirección" value={direccion} onChange={setDireccion} disabled={saving} />
 
             <Input
-              label="Fecha de revisión / visita"
+              label="Fecha de revisión o seguimiento"
               value={visitaScheduledAt}
               onChange={setVisitaScheduledAt}
               disabled={saving}

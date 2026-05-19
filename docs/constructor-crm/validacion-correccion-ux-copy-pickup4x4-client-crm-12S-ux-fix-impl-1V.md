@@ -4,7 +4,7 @@
 **Plan origen:** `plan-correccion-ux-copy-pickup4x4-client-crm-12S-ux-fix-plan.md`  
 **Auditoría origen:** `auditoria-ui-copy-heredado-pickup4x4-client-crm-12S-ux-audit.md`
 
-**Estado validación documental:** build local OK tras parche residual; **revalidación visual final en Vercel pendiente** (checklist §5–§6).
+**Estado validación documental:** build local OK tras parche final de copy; **revalidación visual final en Vercel pendiente** (checklist §6).
 
 ---
 
@@ -29,7 +29,7 @@ Se aplicó la corrección mínima **12S-ux-fix-impl-1** para que la demo `client
 | `app/admin/leads/LeadsClientCrmContext.tsx` | **Creado** — contexto `useLeadsClientCrmMode()` |
 | `app/admin/leads/layout.tsx` | **Creado** — provee `isClientCrm` desde `getAppModeSnapshot()` |
 | `app/admin/leads/nuevo/page.tsx` | Copy + ocultar personal/superficie en client_crm |
-| `app/admin/leads/[id]/page.tsx` | Ocultar bloque «Relevamiento de visita» en client_crm |
+| `app/admin/leads/[id]/page.tsx` | Ocultar relevamiento en client_crm; parche copy (acordeón, proceso, producto) |
 | `app/admin/leads/page.tsx` | Eliminar columna «Pipeline (DEBUG)» |
 | `app/admin/agenda/page.tsx` | Subtítulo genérico actividades comerciales |
 | `lib/leads/leadFlow.ts` | Labels, descripciones y `getLeadNextAction` neutros |
@@ -53,7 +53,7 @@ Se aplicó la corrección mínima **12S-ux-fix-impl-1** para que la demo `client
 | UXFIX-08 | Agenda: leads y actividades comerciales | ✅ |
 | UXFIX-09 | Columna Pipeline (DEBUG) eliminada | ✅ |
 | UXFIX-10 | Dashboard LEADS87 | ⬜ Fase posterior (sin cambio) |
-| UXFIX-11 | «Datos del prospecto» → «Datos del lead» (flujo) | ✅ vía `leadFlow.ts` |
+| UXFIX-11 | «Datos del prospecto» → «Datos del lead» (acordeón ficha + flujo) | ✅ |
 | UXFIX-12 | Tabs Técnico/Consultor | ⬜ Fase posterior |
 
 ### Parche residual (post-validación Vercel)
@@ -63,6 +63,44 @@ Se aplicó la corrección mínima **12S-ux-fix-impl-1** para que la demo `client
 | **Siguiente paso recomendado** — paso `datos` | Texto y checklist sin prospecto / superficie / visita (`NEXT_STEP_CONFIG` en `[id]/page.tsx`) | ✅ Código |
 | **Siguiente paso recomendado** — paso `investigacion` | Copy de revisión/seguimiento (mismo objeto de config) | ✅ Código |
 | Revalidación visual ficha Demo | Confirmar bloque en runtime Vercel | ⬜ Pendiente |
+
+### Parche final de copy residual
+
+| Ítem | Detalle | Estado |
+|------|---------|--------|
+| Acordeón ficha | «Datos del prospecto» → **«Datos del lead»** (`[id]/page.tsx`) | ✅ Código |
+| Producto / servicio | Helper «informada por el lead»; placeholder Pickup 4x4 (sin limpieza) | ✅ Código |
+| Proceso comercial | Tooltip y subtítulo sin prospecto / visita / costeo | ✅ Código |
+| «Después de esto sigue» (paso 1) | Sin relevamiento técnico / costeo; copy de cotización | ✅ Código |
+| Informe evaluación (tab Consultor) | «prospecto» → «lead» en descripciones | ✅ Código |
+| Actividades | «Reunión / visita» → «Reunión / seguimiento» | ✅ Código |
+| Nuevo lead | Helper «contacto»; «Coordinar reunión»; label fecha sin «visita» | ✅ Código |
+| IA — hint informe | «comunicación con el lead» | ✅ Código |
+
+**Búsqueda final de términos visibles (client_crm):**
+
+| Término | Resultado |
+|---------|-----------|
+| Casalimpia | No en código Leads UI |
+| Pipeline DEBUG | Eliminado (lista) |
+| Relevamiento de visita / Servicios especiales | Ocultos con `{!isClientCrmUi ? (…)}` (~L4506) |
+| personal / superficie (nuevo lead) | Ocultos con `{!isClientCrmUi ? (…)}` |
+| prospecto / limpieza / visita (ficha datos) | Corregidos en parche final |
+| prospecto / visita / costeo (Siguiente paso) | Ya neutralizados (parche residual) |
+
+**Pendiente fuera de alcance (no modificado):**
+
+- Copy facility dentro del bloque «Relevamiento de visita» (solo visible en modo interno / `constructor_base`).
+- Dashboard `CommercialFlowKpis` LEADS87 (UXFIX-10).
+- Tabs Técnico / Consultor para rol comercial (UXFIX-12).
+- Bloque «Datos de Iniciativa» en acordeón (fase 2).
+- Variables/columnas BD (`visita_*`, `superficie_m2`, etc.) — sin cambio.
+
+| Build | Resultado |
+|-------|-----------|
+| `npm run build` (parche final) | ✅ **OK** (§5) |
+
+| Revalidación visual Vercel | ⬜ Pendiente post-deploy |
 
 ---
 
@@ -87,6 +125,7 @@ Se aplicó la corrección mínima **12S-ux-fix-impl-1** para que la demo `client
 |---------|-----------|
 | `npm run build` (impl-1 inicial) | ✅ **OK** (Next.js 16, compilación y TypeScript sin error) |
 | `npm run build` (parche residual) | ✅ **OK** |
+| `npm run build` (parche final copy) | ✅ **OK** |
 
 ---
 
@@ -98,8 +137,11 @@ Ejecutar con `APP_MODE=client_crm` en `https://pickup4x4-crm-demo.vercel.app` (o
 
 - [ ] **Nuevo lead:** título «Datos operativos del lead» (no Casalimpia)
 - [ ] **Nuevo lead:** no aparecen personal ni superficie m²
-- [ ] **Nuevo lead:** label «Fecha de revisión / visita»
+- [ ] **Nuevo lead:** label «Fecha de revisión o seguimiento» (sin «visita»)
+- [ ] **Ficha lead:** acordeón «Datos del lead» (no «Datos del prospecto»)
 - [ ] **Ficha lead:** no aparece bloque «Relevamiento de visita»
+- [ ] **Ficha lead:** placeholder producto Pickup 4x4; sin «limpieza» en helper
+- [ ] **Ficha lead:** tooltip proceso comercial sin prospecto/visita/costeo
 - [ ] **Lista leads:** sin columna «Pipeline (DEBUG)»; etapa sigue en badge del nombre
 - [ ] **Flujo lista/ficha:** sin texto «servicios de limpieza»; pasos Revisión / Cotización si aplica
 - [ ] **Ficha — Siguiente paso recomendado (paso datos):** sin prospecto, superficie ni visita en descripción/checklist

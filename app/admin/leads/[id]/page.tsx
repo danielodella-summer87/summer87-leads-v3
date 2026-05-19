@@ -353,7 +353,7 @@ function pilotActivityTypeLabel(raw?: string | null): string {
     whatsapp: "WhatsApp",
     call: "Llamada",
     proposal: "Enviar cotización",
-    meeting: "Reunión / visita",
+    meeting: "Reunión / seguimiento",
     email: "Email / consulta",
     followup: "Seguimiento",
   };
@@ -1782,7 +1782,7 @@ export default function LeadDetailPage() {
       "alta",
       {
         diagnostico:
-          "En el informe aparecen prioridades sobre canales de contacto, contenido o comunicación con el prospecto.",
+          "En el informe aparecen prioridades sobre canales de contacto, contenido o comunicación con el lead.",
         implicancia:
           "Sin calendario y mensajes alineados a la marca, el alcance rara vez se traduce en consultas o ventas medibles.",
         impacto:
@@ -3968,7 +3968,7 @@ export default function LeadDetailPage() {
                 </dl>
               </div>
 
-              {/* Datos del prospecto (comercial) */}
+              {/* Datos del lead (comercial) */}
               <div className="rounded-2xl border bg-white">
                 <div
                   role="button"
@@ -3978,7 +3978,7 @@ export default function LeadDetailPage() {
                   className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-900 flex items-center gap-2"
                 >
                   <span className="text-slate-500">{investigacionOpen ? "▼" : "▶"}</span>
-                  Datos del prospecto
+                  Datos del lead
                 </div>
                 {investigacionOpen && (
                 <div className="p-4">
@@ -4450,7 +4450,7 @@ export default function LeadDetailPage() {
                   <div>
                     <div className="text-xs font-medium text-slate-500">Producto / servicio consultado</div>
                     <div className="mt-0.5 text-xs text-slate-500">
-                      Producto, servicio o necesidad principal informada por el prospecto.
+                      Producto, servicio o necesidad principal informada por el lead.
                     </div>
                     {editing ? (
                       <textarea
@@ -4458,7 +4458,7 @@ export default function LeadDetailPage() {
                         onChange={(e) => setDraft((p) => ({ ...p, oferta: e.target.value }))}
                         className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                         rows={3}
-                        placeholder="Ej: limpieza de oficinas, desinfección, frecuencia deseada…"
+                        placeholder="Ej: tapa rígida, lona, cubre caja, baca, rejilla, accesorio interior…"
                       />
                     ) : (
                       <div className="mt-1 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap">
@@ -4933,11 +4933,11 @@ export default function LeadDetailPage() {
 
               {/* PROCESO COMERCIAL — flujo configurable */}
               <div id="proceso-comercial" className="rounded-2xl border-2 border-slate-200 bg-white p-6 shadow-sm">
-                <Tooltip content="Flujo comercial: datos del prospecto → visita → evaluación → servicios → costeo → cotización / propuesta → presentación." maxWidth="340px">
+                <Tooltip content="Flujo comercial: datos del lead → revisión → evaluación → servicios → cotización / propuesta → presentación." maxWidth="340px">
                   <h2 className="text-xl font-semibold text-slate-900 inline-block cursor-help">Proceso comercial</h2>
                 </Tooltip>
                 <p className="mt-1 text-sm text-slate-600">
-                  Seis pasos para llevar el lead desde la preparación de visita hasta la presentación final para el cliente.
+                  Seis pasos para llevar el lead desde la preparación comercial hasta la presentación final para el cliente.
                 </p>
                 {commercialDocError && (
                   <p className="mt-2 text-sm text-red-600 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
@@ -5154,9 +5154,9 @@ export default function LeadDetailPage() {
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
                     <p className="text-xs font-semibold text-slate-600">Después de esto sigue</p>
                     <p className="mt-0.5 text-sm text-slate-700">
-                      {currentStep === 1 && "Paso 2: Evaluación de necesidades — relevamiento técnico y operativo para preparar servicios y costeo."}
+                      {currentStep === 1 && "Paso 2: Evaluación de necesidades — análisis del contexto operativo para definir productos o servicios a cotizar."}
                       {currentStep === 2 && "Paso 3: Estrategia de crecimiento — visión estratégica que conecta evaluación con el plan."}
-                      {currentStep === 3 && "Paso 4: Estructura de servicios — tabla de servicios y costos en el tab Consultor."}
+                      {currentStep === 3 && "Paso 4: Estructura de servicios — tabla de productos o servicios y cotización en el tab Consultor."}
                       {currentStep === 4 && "Paso 5: Propuesta final para cliente — documento integral, compartir y marcar envío."}
                       {currentStep === 5 && "Paso 6: Presentación comercial — generá y archivá la presentación en el CRM (recomendado)."}
                     </p>
@@ -5519,10 +5519,10 @@ export default function LeadDetailPage() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-6">
                   <h2 className="text-lg font-semibold text-slate-900">Informe de evaluación</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Documento de respaldo con evaluación del prospecto, contexto operativo, oportunidades, acciones y plan de avance.
+                    Documento de respaldo con evaluación del lead, contexto operativo, oportunidades, acciones y plan de avance.
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
-                    Incluye: datos del prospecto, contexto operativo, condiciones del entorno, oportunidades, acciones 72h y plan 30–90 días.
+                    Incluye: datos del lead, contexto operativo, condiciones del entorno, oportunidades, acciones 72h y plan 30–90 días.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {id && (
