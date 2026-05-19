@@ -56,3 +56,15 @@ export {
   type LeadDetailVisibilityConfig,
   type LeadDetailVisibilitySource,
 } from "./adapters/leadDetailVisibility";
+
+export {
+  packageToLeadFields,
+  getLeadFieldGroups,
+  isLeadFieldEnabled,
+  hasLeadField,
+  type KnownLeadFieldKey,
+  type LeadFieldKey,
+  type LeadFieldGroupConfig,
+  type LeadFieldsAdapterConfig,
+  type LeadFieldsAdapterSource,
+} from "./adapters/leadFields";
