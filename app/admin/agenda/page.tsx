@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Trash2, Pencil } from "lucide-react";
 import clsx from "clsx";
+import { useLeadsClientCrmMode } from "@/app/admin/leads/LeadsClientCrmContext";
 import { usePersonalizacion } from "@/lib/personalizacion";
 import { resolveEntityName } from "@/lib/ui/labels";
 
@@ -544,14 +545,30 @@ export default function AgendaPage() {
     return "#";
   }
 
+  const isClientCrmUi = useLeadsClientCrmMode();
   const { clientePlural, clienteSingular } = usePersonalizacion();
   const personalizacion = { clientePlural, clienteSingular };
   const labelSingularAgenda = resolveEntityName("singular", personalizacion);
   const labelPluralAgenda = resolveEntityName("plural", personalizacion);
+  /** En client_crm: ocultar opción socio; filas existentes con owner_type=socio se muestran como Cliente. */
+  const socioOwnerLabelSingular = isClientCrmUi ? "Cliente" : labelSingularAgenda;
+
+  useEffect(() => {
+    if (!isClientCrmUi) return;
+    setCreateForm((f) =>
+      f.owner_type === "socio" ? { ...f, owner_type: "lead", socio_id: "" } : f
+    );
+    setOwner((o) => (o === "socio" ? "all" : o));
+  }, [isClientCrmUi]);
 
   function getOwnerLabel(item: AgendaItem): string {
     if (item.owner_type === "lead") return "Lead";
-    return labelSingularAgenda;
+    return socioOwnerLabelSingular;
+  }
+
+  function getOwnerTypeBadge(item: AgendaItem): string {
+    if (item.owner_type === "lead") return "LEAD:";
+    return isClientCrmUi ? "CLIENTE:" : "SOCIO:";
   }
 
   function buildMapsLink(lugar: string): string {
@@ -947,13 +964,15 @@ export default function AgendaPage() {
                       className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                     >
                       <option value="lead">Lead</option>
-                      <option value="socio">{labelSingularAgenda}</option>
+                      {!isClientCrmUi ? (
+                        <option value="socio">{labelSingularAgenda}</option>
+                      ) : null}
                     </select>
                   </div>
 
                   <div className="relative owner-dropdown-container">
                     <label className="text-xs font-semibold text-slate-600">
-                      {createForm.owner_type === "lead" ? "Lead" : labelSingularAgenda} *
+                      {createForm.owner_type === "lead" ? "Lead" : socioOwnerLabelSingular} *
                     </label>
                     <div className="relative">
                       <input
@@ -964,7 +983,7 @@ export default function AgendaPage() {
                           setShowOwnerDropdown(true);
                         }}
                         onFocus={() => setShowOwnerDropdown(true)}
-                        placeholder={`Buscar ${createForm.owner_type === "lead" ? "lead" : labelSingularAgenda.toLowerCase()}...`}
+                        placeholder={`Buscar ${createForm.owner_type === "lead" ? "lead" : socioOwnerLabelSingular.toLowerCase()}...`}
                         className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                       />
                       {showOwnerDropdown && (
@@ -1233,7 +1252,9 @@ export default function AgendaPage() {
               >
                 <option value="all">Todos</option>
                 <option value="lead">Leads</option>
-                <option value="socio">{labelPluralAgenda}</option>
+                {!isClientCrmUi ? (
+                  <option value="socio">{labelPluralAgenda}</option>
+                ) : null}
               </select>
             </div>
 
@@ -1402,7 +1423,7 @@ export default function AgendaPage() {
                       {/* Lead + Comercial + Invitados en una línea (chips, wrap) */}
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <span className="text-[11px] font-semibold text-slate-500">
-                          {item.owner_type === "lead" ? "LEAD:" : "SOCIO:"}
+                          {getOwnerTypeBadge(item)}
                         </span>
                         <span className="text-sm font-semibold text-slate-900">
                           {item.owner_name ?? "—"}
