@@ -853,6 +853,26 @@ function getVisibleLeadTabs(role: string | null): ReadonlyArray<(typeof LEAD_TAB
   return LEAD_TABS.filter((t) => t.id === "datos" || t.id === "contactos");
 }
 
+function normPipelineNombre(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+function getPipelinesUrl(isClientCrmUi: boolean): string {
+  return isClientCrmUi
+    ? "/api/admin/leads/pipelines?contractOnly=1"
+    : "/api/admin/leads/pipelines";
+}
+
+/** Inyecta la etapa actual del lead si no está en el catálogo filtrado (sin duplicar por nombre normalizado). */
+function mergeCurrentPipelineIntoEtapas(names: readonly string[], current: string): string[] {
+  const trimmed = current.trim();
+  if (!trimmed) return [...names];
+  if (names.some((n) => normPipelineNombre(n) === normPipelineNombre(trimmed))) {
+    return [...names];
+  }
+  return [...names, trimmed];
+}
+
 export default function LeadDetailPage() {
   const router = useRouter();
   const isClientCrmUi = useLeadsClientCrmMode();
@@ -2974,7 +2994,7 @@ export default function LeadDetailPage() {
   async function fetchEtapas() {
     setLoadingEtapas(true);
     try {
-      const res = await fetch("/api/admin/leads/pipelines", {
+      const res = await fetch(getPipelinesUrl(isClientCrmUi), {
         cache: "no-store",
         headers: { "Cache-Control": "no-store" },
       });
@@ -3024,7 +3044,7 @@ export default function LeadDetailPage() {
   useEffect(() => {
     fetchEtapas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isClientCrmUi]);
 
   async function fetchComerciales() {
     setLoadingComerciales(true);
@@ -3304,6 +3324,13 @@ export default function LeadDetailPage() {
     if (editing) return (draft.pipeline as any) ?? "Nuevo";
     return lead?.pipeline ?? "—";
   }, [editing, draft.pipeline, lead?.pipeline]);
+
+  const etapasForSelect = useMemo(() => {
+    const raw = editing ? (draft.pipeline as string | undefined) : lead?.pipeline;
+    const current =
+      typeof raw === "string" ? raw : raw != null ? String(raw) : "";
+    return mergeCurrentPipelineIntoEtapas(etapas, current);
+  }, [etapas, editing, draft.pipeline, lead?.pipeline]);
 
   const title = loading ? "Cargando…" : lead?.nombre ?? "Lead";
   const leadIdSafe = (id ?? lead?.id ?? "").trim();
@@ -4213,14 +4240,11 @@ export default function LeadDetailPage() {
                               className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                               disabled={mutating || loadingEtapas || isClosed}
                             >
-                              <option value="Nuevo">Nuevo</option>
-                              {etapas
-                                .filter((x) => x !== "Nuevo")
-                                .map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
+                              {etapasForSelect.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
                             </select>
                             {isClosed && (
                               <div className="mt-1 text-xs text-amber-600">
