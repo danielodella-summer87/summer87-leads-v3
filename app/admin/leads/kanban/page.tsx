@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { useLeadsClientCrmMode } from "@/app/admin/leads/LeadsClientCrmContext";
 import { usePermissions } from "@/lib/rbac/usePermissions";
 import { isLeadClosed } from "@/lib/leads/leadStatusPolicy";
 
@@ -75,6 +76,56 @@ type ApiResp<T> = {
 
 function norm(s: string | null | undefined) {
   return (s ?? "").trim().toLowerCase();
+}
+
+function getPipelinesUrl(isClientCrmUi: boolean): string {
+  return isClientCrmUi
+    ? "/api/admin/leads/pipelines?contractOnly=1"
+    : "/api/admin/leads/pipelines";
+}
+
+const LEGACY_COLUMN_COLOR = "#94a3b8";
+
+function isLegacyColumnId(id: string) {
+  return id.startsWith("legacy:");
+}
+
+function legacyColumnId(pipelineNombre: string) {
+  return `legacy:${norm(pipelineNombre)}`;
+}
+
+function sortPipelineRows(rows: PipelineRow[]): PipelineRow[] {
+  return [...rows].sort((a, b) => {
+    const ordenA = a.orden ?? 999999;
+    const ordenB = b.orden ?? 999999;
+    if (ordenA !== ordenB) return ordenA - ordenB;
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
+}
+
+/** Columnas contract/API + sintéticas al final para leads con pipeline fuera del catálogo filtrado. */
+function mergeLegacyPipelineRows(apiRows: PipelineRow[], leads: Lead[]): PipelineRow[] {
+  const merged = [...apiRows];
+  const knownNorms = new Set(apiRows.map((p) => norm(p.nombre)));
+  const extras: PipelineRow[] = [];
+
+  for (const lead of leads) {
+    const nombre = (lead.pipeline ?? "").trim();
+    if (!nombre) continue;
+    const key = norm(nombre);
+    if (!key || knownNorms.has(key)) continue;
+    knownNorms.add(key);
+    extras.push({
+      id: legacyColumnId(nombre),
+      nombre,
+      posicion: 999999 + extras.length,
+      tipo: "normal",
+      color: LEGACY_COLUMN_COLOR,
+      orden: 999999 + extras.length,
+    });
+  }
+
+  return [...merged, ...extras];
 }
 
 function pickInitials(name: string) {
@@ -153,9 +204,10 @@ function activityMeta(t: unknown) {
 }
 
 type Column = {
-  id: string; // pipeline id
+  id: string; // pipeline id (UUID API o `legacy:*` sintético)
   nombre: string;
   color: string;
+  synthetic?: boolean;
 };
 
 type ActiveDrag =
@@ -173,6 +225,7 @@ const BASE_PIPELINES = [
 ];
 
 export default function LeadsKanbanPage() {
+  const isClientCrmUi = useLeadsClientCrmMode();
   const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -220,7 +273,7 @@ export default function LeadsKanbanPage() {
     setLoading(true);
     try {
       const [pRes, lRes] = await Promise.all([
-        fetch("/api/admin/leads/pipelines", {
+        fetch(getPipelinesUrl(isClientCrmUi), {
           cache: "no-store",
           headers: { "Cache-Control": "no-store" },
         }),
@@ -236,15 +289,8 @@ export default function LeadsKanbanPage() {
       if (!pRes.ok) throw new Error(pJson?.error ?? "Error cargando pipelines");
       if (!lRes.ok) throw new Error(lJson?.error ?? "Error cargando leads");
 
-      const pData = Array.isArray(pJson?.data) ? pJson.data : [];
+      const pData = sortPipelineRows(Array.isArray(pJson?.data) ? pJson.data : []);
       const lData = Array.isArray(lJson?.data) ? lJson.data : [];
-
-      pData.sort((a, b) => {
-        const ordenA = a.orden ?? 999999;
-        const ordenB = b.orden ?? 999999;
-        if (ordenA !== ordenB) return ordenA - ordenB;
-        return (a.created_at ?? "").localeCompare(b.created_at ?? "");
-      });
 
       setPipelines(pData);
       setLeads(lData);
@@ -259,7 +305,7 @@ export default function LeadsKanbanPage() {
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [isClientCrmUi]);
 
   // Sincronizar scroll horizontal: barra superior ↔ cuerpo
   useEffect(() => {
@@ -309,15 +355,26 @@ export default function LeadsKanbanPage() {
     return () => clearTimeout(t);
   }, [notice]);
 
+  const displayPipelines = useMemo(
+    () => mergeLegacyPipelineRows(pipelines, leads),
+    [pipelines, leads],
+  );
+
   const columns: Column[] = useMemo(() => {
-    return pipelines.map((p) => ({
+    return displayPipelines.map((p) => ({
       id: p.id,
       nombre: p.nombre,
       color: safeColor(p.color),
+      synthetic: isLegacyColumnId(p.id),
     }));
-  }, [pipelines]);
+  }, [displayPipelines]);
 
   const columnIds = useMemo(() => columns.map((c) => c.id), [columns]);
+
+  const sortableColumnIds = useMemo(
+    () => columnIds.filter((id) => !isLegacyColumnId(id)),
+    [columnIds],
+  );
 
   const filteredLeads = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -510,27 +567,33 @@ export default function LeadsKanbanPage() {
       return;
     }
 
-    // 1) columnas
+    // 1) columnas (solo reorden de columnas reales en API; legacy sintéticas al final)
     if (activeType === "column") {
+      if (isLegacyColumnId(activeId) || isLegacyColumnId(String(e.over.id))) {
+        setActiveDrag(null);
+        return;
+      }
+
       const overType = e.over.data.current?.type as string | undefined;
       if (overType !== "column") {
         setActiveDrag(null);
         return;
       }
 
-      const fromIndex = columnIds.indexOf(activeId);
-      const toIndex = columnIds.indexOf(String(e.over.id));
+      const fromIndex = sortableColumnIds.indexOf(activeId);
+      const toIndex = sortableColumnIds.indexOf(String(e.over.id));
 
       if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
         setActiveDrag(null);
         return;
       }
 
-      const newCols = arrayMove(columns, fromIndex, toIndex);
+      const sortableCols = columns.filter((c) => !c.synthetic);
+      const newSortableCols = arrayMove(sortableCols, fromIndex, toIndex);
 
       setPipelines((prev) => {
         const map = new Map(prev.map((p) => [p.id, p]));
-        return newCols.map((c, idx) => ({
+        return newSortableCols.map((c, idx) => ({
           ...(map.get(c.id)!),
           posicion: idx,
         }));
@@ -539,7 +602,7 @@ export default function LeadsKanbanPage() {
       setBusy(true);
       setError(null);
       try {
-        const orderIds = newCols.map((c) => c.id);
+        const orderIds = newSortableCols.map((c) => c.id);
         await persistColumnOrder(orderIds);
       } catch (err: any) {
         setError(err?.message ?? "No se pudo guardar el orden");
@@ -763,7 +826,7 @@ export default function LeadsKanbanPage() {
                 onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
               >
-                <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
+                <SortableContext items={sortableColumnIds} strategy={horizontalListSortingStrategy}>
                   <div className="flex w-max gap-4 pr-10">
                     {columns.map((col) => (
                       <KanbanColumn
@@ -816,7 +879,7 @@ function KanbanColumn({
 }) {
   const sortable = useSortable({
     id: column.id,
-    disabled: disabled,
+    disabled: disabled || !!column.synthetic,
     data: { type: "column" },
   });
 
@@ -841,9 +904,9 @@ function KanbanColumn({
   return (
     <div ref={sortable.setNodeRef} style={style} className="w-[320px] shrink-0 rounded-2xl border bg-white">
       <div
-        className="flex flex-col gap-1 rounded-t-2xl border-b px-3 py-2"
-        {...sortable.attributes}
-        {...sortable.listeners}
+        className={`flex flex-col gap-1 rounded-t-2xl border-b px-3 py-2 ${column.synthetic ? "bg-slate-50" : ""}`}
+        {...(column.synthetic ? {} : sortable.attributes)}
+        {...(column.synthetic ? {} : sortable.listeners)}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
