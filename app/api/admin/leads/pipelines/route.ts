@@ -14,6 +14,7 @@ function supabaseAdmin() {
 
 const TABLE = "leads_pipelines";
 const SELECT = "id,created_at,updated_at,nombre,posicion,tipo,color,orden";
+const SELECT_GET = `${SELECT},stage_key`;
 
 type PipelineRow = {
   id: string;
@@ -24,6 +25,7 @@ type PipelineRow = {
   tipo: "normal" | "ganado" | "perdido";
   color: string | null;
   orden?: number | null;
+  stage_key?: string | null;
 };
 
 type ListResponse = {
@@ -58,8 +60,11 @@ function safeInt(v: unknown, fallback = 0) {
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url);
+    const contractOnly = url.searchParams.get("contractOnly") === "1";
+
     const supabase = supabaseAdmin();
 
     // Ensure pipelines básicos existen
@@ -88,11 +93,17 @@ export async function GET() {
       }
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from(TABLE)
-      .select(SELECT)
+      .select(SELECT_GET)
       .order("orden", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true });
+
+    if (contractOnly) {
+      query = query.not("stage_key", "is", null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json(
