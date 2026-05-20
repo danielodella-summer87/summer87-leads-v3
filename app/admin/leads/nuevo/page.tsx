@@ -45,6 +45,19 @@ const FALLBACK_PIPELINE_NAMES = [
   "Cerrado",
 ] as const;
 
+const PREFERRED_DEFAULT_PIPELINE = "Nuevo lead";
+
+function getPipelinesUrl(isClientCrmUi: boolean): string {
+  return isClientCrmUi
+    ? "/api/admin/leads/pipelines?contractOnly=1"
+    : "/api/admin/leads/pipelines";
+}
+
+function pickPreferredPipeline(nombres: readonly string[]): string {
+  if (nombres.includes(PREFERRED_DEFAULT_PIPELINE)) return PREFERRED_DEFAULT_PIPELINE;
+  return nombres[0] ?? "";
+}
+
 /** Etiquetas UI → valores `next_activity_type` permitidos por POST (cleanActivityType). */
 const NEXT_ACTIVITY_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
   { label: "— Opcional —", value: "" },
@@ -176,14 +189,17 @@ export default function NuevoLeadPage() {
 
     if (!appliedInitialPipeline.current) {
       appliedInitialPipeline.current = true;
-      setPipeline(pipelinesRemote[0].nombre);
+      setPipeline(
+        pickPreferredPipeline(pipelinesRemote.map((p) => p.nombre)),
+      );
     }
   }, [pipelinesLoading, pipelinesRemote, pipelinesUseFallback]);
 
   useEffect(() => {
     if (!pipelineOptions.length) return;
-    if (!pipelineOptions.includes(pipeline)) {
-      setPipeline(pipelineOptions[0]);
+    const current = pipeline.trim();
+    if (!current || !pipelineOptions.includes(pipeline)) {
+      setPipeline(pickPreferredPipeline(pipelineOptions));
     }
   }, [pipeline, pipelineOptions]);
 
@@ -203,11 +219,12 @@ export default function NuevoLeadPage() {
 
   useEffect(() => {
     let cancelled = false;
+    appliedInitialPipeline.current = false;
     (async () => {
       setPipelinesLoading(true);
       setPipelinesUseFallback(false);
       try {
-        const res = await fetch("/api/admin/leads/pipelines", {
+        const res = await fetch(getPipelinesUrl(isClientCrmUi), {
           cache: "no-store",
           headers: { "Cache-Control": "no-store" },
         });
@@ -216,8 +233,13 @@ export default function NuevoLeadPage() {
         const raw = Array.isArray(json?.data) ? json.data : [];
         const sorted = sortPipelineRows(raw);
         if (!cancelled) {
-          setPipelinesRemote(sorted);
-          setPipelinesUseFallback(false);
+          if (sorted.length === 0) {
+            setPipelinesRemote([]);
+            setPipelinesUseFallback(true);
+          } else {
+            setPipelinesRemote(sorted);
+            setPipelinesUseFallback(false);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -231,7 +253,7 @@ export default function NuevoLeadPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isClientCrmUi]);
 
   async function createLead() {
     setError(null);
