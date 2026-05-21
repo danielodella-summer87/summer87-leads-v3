@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import RubroSelect from "@/app/admin/empresas/RubroSelect";
 import {
@@ -355,18 +355,72 @@ export default function NuevoLeadPage() {
           </div>
         )}
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          <Input label="Nombre *" value={nombre} onChange={setNombre} disabled={saving} />
+        {/* 12W-5b: bloques Pickup en client_crm; estructura por secciones en modos internos */}
+        <FormSection
+          title="Identificación del contacto"
+          description={
+            isClientCrmUi
+              ? "Quién consulta y por qué canal llegó la oportunidad."
+              : undefined
+          }
+        >
+          <Input
+            label={isClientCrmUi ? "Nombre / Razón social *" : "Nombre *"}
+            value={nombre}
+            onChange={setNombre}
+            disabled={saving}
+          />
           <Input label="Contacto" value={contacto} onChange={setContacto} disabled={saving} />
-
           <Input label="Teléfono" value={telefono} onChange={setTelefono} disabled={saving} />
           <Input label="Email" value={email} onChange={setEmail} disabled={saving} />
-
           <Input label="Origen" value={origen} onChange={setOrigen} disabled={saving} />
+        </FormSection>
 
+        {isClientCrmUi ? (
+          <section className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
+            <h2 className="text-sm font-semibold text-slate-800">Vehículo</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Estos datos ayudan a calificar compatibilidad y accesorios. La persistencia
+              estructurada se activará en una fase posterior.
+            </p>
+            <p className="mt-2 text-[11px] font-medium text-amber-800">
+              Estos datos se activarán en una fase posterior de persistencia.
+            </p>
+            <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {(
+                [
+                  "Marca",
+                  "Modelo",
+                  "Año",
+                  "Matrícula",
+                  "Uso del vehículo",
+                ] as const
+              ).map((campo) => (
+                <li
+                  key={campo}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5"
+                >
+                  <span className="text-xs font-semibold text-slate-600">{campo}</span>
+                  <p className="mt-0.5 text-[11px] text-slate-400">Preparado para próxima fase</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <FormSection
+          title="Necesidad comercial"
+          description={
+            isClientCrmUi
+              ? "Qué producto o accesorio consulta el contacto."
+              : "Producto, servicio o necesidad detectada en la consulta."
+          }
+        >
           <div className="md:col-span-2 rounded-xl border p-4">
             <div className="text-xs font-semibold text-slate-600">
-              Producto / servicio consultado{" "}
+              {isClientCrmUi
+                ? "Producto o accesorio consultado"
+                : "Producto / servicio consultado"}{" "}
               <span className="font-normal text-slate-400">(opcional)</span>
             </div>
             <textarea
@@ -378,13 +432,26 @@ export default function NuevoLeadPage() {
               className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 disabled:opacity-50"
             />
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-              Ayuda a identificar qué busca el contacto y luego ordenar reportes por demanda.
+              {isClientCrmUi
+                ? "Ayuda a identificar la demanda y preparar cotización. El presupuesto estimado se incorporará en una fase futura."
+                : "Ayuda a identificar qué busca el contacto y luego ordenar reportes por demanda."}
             </p>
           </div>
+        </FormSection>
 
+        <FormSection
+          title="Gestión comercial"
+          description={
+            isClientCrmUi
+              ? "Definí etapa, responsable y próxima acción para que el lead entre ordenado al Kanban."
+              : "Etapa, seguimiento y responsable del lead."
+          }
+        >
           <div className="rounded-xl border p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-xs font-semibold text-slate-600">Pipeline</div>
+              <div className="text-xs font-semibold text-slate-600">
+                {isClientCrmUi ? "Etapa comercial" : "Pipeline"}
+              </div>
               {pipelinesLoading ? (
                 <span className="text-[11px] text-slate-400">Cargando etapas…</span>
               ) : null}
@@ -412,7 +479,7 @@ export default function NuevoLeadPage() {
             )}
           </div>
 
-          <div className="rounded-xl border p-4">
+          <div className="rounded-xl border p-4 md:col-span-2">
             <p className="text-xs font-semibold text-slate-800">Seguimiento inicial</p>
             <p className="mt-0.5 text-[11px] text-slate-500">
               Evita que el lead quede sin próximo paso en el Kanban.
@@ -420,7 +487,7 @@ export default function NuevoLeadPage() {
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
                 <div className="text-xs font-semibold text-slate-600">
-                  Próxima acción{" "}
+                  {isClientCrmUi ? "Próxima acción comercial" : "Próxima acción"}{" "}
                   <span className="font-normal text-slate-400">(opcional)</span>
                 </div>
                 <select
@@ -438,7 +505,7 @@ export default function NuevoLeadPage() {
               </div>
               <div>
                 <div className="text-xs font-semibold text-slate-600">
-                  Fecha de próximo seguimiento{" "}
+                  {isClientCrmUi ? "Fecha de seguimiento" : "Fecha de próximo seguimiento"}{" "}
                   <span className="font-normal text-slate-400">(opcional)</span>
                 </div>
                 <input
@@ -453,7 +520,9 @@ export default function NuevoLeadPage() {
           </div>
 
           <div className="rounded-xl border p-4 md:col-span-2">
-            <div className="text-xs font-semibold text-slate-600">Comercial *</div>
+            <div className="text-xs font-semibold text-slate-600">
+              {isClientCrmUi ? "Comercial responsable *" : "Comercial *"}
+            </div>
             <select
               value={comercialId}
               onChange={(e) => setComercialId(e.target.value)}
@@ -471,15 +540,27 @@ export default function NuevoLeadPage() {
               Obligatorio para guardar el lead.
             </div>
           </div>
-        </div>
 
-        <div className="mt-6 rounded-2xl border p-4">
-          <h2 className="text-sm font-semibold text-slate-800">Datos operativos del lead</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Estos datos ayudan a entender la necesidad, preparar el seguimiento y avanzar hacia una cotización.
-          </p>
+          <div className="md:col-span-2">
+            <Textarea
+              label={isClientCrmUi ? "Observaciones" : "Notas"}
+              value={notas}
+              onChange={setNotas}
+              disabled={saving}
+              compact
+            />
+          </div>
+        </FormSection>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <FormSection
+          title="Datos operativos opcionales"
+          description={
+            isClientCrmUi
+              ? "Domicilio u otros datos de logística si ya los tenés."
+              : "Estos datos ayudan a entender la necesidad, preparar el seguimiento y avanzar hacia una cotización."
+          }
+        >
+          {!isClientCrmUi ? (
             <div className="rounded-xl border p-4">
               <div className="text-xs font-semibold text-slate-600">Rubro</div>
               <div className="mt-2">
@@ -491,33 +572,40 @@ export default function NuevoLeadPage() {
                 />
               </div>
             </div>
+          ) : null}
 
-            {!isClientCrmUi ? (
-              <Input
-                label="Cantidad de personal"
-                value={cantidadPersonal}
-                onChange={setCantidadPersonal}
-                disabled={saving}
-                type="number"
-                min="0"
-                step="1"
-              />
-            ) : null}
+          {!isClientCrmUi ? (
+            <Input
+              label="Cantidad de personal"
+              value={cantidadPersonal}
+              onChange={setCantidadPersonal}
+              disabled={saving}
+              type="number"
+              min="0"
+              step="1"
+            />
+          ) : null}
 
-            {!isClientCrmUi ? (
-              <Input
-                label="Superficie m²"
-                value={superficieM2}
-                onChange={setSuperficieM2}
-                disabled={saving}
-                type="number"
-                min="0"
-                step="0.01"
-              />
-            ) : null}
+          {!isClientCrmUi ? (
+            <Input
+              label="Superficie m²"
+              value={superficieM2}
+              onChange={setSuperficieM2}
+              disabled={saving}
+              type="number"
+              min="0"
+              step="0.01"
+            />
+          ) : null}
 
-            <Input label="Dirección" value={direccion} onChange={setDireccion} disabled={saving} />
+          <Input
+            label="Dirección"
+            value={direccion}
+            onChange={setDireccion}
+            disabled={saving}
+          />
 
+          {!isClientCrmUi ? (
             <Input
               label="Fecha de revisión o seguimiento"
               value={visitaScheduledAt}
@@ -525,14 +613,30 @@ export default function NuevoLeadPage() {
               disabled={saving}
               type="datetime-local"
             />
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <Textarea label="Notas" value={notas} onChange={setNotas} disabled={saving} />
-        </div>
+          ) : null}
+        </FormSection>
       </div>
     </PageContainer>
+  );
+}
+
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-6 rounded-2xl border p-4">
+      <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+      {description ? (
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
+      ) : null}
+      <div className="mt-4 grid gap-3 md:grid-cols-2">{children}</div>
+    </section>
   );
 }
 
@@ -574,20 +678,22 @@ function Textarea({
   value,
   onChange,
   disabled,
+  compact,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border p-4">
+    <div className={compact ? "rounded-xl border p-4" : "rounded-2xl border p-4"}>
       <div className="text-xs font-semibold text-slate-600">{label}</div>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        rows={4}
+        rows={compact ? 3 : 4}
         className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 disabled:opacity-50"
       />
     </div>
