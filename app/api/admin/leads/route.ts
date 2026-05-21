@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
+  resolveContractFieldWhitelist,
+  sanitizeContractFields,
+  type ContractFieldValue,
+} from "@/lib/crmPackage/adapters/leadFieldPersistence";
+import { getActiveCrmPackageConfigFromEnvironment } from "@/lib/crmPackage/getActiveCrmPackageConfig";
+import {
   isMissingLeadsLinkedinPersonalColumn,
   leadsSelectWithLinkedinVariant,
   shapeLeadRowLinkedinForApi,
@@ -87,6 +93,7 @@ type LeadRow = {
   member_since?: string | null;
   meet_url?: string | null;
   services_count?: number;
+  contract_fields_json?: Record<string, ContractFieldValue> | null;
 };
 
 type LeadsApiResponse = {
@@ -190,7 +197,19 @@ function isMissingColumnError(message: string | undefined, table: string, column
 const CASALIMPIA_LEAD_FIELDS =
   "rubro_id,cantidad_personal,superficie_m2,cantidad_pisos,cantidad_banos,tachos_residuos,tiene_parking,tiene_subsuelo,tiene_ascensores,tiene_escaleras,tiene_vidrios_altos,tipos_suelo,horario_operacion,restricciones_acceso,zonas_criticas,requerimientos_especiales,notas_instalacion,installation_details_json,visita_scheduled_at";
 const SELECT_WITH_SNAPSHOT =
-  `id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},objetivos,audiencia,tamano,oferta,website,instagram,direccion,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
+  `id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},objetivos,audiencia,tamano,oferta,website,instagram,direccion,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,contract_fields_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
+
+function stripContractFieldsJsonFromSelect(select: string): string {
+  return select.replace(/,contract_fields_json/g, "");
+}
+
+/** Lectura: si el select no trae la columna, la API expone `{}` (no escribe). */
+function contractFieldsJsonForApiRead(value: unknown): Record<string, ContractFieldValue> {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, ContractFieldValue>;
+  }
+  return {};
+}
 const SELECT_LEGACY =
   "id,created_at,updated_at,nombre,contacto,telefono,email,origen,estado,pipeline,notas,objetivos,audiencia,tamano,oferta,website,linkedin_empresa,linkedin_personal,ai_report,rating,next_activity_type,next_activity_at,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,initiative_kind,project_description,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)";
 
@@ -241,7 +260,33 @@ type LeadCreateInput = Partial<{
   empresa_id: string | null;
   comercial_id: string | null;
   score: number | string | null;
+  contract_fields?: Record<string, unknown>;
+  contract_fields_json?: Record<string, unknown>;
 }>;
+
+function extractContractFieldsBody(
+  body: LeadCreateInput
+): unknown | undefined {
+  if (body.contract_fields !== undefined) return body.contract_fields;
+  if (body.contract_fields_json !== undefined) return body.contract_fields_json;
+  return undefined;
+}
+
+function buildContractFieldsJsonForInsert(
+  body: LeadCreateInput
+): Record<string, ContractFieldValue> {
+  const raw = extractContractFieldsBody(body);
+  if (raw === undefined) return {};
+
+  const pkg = getActiveCrmPackageConfigFromEnvironment();
+  const whitelist = resolveContractFieldWhitelist(pkg.config);
+
+  return sanitizeContractFields(raw, {
+    whitelist,
+    rejectKore: true,
+    rejectSystemKeys: true,
+  });
+}
 
 export async function GET(req: Request) {
   try {
@@ -314,6 +359,29 @@ export async function GET(req: Request) {
       error = liRes.error;
     }
 
+    if (error && isMissingColumnError(error.message, "leads", "contract_fields_json")) {
+      const selectNoCf = stripContractFieldsJsonFromSelect(SELECT_WITH_SNAPSHOT);
+      let qNoCf = supabase.from("leads").select(selectNoCf);
+      if (pipelineParam && pipelineParam.trim()) {
+        qNoCf = qNoCf.eq("pipeline", pipelineParam.trim());
+      }
+      if (comercialIdParam) {
+        qNoCf = qNoCf.eq("comercial_id", comercialIdParam);
+      }
+      if (socioIdParam) {
+        qNoCf = qNoCf.eq("socio_id", socioIdParam);
+      }
+      if (empresaIdParam) {
+        qNoCf = qNoCf.eq("empresa_id", empresaIdParam);
+      }
+      const noCfRes = await qNoCf.order("created_at", { ascending: false }).limit(limit);
+      data = (noCfRes.data ?? []).map((row: any) => ({
+        ...row,
+        contract_fields_json: {},
+      })) as typeof data;
+      error = noCfRes.error;
+    }
+
     if (
       error &&
       (isMissingColumnError(error.message, "leads", "instagram") ||
@@ -356,6 +424,7 @@ export async function GET(req: Request) {
         ...row,
         instagram: row?.instagram ?? null,
         direccion: row?.direccion ?? null,
+        contract_fields_json: contractFieldsJsonForApiRead(row?.contract_fields_json),
       })) as any;
       error = legacyRes.error;
     }
@@ -467,6 +536,9 @@ export async function GET(req: Request) {
       return {
         ...shaped,
         etapa_actual: etapaDb || pipelineStr || null,
+        contract_fields_json: contractFieldsJsonForApiRead(
+          lead.contract_fields_json ?? shaped.contract_fields_json
+        ),
         comercial: Array.isArray(lead.comerciales)
           ? lead.comerciales[0] ?? null
           : lead.comerciales ?? null,
@@ -649,6 +721,7 @@ export async function POST(req: Request) {
       score: scoreParsed,
 
       updated_at: new Date().toISOString(),
+      contract_fields_json: buildContractFieldsJsonForInsert(body),
     };
 
     const supabase = supabaseAdmin();
@@ -675,6 +748,10 @@ export async function POST(req: Request) {
             ...(legacyRes.data as any),
             instagram: (legacyRes.data as any)?.instagram ?? null,
             direccion: (legacyRes.data as any)?.direccion ?? null,
+            contract_fields_json: contractFieldsJsonForApiRead(
+              (legacyRes.data as any)?.contract_fields_json ??
+                insert.contract_fields_json
+            ),
           } as any)
         : null;
       error = legacyRes.error;
@@ -687,8 +764,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const created = data
+      ? {
+          ...(data as Record<string, unknown>),
+          contract_fields_json: contractFieldsJsonForApiRead(
+            (data as Record<string, unknown>).contract_fields_json ??
+              insert.contract_fields_json
+          ),
+        }
+      : null;
+
     return NextResponse.json(
-      { data: (data ?? null) as LeadRow | null, error: null } satisfies LeadApiResponse,
+      { data: (created ?? null) as LeadRow | null, error: null } satisfies LeadApiResponse,
       { status: 201, headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: any) {

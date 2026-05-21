@@ -53,11 +53,12 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
     // Intento principal: tabla "leads" con join a empresas
     const selectLeadWithSnapshot =
-      `id,created_at,updated_at,nombre,contacto,telefono,email,origen,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_generation_id,ai_status,ai_progress,ai_current_module,ai_started_at,ai_module_total,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,linkedin_empresa,linkedin_personal,instagram,direccion,is_member,member_since,empresa_id,iniciativa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,initiative_kind,project_description,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
+      `id,created_at,updated_at,nombre,contacto,telefono,email,origen,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_generation_id,ai_status,ai_progress,ai_current_module,ai_started_at,ai_module_total,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,contract_fields_json,strategy_approved_at,linkedin_empresa,linkedin_personal,instagram,direccion,is_member,member_since,empresa_id,iniciativa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,initiative_kind,project_description,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)`;
     const selectLeadLegacy =
       "id,created_at,updated_at,nombre,contacto,telefono,email,origen,pipeline,notas,website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_generation_id,ai_status,ai_progress,ai_current_module,ai_started_at,ai_module_total,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,commercial_strategy_json,strategy_approved_at,linkedin_empresa,linkedin_personal,is_member,member_since,empresa_id,iniciativa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,initiative_kind,project_description,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre)),comerciales:comercial_id(id,nombre)";
 
     const stripIniciativaId = (sel: string) => sel.replace(",iniciativa_id", "");
+    const stripContractFieldsJson = (sel: string) => sel.replace(/,contract_fields_json/g, "");
 
     let q1 = await sb.from("leads").select(selectLeadWithSnapshot).eq("id", id).maybeSingle();
     if (q1.error && isMissingColumnError(q1.error.message, "leads", "iniciativa_id")) {
@@ -66,6 +67,16 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
         .select(stripIniciativaId(selectLeadWithSnapshot))
         .eq("id", id)
         .maybeSingle();
+    }
+    if (q1.error && isMissingColumnError(q1.error.message, "leads", "contract_fields_json")) {
+      q1 = await sb
+        .from("leads")
+        .select(stripContractFieldsJson(stripIniciativaId(selectLeadWithSnapshot)))
+        .eq("id", id)
+        .maybeSingle();
+      if (!q1.error && q1.data) {
+        (q1.data as Record<string, unknown>).contract_fields_json = {};
+      }
     }
     if (
       q1.error &&
@@ -112,6 +123,13 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
         : (row.comerciales ?? null);
       const commercialStage = row.commercial_stage ?? null;
       const shaped = shapeLeadRowLinkedinForApi(row);
+      const contractFieldsJson =
+        row.contract_fields_json !== null &&
+        typeof row.contract_fields_json === "object" &&
+        !Array.isArray(row.contract_fields_json)
+          ? (row.contract_fields_json as Record<string, unknown>)
+          : {};
+
       return NextResponse.json(
         {
           data: {
@@ -121,6 +139,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
             meet_url: row.meet_url ?? null,
             commercial_stage: commercialStage,
             stage: commercialStage,
+            contract_fields_json: contractFieldsJson,
           },
           error: null,
         } satisfies ApiResp<any>,
