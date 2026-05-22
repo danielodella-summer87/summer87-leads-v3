@@ -87,7 +87,54 @@ type LeadCreatePayload = {
   superficie_m2: number | null;
   direccion: string | null;
   visita_scheduled_at: string | null;
+  contract_fields?: Record<string, unknown>;
 };
+
+const VEHICULO_TIPO_USO_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "— Seleccionar —", value: "" },
+  { label: "Particular", value: "particular" },
+  { label: "Trabajo", value: "trabajo" },
+  { label: "Flota", value: "flota" },
+  { label: "Campo", value: "campo" },
+  { label: "Otro", value: "otro" },
+];
+
+function cleanContractString(value: string): string | undefined {
+  const s = (value ?? "").trim();
+  return s.length ? s : undefined;
+}
+
+function cleanContractNumber(value: string): number | undefined {
+  const s = (value ?? "").trim();
+  if (!s.length) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function buildPickupContractFields(
+  isClientCrmUi: boolean,
+  marca: string,
+  modelo: string,
+  anio: string,
+  matricula: string,
+  tipoUso: string,
+): Record<string, unknown> | undefined {
+  if (!isClientCrmUi) return undefined;
+
+  const fields: Record<string, unknown> = {};
+  const marcaVal = cleanContractString(marca);
+  if (marcaVal) fields.marca = marcaVal;
+  const modeloVal = cleanContractString(modelo);
+  if (modeloVal) fields.modelo = modeloVal;
+  const anioVal = cleanContractNumber(anio);
+  if (anioVal !== undefined) fields.año = anioVal;
+  const matriculaVal = cleanContractString(matricula);
+  if (matriculaVal) fields.matricula = matriculaVal;
+  const tipoUsoVal = cleanContractString(tipoUso);
+  if (tipoUsoVal) fields.tipo_uso = tipoUsoVal;
+
+  return Object.keys(fields).length ? fields : undefined;
+}
 
 type Lead = LeadCreatePayload & {
   id: string;
@@ -158,6 +205,12 @@ export default function NuevoLeadPage() {
   const [superficieM2, setSuperficieM2] = useState("");
   const [direccion, setDireccion] = useState("");
   const [visitaScheduledAt, setVisitaScheduledAt] = useState("");
+
+  const [vehiculoMarca, setVehiculoMarca] = useState("");
+  const [vehiculoModelo, setVehiculoModelo] = useState("");
+  const [vehiculoAnio, setVehiculoAnio] = useState("");
+  const [vehiculoMatricula, setVehiculoMatricula] = useState("");
+  const [vehiculoTipoUso, setVehiculoTipoUso] = useState("");
 
   const [pipelinesRemote, setPipelinesRemote] = useState<PipelineRow[]>([]);
   const [pipelinesLoading, setPipelinesLoading] = useState(true);
@@ -287,6 +340,18 @@ export default function NuevoLeadPage() {
       visita_scheduled_at: normDateTimeLocal(visitaScheduledAt),
     };
 
+    const pickupContractFields = buildPickupContractFields(
+      isClientCrmUi,
+      vehiculoMarca,
+      vehiculoModelo,
+      vehiculoAnio,
+      vehiculoMatricula,
+      vehiculoTipoUso,
+    );
+    if (pickupContractFields) {
+      payload.contract_fields = pickupContractFields;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/admin/leads", {
@@ -377,35 +442,57 @@ export default function NuevoLeadPage() {
         </FormSection>
 
         {isClientCrmUi ? (
-          <section className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
-            <h2 className="text-sm font-semibold text-slate-800">Vehículo</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Estos datos ayudan a calificar compatibilidad y accesorios. La persistencia
-              estructurada se activará en una fase posterior.
+          <FormSection
+            title="Vehículo"
+            description="Datos para compatibilidad, cotización e instalación."
+          >
+            <p className="md:col-span-2 text-[11px] leading-relaxed text-slate-500">
+              Estos datos se guardan como campos del contrato CRM y ayudan a preparar
+              compatibilidad, presupuesto e instalación.
             </p>
-            <p className="mt-2 text-[11px] font-medium text-amber-800">
-              Estos datos se activarán en una fase posterior de persistencia.
-            </p>
-            <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {(
-                [
-                  "Marca",
-                  "Modelo",
-                  "Año",
-                  "Matrícula",
-                  "Uso del vehículo",
-                ] as const
-              ).map((campo) => (
-                <li
-                  key={campo}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5"
-                >
-                  <span className="text-xs font-semibold text-slate-600">{campo}</span>
-                  <p className="mt-0.5 text-[11px] text-slate-400">Preparado para próxima fase</p>
-                </li>
-              ))}
-            </ul>
-          </section>
+            <Input
+              label="Marca"
+              value={vehiculoMarca}
+              onChange={setVehiculoMarca}
+              disabled={saving}
+            />
+            <Input
+              label="Modelo"
+              value={vehiculoModelo}
+              onChange={setVehiculoModelo}
+              disabled={saving}
+            />
+            <Input
+              label="Año"
+              value={vehiculoAnio}
+              onChange={setVehiculoAnio}
+              disabled={saving}
+              type="number"
+              min="1900"
+              step="1"
+            />
+            <Input
+              label="Matrícula"
+              value={vehiculoMatricula}
+              onChange={setVehiculoMatricula}
+              disabled={saving}
+            />
+            <div className="rounded-xl border p-4">
+              <div className="text-xs font-semibold text-slate-600">Uso del vehículo</div>
+              <select
+                value={vehiculoTipoUso}
+                onChange={(e) => setVehiculoTipoUso(e.target.value)}
+                disabled={saving}
+                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm text-slate-900 disabled:opacity-50"
+              >
+                {VEHICULO_TIPO_USO_OPTIONS.map((opt) => (
+                  <option key={opt.value || "empty"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </FormSection>
         ) : null}
 
         <FormSection
