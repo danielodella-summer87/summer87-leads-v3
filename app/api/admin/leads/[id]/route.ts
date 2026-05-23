@@ -8,6 +8,12 @@ import {
   leadsSelectWithLinkedinVariant,
   shapeLeadRowLinkedinForApi,
 } from "@/lib/leads/linkedinLeadFields";
+import { getActiveCrmPackageConfigFromEnvironment } from "@/lib/crmPackage/getActiveCrmPackageConfig";
+import {
+  mergeContractFieldsPatch,
+  resolveContractFieldWhitelist,
+  type ContractFieldValue,
+} from "@/lib/crmPackage/adapters/leadFieldPersistence";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +31,19 @@ function safeStr(v: unknown) {
   if (typeof v !== "string") return null;
   const s = v.trim();
   return s.length ? s : null;
+}
+
+function contractFieldsJsonForApiRead(value: unknown): Record<string, ContractFieldValue> {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, ContractFieldValue>;
+  }
+  return {};
+}
+
+function extractContractFieldsPatchBody(body: Record<string, unknown>): unknown | undefined {
+  if (body.contract_fields !== undefined) return body.contract_fields;
+  if (body.contract_fields_json !== undefined) return body.contract_fields_json;
+  return undefined;
 }
 
 type ApiResp<T> = { data?: T | null; error?: string | null };
@@ -402,6 +421,48 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
+    // contract_fields_json: merge seguro (12W-5h)
+    const contractFieldsIncoming = extractContractFieldsPatchBody(body as Record<string, unknown>);
+    if (contractFieldsIncoming !== undefined) {
+      let currentCfRow = await sb
+        .from("leads")
+        .select("contract_fields_json")
+        .eq("id", id)
+        .maybeSingle();
+      if (
+        currentCfRow.error &&
+        isMissingColumnError(currentCfRow.error.message, "leads", "contract_fields_json")
+      ) {
+        return NextResponse.json(
+          {
+            data: null,
+            error: "contract_fields_json no disponible en este entorno (requiere DDL 12W-5d)",
+          } satisfies ApiResp<null>,
+          { status: 400 }
+        );
+      }
+      if (currentCfRow.error) {
+        return NextResponse.json(
+          { data: null, error: currentCfRow.error.message } satisfies ApiResp<null>,
+          { status: 500 }
+        );
+      }
+
+      const currentCfJson = currentCfRow.data?.contract_fields_json ?? {};
+      const pkg = getActiveCrmPackageConfigFromEnvironment();
+      const whitelist = resolveContractFieldWhitelist(pkg.config);
+
+      updateData.contract_fields_json = mergeContractFieldsPatch(
+        currentCfJson,
+        contractFieldsIncoming,
+        {
+          whitelist,
+          rejectKore: true,
+          rejectSystemKeys: true,
+        }
+      );
+    }
+
     // Incluir otros campos del body (excepto metadatos / campos ya normalizados arriba)
     for (const [key, value] of Object.entries(body)) {
       if (
@@ -421,7 +482,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         key !== "stage" &&
         key !== "allow_clear_linkedin" &&
         key !== "linkedin_personal" &&
-        key !== "linkedin_director"
+        key !== "linkedin_director" &&
+        key !== "contract_fields" &&
+        key !== "contract_fields_json"
       ) {
         updateData[key] = value;
       }
@@ -653,9 +716,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (!updateResult.error && updateResult.data) {
       // Re-hidratar el lead completo con el mismo select que el GET (incluyendo empresas)
       const selectQueryWithSnapshot =
-        `id,nombre,contacto,telefono,email,origen,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,linkedin_empresa,linkedin_personal,instagram,direccion,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre))`;
+        `id,nombre,contacto,telefono,email,origen,pipeline,notas,${CASALIMPIA_LEAD_FIELDS},website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,contract_fields_json,linkedin_empresa,linkedin_personal,instagram,direccion,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre))`;
       const selectQueryLegacy =
-        "id,nombre,contacto,telefono,email,origen,pipeline,notas,website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,linkedin_empresa,linkedin_personal,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre))";
+        "id,nombre,contacto,telefono,email,origen,pipeline,notas,website,objetivos,audiencia,tamano,oferta,ai_context,ai_report,ai_report_updated_at,ai_custom_prompt,proposal_draft_json,proposal_confirmed_at,proposal_sent_at,proposal_doc_url,presentation_doc_url,proposal_reviewed,commercial_stage,contract_fields_json,linkedin_empresa,linkedin_personal,is_member,member_since,empresa_id,comercial_id,score,score_categoria,meet_url,next_activity_type,next_activity_at,empresas:empresa_id(id,nombre,email,telefono,celular,rut,direccion,ciudad,pais,web,instagram,facebook,contacto_nombre,contacto_celular,contacto_email,etiquetas,rubro_id,rubros:rubro_id(id,nombre))";
+      const stripContractFieldsJsonFromSelect = (sel: string) => sel.replace(/,contract_fields_json/g, "");
 
       let refreshed = await sb.from("leads").select(selectQueryWithSnapshot).eq("id", id).maybeSingle();
       if (refreshed.error && isMissingLeadsLinkedinPersonalColumn(refreshed.error.message)) {
@@ -672,6 +736,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       ) {
         refreshed = await sb.from("leads").select(selectQueryLegacy).eq("id", id).maybeSingle();
       }
+      if (refreshed.error && isMissingColumnError(refreshed.error.message, "leads", "contract_fields_json")) {
+        refreshed = await sb
+          .from("leads")
+          .select(stripContractFieldsJsonFromSelect(selectQueryWithSnapshot))
+          .eq("id", id)
+          .maybeSingle();
+      }
       if (refreshed.error && isMissingLeadsLinkedinPersonalColumn(refreshed.error.message)) {
         refreshed = await sb
           .from("leads")
@@ -684,11 +755,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         const row = refreshed.data as Record<string, unknown>;
         const cs = row.commercial_stage ?? null;
         const shaped = shapeLeadRowLinkedinForApi(row);
+        const contractFieldsJson = contractFieldsJsonForApiRead(row.contract_fields_json);
         const fullLead = {
           ...shaped,
           meet_url: row.meet_url ?? null,
           commercial_stage: cs,
           stage: cs,
+          contract_fields_json: contractFieldsJson,
         };
         
         // Si hubo error al crear socio pero el lead se actualizó, incluir advertencia

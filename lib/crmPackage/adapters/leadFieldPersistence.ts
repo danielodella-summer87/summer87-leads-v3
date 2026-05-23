@@ -217,3 +217,96 @@ export function resolveContractFieldWhitelist(
     resolveLeadFieldsAdapterForPersistence(config)
   );
 }
+
+function isExplicitlyEmptyContractFieldValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string" && !value.trim()) return true;
+  return false;
+}
+
+/**
+ * Merge seguro para PATCH: actualiza solo claves whitelist presentes en `incoming`;
+ * vacíos explícitos eliminan la clave; claves futuras/no whitelist se preservan.
+ */
+export function mergeContractFieldsPatch(
+  current: unknown,
+  incoming: unknown,
+  options: SanitizeContractFieldsOptions = {}
+): Record<string, ContractFieldValue> {
+  const currentObj: Record<string, unknown> = isPlainRecord(current) ? { ...current } : {};
+  const whitelist =
+    options.whitelist ?? resolveContractFieldWhitelist(undefined);
+
+  const preservedFuture = (): Record<string, unknown> =>
+    Object.fromEntries(
+      Object.entries(currentObj).filter(
+        ([key]) => whitelist.size > 0 && !whitelist.has(key)
+      )
+    );
+
+  const sanitizeWhitelisted = (
+    source: Record<string, unknown>
+  ): Record<string, ContractFieldValue> =>
+    sanitizeContractFields(
+      Object.fromEntries(
+        Object.entries(source).filter(([key]) => whitelist.has(key))
+      ),
+      { ...options, whitelist }
+    );
+
+  const combinePreservedFutureWithWhitelisted = (
+    future: Record<string, unknown>,
+    whitelisted: Record<string, ContractFieldValue>
+  ): Record<string, ContractFieldValue> => {
+    const out: Record<string, ContractFieldValue> = { ...whitelisted };
+    for (const [key, value] of Object.entries(future)) {
+      if (key in out) continue;
+      const scalar = sanitizeScalar(value);
+      if (scalar !== null) out[key] = scalar;
+    }
+    return out;
+  };
+
+  if (incoming === undefined) {
+    return combinePreservedFutureWithWhitelisted(
+      preservedFuture(),
+      sanitizeWhitelisted(currentObj)
+    );
+  }
+
+  if (!isPlainRecord(incoming)) {
+    return combinePreservedFutureWithWhitelisted(
+      preservedFuture(),
+      sanitizeWhitelisted(currentObj)
+    );
+  }
+
+  const merged: Record<string, unknown> = { ...currentObj };
+
+  for (const [rawKey, rawValue] of Object.entries(incoming)) {
+    const key = rawKey.trim();
+    if (!key) continue;
+    if (whitelist.size > 0 && !whitelist.has(key)) continue;
+    if (ALL_CORE_FIELD_KEYS.has(key)) continue;
+
+    if (isExplicitlyEmptyContractFieldValue(rawValue)) {
+      delete merged[key];
+      continue;
+    }
+
+    const single = sanitizeContractFields({ [key]: rawValue }, {
+      ...options,
+      whitelist,
+    });
+    if (single[key] !== undefined) {
+      merged[key] = single[key];
+    } else {
+      delete merged[key];
+    }
+  }
+
+  return combinePreservedFutureWithWhitelisted(
+    preservedFuture(),
+    sanitizeWhitelisted(merged)
+  );
+}

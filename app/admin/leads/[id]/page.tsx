@@ -171,7 +171,9 @@ type PatchPayload = Partial<
     | "direccion"
     | "notas_instalacion"
   >
->;
+> & {
+  contract_fields?: Record<string, unknown>;
+};
 
 
 type ApiResp<T> = {
@@ -916,6 +918,51 @@ const TIPO_USO_LABELS: Record<string, string> = {
   otro: "Otro",
 };
 
+const VEHICULO_TIPO_USO_OPTIONS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: "— Seleccionar —", value: "" },
+  { label: "Particular", value: "particular" },
+  { label: "Trabajo", value: "trabajo" },
+  { label: "Flota", value: "flota" },
+  { label: "Campo", value: "campo" },
+  { label: "Otro", value: "otro" },
+];
+
+type VehicleContractDraft = {
+  marca: string;
+  modelo: string;
+  anio: string;
+  matricula: string;
+  tipo_uso: string;
+};
+
+function vehicleDraftFromContractFields(fields: Record<string, unknown>): VehicleContractDraft {
+  const anio = getContractFieldNumber(fields, "año");
+  return {
+    marca: getContractFieldString(fields, "marca") ?? "",
+    modelo: getContractFieldString(fields, "modelo") ?? "",
+    anio: anio != null ? String(anio) : "",
+    matricula: getContractFieldString(fields, "matricula") ?? "",
+    tipo_uso: getContractFieldString(fields, "tipo_uso") ?? "",
+  };
+}
+
+function buildVehicleContractPatchPayload(draft: VehicleContractDraft): Record<string, unknown> {
+  const anioTrim = draft.anio.trim();
+  let anioValue: number | null = null;
+  if (anioTrim.length) {
+    const n = Number(anioTrim);
+    anioValue = Number.isFinite(n) ? n : null;
+  }
+
+  return {
+    marca: draft.marca.trim() || null,
+    modelo: draft.modelo.trim() || null,
+    año: anioValue,
+    matricula: draft.matricula.trim() || null,
+    tipo_uso: draft.tipo_uso.trim() || null,
+  };
+}
+
 function formatTipoUso(value: string | null): string | null {
   if (!value) return null;
   const key = value.trim().toLowerCase();
@@ -950,6 +997,15 @@ export default function LeadDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<PatchPayload>({});
+  const [vehicleEditing, setVehicleEditing] = useState(false);
+  const [vehicleDraft, setVehicleDraft] = useState<VehicleContractDraft>({
+    marca: "",
+    modelo: "",
+    anio: "",
+    matricula: "",
+    tipo_uso: "",
+  });
+  const [vehicleSaving, setVehicleSaving] = useState(false);
   const [entityForm, setEntityForm] = useState({
     nombre: "",
     telefono: "",
@@ -2671,6 +2727,8 @@ export default function LeadDetailPage() {
           empresas: updated.empresas ?? prev.empresas ?? null,
           // Preservar empresa_id si viene vacío por error
           empresa_id: updated.empresa_id ?? prev.empresa_id ?? null,
+          contract_fields_json:
+            updated.contract_fields_json ?? prev.contract_fields_json ?? null,
         };
       });
       
@@ -3464,6 +3522,32 @@ export default function LeadDetailPage() {
     };
   }, [lead?.contract_fields_json]);
 
+  function startVehicleEdit() {
+    const fields = getContractFieldsFromLead(lead);
+    setVehicleDraft(vehicleDraftFromContractFields(fields));
+    setVehicleEditing(true);
+  }
+
+  function cancelVehicleEdit() {
+    setVehicleEditing(false);
+    setVehicleDraft(vehicleDraftFromContractFields(getContractFieldsFromLead(lead)));
+  }
+
+  async function saveVehicleEdit() {
+    if (!id) return;
+    setVehicleSaving(true);
+    try {
+      await patchLead({
+        contract_fields: buildVehicleContractPatchPayload(vehicleDraft),
+      });
+      setVehicleEditing(false);
+    } catch {
+      // patchLead ya setea error
+    } finally {
+      setVehicleSaving(false);
+    }
+  }
+
   return (
     <PageContainer>
       <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -4091,42 +4175,160 @@ export default function LeadDetailPage() {
                   id="lead-vehicle-contract-fields"
                   className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                 >
-                  <h2 className="text-sm font-semibold text-slate-900">Vehículo</h2>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                    Datos del vehículo asociados a esta oportunidad.
-                  </p>
-                  <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                    {vehicleContractDisplay.marca ? (
-                      <div>
-                        <dt className="text-xs font-medium text-slate-500">Marca</dt>
-                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.marca}</dd>
-                      </div>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">Vehículo</h2>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                        Datos del vehículo asociados a esta oportunidad.
+                      </p>
+                    </div>
+                    {!vehicleEditing && canEditLead ? (
+                      <button
+                        type="button"
+                        onClick={startVehicleEdit}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-none hover:bg-slate-50 disabled:opacity-50 transition"
+                        disabled={disabled || vehicleSaving}
+                      >
+                        Editar
+                      </button>
                     ) : null}
-                    {vehicleContractDisplay.modelo ? (
-                      <div>
-                        <dt className="text-xs font-medium text-slate-500">Modelo</dt>
-                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.modelo}</dd>
+                  </div>
+
+                  {vehicleEditing ? (
+                    <div className="mt-4 space-y-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="text-xs font-medium text-slate-500" htmlFor="vehicle-marca">
+                            Marca
+                          </label>
+                          <input
+                            id="vehicle-marca"
+                            value={vehicleDraft.marca}
+                            onChange={(e) =>
+                              setVehicleDraft((prev) => ({ ...prev, marca: e.target.value }))
+                            }
+                            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                            disabled={vehicleSaving}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-slate-500" htmlFor="vehicle-modelo">
+                            Modelo
+                          </label>
+                          <input
+                            id="vehicle-modelo"
+                            value={vehicleDraft.modelo}
+                            onChange={(e) =>
+                              setVehicleDraft((prev) => ({ ...prev, modelo: e.target.value }))
+                            }
+                            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                            disabled={vehicleSaving}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-slate-500" htmlFor="vehicle-anio">
+                            Año
+                          </label>
+                          <input
+                            id="vehicle-anio"
+                            type="number"
+                            inputMode="numeric"
+                            value={vehicleDraft.anio}
+                            onChange={(e) =>
+                              setVehicleDraft((prev) => ({ ...prev, anio: e.target.value }))
+                            }
+                            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                            disabled={vehicleSaving}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-slate-500" htmlFor="vehicle-matricula">
+                            Matrícula
+                          </label>
+                          <input
+                            id="vehicle-matricula"
+                            value={vehicleDraft.matricula}
+                            onChange={(e) =>
+                              setVehicleDraft((prev) => ({ ...prev, matricula: e.target.value }))
+                            }
+                            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                            disabled={vehicleSaving}
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="text-xs font-medium text-slate-500" htmlFor="vehicle-tipo-uso">
+                            Uso del vehículo
+                          </label>
+                          <select
+                            id="vehicle-tipo-uso"
+                            value={vehicleDraft.tipo_uso}
+                            onChange={(e) =>
+                              setVehicleDraft((prev) => ({ ...prev, tipo_uso: e.target.value }))
+                            }
+                            className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                            disabled={vehicleSaving}
+                          >
+                            {VEHICULO_TIPO_USO_OPTIONS.map((opt) => (
+                              <option key={opt.value || "empty"} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                    ) : null}
-                    {vehicleContractDisplay.anio != null ? (
-                      <div>
-                        <dt className="text-xs font-medium text-slate-500">Año</dt>
-                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.anio}</dd>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={cancelVehicleEdit}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-none hover:bg-slate-50 disabled:opacity-50 transition"
+                          disabled={vehicleSaving}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveVehicleEdit}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-none hover:bg-slate-50 disabled:opacity-50 transition"
+                          disabled={vehicleSaving}
+                        >
+                          {vehicleSaving ? "Guardando..." : "Guardar"}
+                        </button>
                       </div>
-                    ) : null}
-                    {vehicleContractDisplay.matricula ? (
-                      <div>
-                        <dt className="text-xs font-medium text-slate-500">Matrícula</dt>
-                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.matricula}</dd>
-                      </div>
-                    ) : null}
-                    {vehicleContractDisplay.tipoUso ? (
-                      <div>
-                        <dt className="text-xs font-medium text-slate-500">Uso del vehículo</dt>
-                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.tipoUso}</dd>
-                      </div>
-                    ) : null}
-                  </dl>
+                    </div>
+                  ) : (
+                    <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                      {vehicleContractDisplay.marca ? (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Marca</dt>
+                          <dd className="mt-1 text-slate-800">{vehicleContractDisplay.marca}</dd>
+                        </div>
+                      ) : null}
+                      {vehicleContractDisplay.modelo ? (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Modelo</dt>
+                          <dd className="mt-1 text-slate-800">{vehicleContractDisplay.modelo}</dd>
+                        </div>
+                      ) : null}
+                      {vehicleContractDisplay.anio != null ? (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Año</dt>
+                          <dd className="mt-1 text-slate-800">{vehicleContractDisplay.anio}</dd>
+                        </div>
+                      ) : null}
+                      {vehicleContractDisplay.matricula ? (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Matrícula</dt>
+                          <dd className="mt-1 text-slate-800">{vehicleContractDisplay.matricula}</dd>
+                        </div>
+                      ) : null}
+                      {vehicleContractDisplay.tipoUso ? (
+                        <div>
+                          <dt className="text-xs font-medium text-slate-500">Uso del vehículo</dt>
+                          <dd className="mt-1 text-slate-800">{vehicleContractDisplay.tipoUso}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  )}
                 </div>
               ) : null}
 
