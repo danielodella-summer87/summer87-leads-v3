@@ -3522,9 +3522,17 @@ export default function LeadDetailPage() {
     };
   }, [lead?.contract_fields_json]);
 
+  const shouldShowVehicleSection =
+    Boolean(vehicleContractDisplay) || vehicleEditing || canEditLead;
+
   function startVehicleEdit() {
     const fields = getContractFieldsFromLead(lead);
     setVehicleDraft(vehicleDraftFromContractFields(fields));
+    setVehicleEditing(true);
+  }
+
+  function startVehicleAdd() {
+    setVehicleDraft(vehicleDraftFromContractFields({}));
     setVehicleEditing(true);
   }
 
@@ -4170,7 +4178,7 @@ export default function LeadDetailPage() {
                 </dl>
               </div>
 
-              {vehicleContractDisplay ? (
+              {shouldShowVehicleSection ? (
                 <div
                   id="lead-vehicle-contract-fields"
                   className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -4179,17 +4187,19 @@ export default function LeadDetailPage() {
                     <div>
                       <h2 className="text-sm font-semibold text-slate-900">Vehículo</h2>
                       <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                        Datos del vehículo asociados a esta oportunidad.
+                        {vehicleContractDisplay || vehicleEditing
+                          ? "Datos del vehículo asociados a esta oportunidad."
+                          : "Este lead todavía no tiene datos de vehículo asociados. Podés agregarlos para mejorar compatibilidad, cotización e instalación."}
                       </p>
                     </div>
                     {!vehicleEditing && canEditLead ? (
                       <button
                         type="button"
-                        onClick={startVehicleEdit}
+                        onClick={vehicleContractDisplay ? startVehicleEdit : startVehicleAdd}
                         className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-none hover:bg-slate-50 disabled:opacity-50 transition"
                         disabled={disabled || vehicleSaving}
                       >
-                        Editar
+                        {vehicleContractDisplay ? "Editar" : "Agregar vehículo"}
                       </button>
                     ) : null}
                   </div>
@@ -4295,7 +4305,7 @@ export default function LeadDetailPage() {
                         </button>
                       </div>
                     </div>
-                  ) : (
+                  ) : vehicleContractDisplay ? (
                     <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                       {vehicleContractDisplay.marca ? (
                         <div>
@@ -4328,7 +4338,7 @@ export default function LeadDetailPage() {
                         </div>
                       ) : null}
                     </dl>
-                  )}
+                  ) : null}
                 </div>
               ) : null}
 
