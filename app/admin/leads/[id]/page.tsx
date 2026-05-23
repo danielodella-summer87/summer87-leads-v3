@@ -132,6 +132,7 @@ type Lead = {
   superficie_m2?: number | null;
   direccion?: string | null;
   notas_instalacion?: string | null;
+  contract_fields_json?: Record<string, unknown> | null;
 };
 
 type LeadApiResponse = {
@@ -871,6 +872,64 @@ function mergeCurrentPipelineIntoEtapas(names: readonly string[], current: strin
     return [...names];
   }
   return [...names, trimmed];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function getContractFieldsFromLead(lead: Lead | null): Record<string, unknown> {
+  const raw = lead?.contract_fields_json;
+  return isRecord(raw) ? raw : {};
+}
+
+function getContractFieldString(
+  fields: Record<string, unknown>,
+  key: string,
+): string | null {
+  const v = fields[key];
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return s.length ? s : null;
+}
+
+function getContractFieldNumber(
+  fields: Record<string, unknown>,
+  key: string,
+): number | null {
+  const v = fields[key];
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s.length) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+const TIPO_USO_LABELS: Record<string, string> = {
+  particular: "Particular",
+  trabajo: "Trabajo",
+  flota: "Flota",
+  campo: "Campo",
+  otro: "Otro",
+};
+
+function formatTipoUso(value: string | null): string | null {
+  if (!value) return null;
+  const key = value.trim().toLowerCase();
+  return TIPO_USO_LABELS[key] ?? value.trim();
+}
+
+function hasVehicleContractFields(fields: Record<string, unknown>): boolean {
+  return (
+    getContractFieldString(fields, "marca") != null ||
+    getContractFieldString(fields, "modelo") != null ||
+    getContractFieldNumber(fields, "año") != null ||
+    getContractFieldString(fields, "matricula") != null ||
+    getContractFieldString(fields, "tipo_uso") != null
+  );
 }
 
 export default function LeadDetailPage() {
@@ -3393,6 +3452,18 @@ export default function LeadDetailPage() {
   const vendedorLabel = lead?.comercial?.nombre?.trim() ? lead.comercial.nombre : "Sin asignar";
   const pilotCommercialStatus = getPilotCommercialStatus(lead);
 
+  const vehicleContractDisplay = useMemo(() => {
+    const fields = getContractFieldsFromLead(lead);
+    if (!hasVehicleContractFields(fields)) return null;
+    return {
+      marca: getContractFieldString(fields, "marca"),
+      modelo: getContractFieldString(fields, "modelo"),
+      anio: getContractFieldNumber(fields, "año"),
+      matricula: getContractFieldString(fields, "matricula"),
+      tipoUso: formatTipoUso(getContractFieldString(fields, "tipo_uso")),
+    };
+  }, [lead?.contract_fields_json]);
+
   return (
     <PageContainer>
       <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -4014,6 +4085,50 @@ export default function LeadDetailPage() {
                   </div>
                 </dl>
               </div>
+
+              {vehicleContractDisplay ? (
+                <div
+                  id="lead-vehicle-contract-fields"
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <h2 className="text-sm font-semibold text-slate-900">Vehículo</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                    Datos del vehículo asociados a esta oportunidad.
+                  </p>
+                  <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                    {vehicleContractDisplay.marca ? (
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Marca</dt>
+                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.marca}</dd>
+                      </div>
+                    ) : null}
+                    {vehicleContractDisplay.modelo ? (
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Modelo</dt>
+                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.modelo}</dd>
+                      </div>
+                    ) : null}
+                    {vehicleContractDisplay.anio != null ? (
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Año</dt>
+                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.anio}</dd>
+                      </div>
+                    ) : null}
+                    {vehicleContractDisplay.matricula ? (
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Matrícula</dt>
+                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.matricula}</dd>
+                      </div>
+                    ) : null}
+                    {vehicleContractDisplay.tipoUso ? (
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">Uso del vehículo</dt>
+                        <dd className="mt-1 text-slate-800">{vehicleContractDisplay.tipoUso}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </div>
+              ) : null}
 
               {/* Datos del lead (comercial) */}
               <div className="rounded-2xl border bg-white">
