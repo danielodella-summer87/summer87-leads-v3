@@ -34,6 +34,7 @@ type Lead = {
   comerciales?: { id: string; nombre: string } | null;
   empresas?: { instagram?: string | null; facebook?: string | null } | null;
   services_count?: number;
+  contract_fields_json?: Record<string, unknown> | null;
 };
 
 type PipelineRow = {
@@ -65,6 +66,20 @@ type BulkDeleteResponse = {
   error?: string | null;
 };
 
+const VEHICLE_FIELD_KEYS = ["marca", "modelo", "año", "matricula", "tipo_uso"] as const;
+const VEHICLE_TIPO_USO_VALUES = ["particular", "trabajo", "flota", "campo", "otro"] as const;
+
+type VehicleFieldKey = (typeof VEHICLE_FIELD_KEYS)[number];
+type VehiclePresenceFilter = "all" | "with_vehicle" | "without_vehicle";
+type VehicleTipoUsoFilter = "all" | (typeof VEHICLE_TIPO_USO_VALUES)[number];
+
+type VehicleFilters = {
+  vehiclePresenceFilter: VehiclePresenceFilter;
+  vehicleMarcaFilter: string;
+  vehicleModeloFilter: string;
+  vehicleTipoUsoFilter: VehicleTipoUsoFilter;
+};
+
 function safeStr(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
 }
@@ -87,6 +102,78 @@ function formatLocalFilenameDate(d = new Date()) {
 
 function norm(s: string | null | undefined) {
   return (s ?? "").trim().toLowerCase();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getContractFieldsFromLead(lead: Lead | null | undefined): Record<string, unknown> {
+  const raw = lead?.contract_fields_json;
+  return isRecord(raw) ? raw : {};
+}
+
+function getVehicleFieldString(fields: Record<string, unknown>, key: VehicleFieldKey): string {
+  const value = fields[key];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+
+function normalizeVehicleFilterText(value: unknown): string {
+  return safeStr(value).trim().toLowerCase();
+}
+
+function hasVehicleData(fields: Record<string, unknown>): boolean {
+  return VEHICLE_FIELD_KEYS.some((key) => getVehicleFieldString(fields, key).length > 0);
+}
+
+function getVehicleTipoUsoLabel(value: string): string {
+  switch (normalizeVehicleFilterText(value)) {
+    case "particular":
+      return "Particular";
+    case "trabajo":
+      return "Trabajo";
+    case "flota":
+      return "Flota";
+    case "campo":
+      return "Campo";
+    case "otro":
+      return "Otro";
+    default:
+      return value.trim() || "Tipo de uso";
+  }
+}
+
+function matchesVehicleFilters(lead: Lead, filters: VehicleFilters): boolean {
+  const fields = getContractFieldsFromLead(lead);
+  const vehiclePresent = hasVehicleData(fields);
+
+  if (filters.vehiclePresenceFilter === "with_vehicle" && !vehiclePresent) {
+    return false;
+  }
+
+  if (filters.vehiclePresenceFilter === "without_vehicle" && vehiclePresent) {
+    return false;
+  }
+
+  const marcaFilter = normalizeVehicleFilterText(filters.vehicleMarcaFilter);
+  const modeloFilter = normalizeVehicleFilterText(filters.vehicleModeloFilter);
+  const tipoUsoFilter = normalizeVehicleFilterText(filters.vehicleTipoUsoFilter);
+
+  if (marcaFilter && !normalizeVehicleFilterText(getVehicleFieldString(fields, "marca")).includes(marcaFilter)) {
+    return false;
+  }
+
+  if (modeloFilter && !normalizeVehicleFilterText(getVehicleFieldString(fields, "modelo")).includes(modeloFilter)) {
+    return false;
+  }
+
+  if (tipoUsoFilter && tipoUsoFilter !== "all") {
+    return normalizeVehicleFilterText(getVehicleFieldString(fields, "tipo_uso")) === tipoUsoFilter;
+  }
+
+  return true;
 }
 
 function getProgressBadgeClasses(percent: number): string {
@@ -370,6 +457,10 @@ export default function LeadsPage() {
   const [q, setQ] = useState("");
   const [pipelineFilter, setPipelineFilter] = useState<string>("Todos");
   const [showMembers, setShowMembers] = useState(false); // default OFF
+  const [vehiclePresenceFilter, setVehiclePresenceFilter] = useState<VehiclePresenceFilter>("all");
+  const [vehicleMarcaFilter, setVehicleMarcaFilter] = useState("");
+  const [vehicleModeloFilter, setVehicleModeloFilter] = useState("");
+  const [vehicleTipoUsoFilter, setVehicleTipoUsoFilter] = useState<VehicleTipoUsoFilter>("all");
 
   // selección masiva
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -475,6 +566,24 @@ export default function LeadsPage() {
     return merged;
   }, [pipelines]);
 
+  const vehicleMarcaOptions = useMemo(() => {
+    const values = new Set<string>();
+    rows.forEach((lead) => {
+      const value = getVehicleFieldString(getContractFieldsFromLead(lead), "marca");
+      if (value) values.add(value);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
+  const vehicleModeloOptions = useMemo(() => {
+    const values = new Set<string>();
+    rows.forEach((lead) => {
+      const value = getVehicleFieldString(getContractFieldsFromLead(lead), "modelo");
+      if (value) values.add(value);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     let list = [...rows];
@@ -509,6 +618,15 @@ export default function LeadsPage() {
       });
     }
 
+    list = list.filter((r) =>
+      matchesVehicleFilters(r, {
+        vehiclePresenceFilter,
+        vehicleMarcaFilter,
+        vehicleModeloFilter,
+        vehicleTipoUsoFilter,
+      })
+    );
+
     // Deduplicación cuando showMembers === true
     if (showMembers) {
       const map = new Map<string, typeof list[number]>();
@@ -534,7 +652,16 @@ export default function LeadsPage() {
 
     list.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") * -1);
     return list;
-  }, [rows, q, pipelineFilter, showMembers]);
+  }, [
+    rows,
+    q,
+    pipelineFilter,
+    showMembers,
+    vehiclePresenceFilter,
+    vehicleMarcaFilter,
+    vehicleModeloFilter,
+    vehicleTipoUsoFilter,
+  ]);
 
   const selectedCount = selectedIds.size;
 
@@ -818,6 +945,87 @@ export default function LeadsPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex flex-col gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Filtros de vehículo</h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Filtros basados en los datos de vehículo capturados en el contrato CRM.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-slate-600">Presencia</span>
+                <select
+                  value={vehiclePresenceFilter}
+                  onChange={(e) => setVehiclePresenceFilter(e.target.value as VehiclePresenceFilter)}
+                  className="rounded-xl border bg-white px-3 py-2 text-sm"
+                  disabled={disabled}
+                >
+                  <option value="all">Todos</option>
+                  <option value="with_vehicle">Con vehículo</option>
+                  <option value="without_vehicle">Sin vehículo</option>
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-slate-600">Marca</span>
+                <input
+                  type="text"
+                  value={vehicleMarcaFilter}
+                  onChange={(e) => setVehicleMarcaFilter(e.target.value)}
+                  placeholder="Ej. Toyota"
+                  list="vehicle-marca-options"
+                  className="rounded-xl border bg-white px-3 py-2 text-sm"
+                  disabled={disabled}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-slate-600">Modelo</span>
+                <input
+                  type="text"
+                  value={vehicleModeloFilter}
+                  onChange={(e) => setVehicleModeloFilter(e.target.value)}
+                  placeholder="Ej. Hilux"
+                  list="vehicle-modelo-options"
+                  className="rounded-xl border bg-white px-3 py-2 text-sm"
+                  disabled={disabled}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-slate-600">Tipo de uso</span>
+                <select
+                  value={vehicleTipoUsoFilter}
+                  onChange={(e) => setVehicleTipoUsoFilter(e.target.value as VehicleTipoUsoFilter)}
+                  className="rounded-xl border bg-white px-3 py-2 text-sm"
+                  disabled={disabled}
+                >
+                  <option value="all">Todos</option>
+                  {VEHICLE_TIPO_USO_VALUES.map((tipo) => (
+                    <option key={tipo} value={tipo}>
+                      {getVehicleTipoUsoLabel(tipo)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <datalist id="vehicle-marca-options">
+            {vehicleMarcaOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <datalist id="vehicle-modelo-options">
+            {vehicleModeloOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
         </div>
 
         {/* acciones masivas */}
