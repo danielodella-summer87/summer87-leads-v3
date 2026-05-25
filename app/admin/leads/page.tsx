@@ -80,6 +80,14 @@ type VehicleFilters = {
   vehicleTipoUsoFilter: VehicleTipoUsoFilter;
 };
 
+type VehicleBadgeTone = "primary" | "partial" | "empty" | "secondary";
+
+type VehicleBadge = {
+  key: string;
+  label: string;
+  tone: VehicleBadgeTone;
+};
+
 function safeStr(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
 }
@@ -142,6 +150,60 @@ function getVehicleTipoUsoLabel(value: string): string {
       return "Otro";
     default:
       return value.trim() || "Tipo de uso";
+  }
+}
+
+function getVehicleBadgesForLead(lead: Lead): VehicleBadge[] {
+  const fields = getContractFieldsFromLead(lead);
+  const marca = getVehicleFieldString(fields, "marca");
+  const modelo = getVehicleFieldString(fields, "modelo");
+  const tipoUso = getVehicleFieldString(fields, "tipo_uso");
+  const vehiclePresent = hasVehicleData(fields);
+  const hasCompleteVehicle = Boolean(marca && modelo);
+  const badges: VehicleBadge[] = [];
+
+  if (hasCompleteVehicle) {
+    badges.push({
+      key: "vehicle-main",
+      label: `${marca} ${modelo}`.trim(),
+      tone: "primary",
+    });
+  } else if (vehiclePresent) {
+    badges.push({
+      key: "vehicle-partial",
+      label: "Vehículo parcial",
+      tone: "partial",
+    });
+  } else {
+    badges.push({
+      key: "vehicle-empty",
+      label: "Sin vehículo",
+      tone: "empty",
+    });
+  }
+
+  if (tipoUso) {
+    badges.push({
+      key: "vehicle-tipo-uso",
+      label: getVehicleTipoUsoLabel(tipoUso),
+      tone: "secondary",
+    });
+  }
+
+  return badges.slice(0, 2);
+}
+
+function getVehicleBadgeClasses(tone: VehicleBadgeTone): string {
+  switch (tone) {
+    case "primary":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "partial":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "secondary":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "empty":
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-500";
   }
 }
 
@@ -1123,6 +1185,7 @@ export default function LeadsPage() {
               <tbody className="divide-y divide-slate-200">
               {filtered.map((l) => {
                 const checked = selectedIds.has(l.id);
+                const vehicleBadges = getVehicleBadgesForLead(l);
                 const leadForFlow = {
                   id: l.id,
                   nombre: l.nombre,
@@ -1167,19 +1230,31 @@ export default function LeadsPage() {
                     <td className="px-3 py-2 align-top">
                       <Link
                         href={`/admin/leads/${l.id}`}
-                        className="flex flex-wrap items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+                        className="flex flex-col items-start gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
                       >
-                        <span className={`font-semibold truncate ${norm(l.pipeline) === norm("Ganado") ? "text-emerald-700" : "text-slate-900"}`}>
-                          {l.nombre ?? <span className="text-slate-400">—</span>}
-                        </span>
-                        {l.comerciales?.nombre && (
-                          <span className="text-xs rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 whitespace-nowrap font-medium">
-                            {l.comerciales.nombre}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`font-semibold truncate ${norm(l.pipeline) === norm("Ganado") ? "text-emerald-700" : "text-slate-900"}`}>
+                            {l.nombre ?? <span className="text-slate-400">—</span>}
                           </span>
-                        )}
-                        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                          Etapa: {l.pipeline ?? "—"}
-                        </span>
+                          {l.comerciales?.nombre && (
+                            <span className="text-xs rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 whitespace-nowrap font-medium">
+                              {l.comerciales.nombre}
+                            </span>
+                          )}
+                          <span className="rounded-full border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                            Etapa: {l.pipeline ?? "—"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {vehicleBadges.map((badge) => (
+                            <span
+                              key={badge.key}
+                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${getVehicleBadgeClasses(badge.tone)}`}
+                            >
+                              {badge.label}
+                            </span>
+                          ))}
+                        </div>
                       </Link>
                     </td>
                     <td
