@@ -3,7 +3,6 @@
  * Funciones puras — sin Supabase.
  */
 
-import { pickup4x4CrmPackageConfig } from "../configs/pickup4x4.config";
 import type { CrmPackageConfig } from "../types";
 import type { LeadFieldsAdapterConfig } from "./leadFields";
 import { packageToLeadFields } from "./leadFields";
@@ -197,19 +196,15 @@ export function sanitizeContractFields(
 }
 
 /**
- * Adapter de lead_fields: contrato activo o fallback documentado pickup4x4.config.ts.
+ * Adapter de lead_fields: contrato activo o adapter legacy neutro.
  */
 export function resolveLeadFieldsAdapterForPersistence(
   config: CrmPackageConfig | null | undefined
 ): LeadFieldsAdapterConfig {
-  const adapter = packageToLeadFields(config);
-  if (adapter.source === "contract" && adapter.allFields.length > 0) {
-    return adapter;
-  }
-  return packageToLeadFields(pickup4x4CrmPackageConfig);
+  return packageToLeadFields(config);
 }
 
-/** Whitelist JSONB lista para persistencia en API. */
+/** Whitelist JSONB lista para persistencia en API; vacía = modo neutro sin contrato activo. */
 export function resolveContractFieldWhitelist(
   config: CrmPackageConfig | null | undefined
 ): Set<string> {
@@ -235,29 +230,39 @@ export function mergeContractFieldsPatch(
 ): Record<string, ContractFieldValue> {
   const currentObj: Record<string, unknown> = isPlainRecord(current) ? { ...current } : {};
   const whitelist =
-    options.whitelist ?? resolveContractFieldWhitelist(undefined);
+    options.whitelist === undefined
+      ? resolveContractFieldWhitelist(undefined)
+      : options.whitelist;
+  const hasActiveWhitelist = Boolean(whitelist && whitelist.size > 0);
 
   const preservedFuture = (): Record<string, unknown> =>
-    Object.fromEntries(
-      Object.entries(currentObj).filter(
-        ([key]) => whitelist.size > 0 && !whitelist.has(key)
-      )
-    );
+    hasActiveWhitelist
+      ? Object.fromEntries(
+          Object.entries(currentObj).filter(
+            ([key]) => !ALL_CORE_FIELD_KEYS.has(key) && !whitelist!.has(key)
+          )
+        )
+      : {};
 
   const sanitizeWhitelisted = (
     source: Record<string, unknown>
   ): Record<string, ContractFieldValue> =>
-    sanitizeContractFields(
-      Object.fromEntries(
-        Object.entries(source).filter(([key]) => whitelist.has(key))
-      ),
-      { ...options, whitelist }
-    );
+    hasActiveWhitelist
+      ? sanitizeContractFields(
+          Object.fromEntries(
+            Object.entries(source).filter(([key]) => whitelist!.has(key))
+          ),
+          { ...options, whitelist }
+        )
+      : sanitizeContractFields(source, { ...options, whitelist: null });
 
   const combinePreservedFutureWithWhitelisted = (
     future: Record<string, unknown>,
     whitelisted: Record<string, ContractFieldValue>
   ): Record<string, ContractFieldValue> => {
+    if (!hasActiveWhitelist) {
+      return whitelisted;
+    }
     const out: Record<string, ContractFieldValue> = { ...whitelisted };
     for (const [key, value] of Object.entries(future)) {
       if (key in out) continue;
@@ -286,7 +291,7 @@ export function mergeContractFieldsPatch(
   for (const [rawKey, rawValue] of Object.entries(incoming)) {
     const key = rawKey.trim();
     if (!key) continue;
-    if (whitelist.size > 0 && !whitelist.has(key)) continue;
+    if (hasActiveWhitelist && !whitelist!.has(key)) continue;
     if (ALL_CORE_FIELD_KEYS.has(key)) continue;
 
     if (isExplicitlyEmptyContractFieldValue(rawValue)) {

@@ -81,8 +81,8 @@ export function getActiveCrmPackageConfig(
 
 /**
  * Atajo server-side: lee APP_MODE y CLIENT_SLUG desde env vía appMode helpers.
- * Fallback demo: si `client_crm` y no hay CLIENT_SLUG en env → asume `pickup4x4`
- * (solo para instancia demo; documentado en 12W-1V).
+ * Si `client_crm` no trae CLIENT_SLUG explícito, devuelve estado neutro/null.
+ * Pickup solo queda disponible cuando el slug explícito coincide.
  */
 export function getActiveCrmPackageConfigFromEnvironment(
   overrides?: Partial<GetActiveCrmPackageConfigOptions>
@@ -91,19 +91,35 @@ export function getActiveCrmPackageConfigFromEnvironment(
   const envSlug = getClientSlug();
 
   let clientSlug: string | null;
+  let missingExplicitClientSlug = false;
   if (overrides && "clientSlug" in overrides) {
     clientSlug = overrides.clientSlug ?? null;
   } else if (envSlug) {
     clientSlug = envSlug;
-  } else if (snap.isClientCrm) {
-    clientSlug = PICKUP4X4_CLIENT_SLUG;
   } else {
+    if (snap.isClientCrm) {
+      missingExplicitClientSlug = true;
+    }
     clientSlug = null;
   }
 
-  return getActiveCrmPackageConfig({
+  const result = getActiveCrmPackageConfig({
     enabled: overrides?.enabled,
     appMode: overrides?.appMode ?? snap.appMode,
     clientSlug,
   });
+
+  if (
+    missingExplicitClientSlug &&
+    result.ok &&
+    result.config === null &&
+    result.source === "none"
+  ) {
+    return {
+      ...result,
+      reason: "missing_explicit_client_slug",
+    };
+  }
+
+  return result;
 }
