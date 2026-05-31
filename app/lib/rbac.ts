@@ -9,7 +9,10 @@ export type RoleKey =
   | "comercial"
   | "tecnico"
   | "consultor"
-  | "viewer";
+  | "viewer"
+  // Rol de INSTALACIÓN temporal (CONSTRUCTOR-SETUP-USER-2). Acceso acotado SOLO a
+  // Constructor/Discovery; sin permisos operativos. Ver SETUP_ALLOWED_PREFIXES.
+  | "setup";
 
 /** Usuario con rol (ej. respuesta de /api/admin/permissions/me → user). Acepta varias formas de envío del rol. */
 export type UserWithRole = {
@@ -73,6 +76,8 @@ const PERMISSIONS_BY_ROLE: Record<RoleKey, string[]> = {
   tecnico: ["leads.read", "leads.write"],
   consultor: ["leads.read", "leads.write"],
   viewer: ["leads.read"],
+  // setup: sin permisos operativos. Su acceso es por ruta (allowlist), no por permiso.
+  setup: [],
 };
 
 const NORMALIZED_ROLES: RoleKey[] = [
@@ -82,6 +87,17 @@ const NORMALIZED_ROLES: RoleKey[] = [
   "tecnico",
   "consultor",
   "viewer",
+  "setup",
+];
+
+/**
+ * Rutas que el rol `setup` (instalación) PUEDE tocar. Allowlist estricta:
+ * todo lo demás queda denegado para `setup` (default-deny solo para este rol).
+ */
+const SETUP_ALLOWED_PREFIXES: string[] = [
+  "/admin/constructor",
+  "/admin/constructor-crm",
+  "/api/admin/constructor",
 ];
 
 /** Alias de nombres de rol en DB (roles.name) a RoleKey */
@@ -109,6 +125,7 @@ const ROLE_LABELS: Record<string, string> = {
   operaciones: "Operador",
   solo_lectura: "Viewer",
   gerencia: "Gerencia",
+  setup: "Setup (instalación)",
 };
 
 export function roleToLabel(role: string | null | undefined): string {
@@ -147,6 +164,12 @@ export function canAccessPath(
   const r = getRole(user);
   if (!r) return false;
   if (r === "admin") return true;
+  // Rol de instalación: allowlist estricta (default-deny). Solo Constructor/Discovery.
+  if (r === "setup") {
+    return SETUP_ALLOWED_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
+    );
+  }
   for (const { prefix, allowed } of PATH_ROLES) {
     if (pathname === prefix || pathname.startsWith(prefix + "/")) {
       return hasAnyRole(r, allowed);
