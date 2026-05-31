@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
+import { isConstructorSetupPrototypeModeEnabled } from "@/lib/config/constructorPrototypeFlags";
 
 export const dynamic = "force-dynamic";
 
-// TEMPORAL PROTOTIPO:
-// Permite leer/guardar la configuración del Constructor CRM sin exigir config.update.
-// Motivo: estamos diseñando y validando el flujo de Constructor persistente.
-// Revertir a false o reemplazar por permisos reales antes de activar CRM operativo.
-const CONSTRUCTOR_SETUP_PROTOTYPE_MODE = true;
+// MODO PROTOTIPO (gobernado por env — CONSTRUCTOR-SECURITY-1):
+// Permite leer/guardar la configuración del Constructor CRM sin exigir config.update,
+// SOLO en local/dev y solo con CONSTRUCTOR_SETUP_PROTOTYPE_MODE activado explícitamente.
+// En production siempre off → exige permisos reales. Ver lib/config/constructorPrototypeFlags.ts.
 
 function supabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -53,7 +53,7 @@ function nextStep(current: StepKey): StepKey {
 }
 
 function requireConstructorSetupAccess() {
-  if (CONSTRUCTOR_SETUP_PROTOTYPE_MODE) return null;
+  if (isConstructorSetupPrototypeModeEnabled()) return null;
 
   // TODO: reemplazar por requirePermission("config.update") o el permiso real
   // del Constructor cuando se cierre el modo prototipo.

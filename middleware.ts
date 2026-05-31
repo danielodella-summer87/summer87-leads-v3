@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSessionUser, getSessionCookieName } from "@/lib/auth/internalAuth";
 import { canAccessPath } from "@/app/lib/rbac";
+import { isConstructorAuthBypassEnabled } from "@/lib/config/constructorPrototypeFlags";
 
 const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"];
 
@@ -42,10 +43,10 @@ function addDebugHeaders(res: NextResponse, debug: DebugCookies): NextResponse {
   return res;
 }
 
-// BYPASS TEMPORAL DE PROTOTIPO:
-// El Constructor CRM queda accesible sin login para pruebas internas.
-// Revertir antes de exponer a terceros.
-const CONSTRUCTOR_AUTH_BYPASS = true;
+// BYPASS DE PROTOTIPO (gobernado por env — CONSTRUCTOR-SECURITY-1):
+// El Constructor CRM puede quedar accesible sin login SOLO en local/dev y solo si
+// CONSTRUCTOR_AUTH_BYPASS está activado explícitamente. En production siempre off.
+// Ver lib/config/constructorPrototypeFlags.ts.
 
 function isConstructorRoute(pathname: string) {
   return (
@@ -65,9 +66,9 @@ export async function middleware(req: NextRequest) {
   const crm = req.cookies.get("crm_session")?.value;
   const debug: DebugCookies = { expectedName, expected, legacy, crm, path: pathname };
 
-  // BYPASS TEMPORAL DE PROTOTIPO:
-  // Permitimos abrir el Constructor sin sesión mientras se valida internamente.
-  if (CONSTRUCTOR_AUTH_BYPASS && isConstructorRoute(pathname)) {
+  // BYPASS DE PROTOTIPO (gobernado por env): solo abre el Constructor sin sesión
+  // cuando el bypass está habilitado explícitamente (nunca en production).
+  if (isConstructorAuthBypassEnabled() && isConstructorRoute(pathname)) {
     return addDebugHeaders(NextResponse.next(), debug);
   }
 

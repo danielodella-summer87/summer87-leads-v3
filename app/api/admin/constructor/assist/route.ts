@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
+import { isConstructorAssistAuthBypassEnabled } from "@/lib/config/constructorPrototypeFlags";
 import type {
   ConstructorAISuggestion,
   ConstructorAssistMode,
@@ -47,10 +48,10 @@ const OPENAI_SANDBOX_REQUEST_ID = "openai-sandbox-diagnostico" as const;
 const OPENAI_SANDBOX_MODEL =
   process.env.OPENAI_SANDBOX_MODEL?.trim() || "gpt-4o-mini";
 
-// BYPASS TEMPORAL DE PROTOTIPO:
-// Permitimos usar assist sin sesión mientras el Constructor se valida internamente.
-// Revertir antes de exponer a terceros.
-const CONSTRUCTOR_ASSIST_AUTH_BYPASS = true;
+// BYPASS DE PROTOTIPO (gobernado por env — CONSTRUCTOR-SECURITY-1):
+// Permite usar assist sin sesión SOLO en local/dev y solo con
+// CONSTRUCTOR_ASSIST_AUTH_BYPASS activado explícitamente. En production siempre off.
+// Ver lib/config/constructorPrototypeFlags.ts.
 
 const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"] as const;
 
@@ -669,9 +670,9 @@ export async function POST(req: NextRequest) {
   const blocked = guardConstructorApiByMode();
   if (blocked) return blocked;
 
-  // BYPASS TEMPORAL DE PROTOTIPO:
-  // Mantenemos el guard pero deshabilitado por bypass mientras dura la fase de prototipo interno.
-  if (!CONSTRUCTOR_ASSIST_AUTH_BYPASS) {
+  // BYPASS DE PROTOTIPO (gobernado por env): el guard solo se omite si el bypass
+  // está habilitado explícitamente en local/dev (nunca en production).
+  if (!isConstructorAssistAuthBypassEnabled()) {
     const hasAccess = await hasConstructorAssistAccess();
     if (!hasAccess) return unauthorizedError();
   }

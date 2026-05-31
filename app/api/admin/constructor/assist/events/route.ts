@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardConstructorApiByMode } from "@/lib/admin/constructorApiAccess";
+import { isConstructorAssistEventsAuthBypassEnabled } from "@/lib/config/constructorPrototypeFlags";
 import { cookies } from "next/headers";
 import {
   isConstructorAISuggestionAuditAction,
@@ -26,10 +27,10 @@ const MOCK_METADATA = {
   requestId: "mock-constructor-assist-events",
 } as const;
 
-// BYPASS TEMPORAL DE PROTOTIPO:
-// Permitimos registrar eventos mock sin sesión mientras el Constructor se valida internamente.
-// Revertir antes de exponer a terceros.
-const CONSTRUCTOR_ASSIST_EVENTS_AUTH_BYPASS = true;
+// BYPASS DE PROTOTIPO (gobernado por env — CONSTRUCTOR-SECURITY-1):
+// Permite registrar eventos mock sin sesión SOLO en local/dev y solo con
+// CONSTRUCTOR_ASSIST_EVENTS_AUTH_BYPASS activado explícitamente. En production siempre off.
+// Ver lib/config/constructorPrototypeFlags.ts.
 
 const CRM_VALID_ROLES = ["superadmin", "admin", "staff", "member"] as const;
 
@@ -200,9 +201,9 @@ export async function POST(req: NextRequest) {
   const blocked = guardConstructorApiByMode();
   if (blocked) return blocked;
 
-  // BYPASS TEMPORAL DE PROTOTIPO:
-  // Mantenemos el guard pero deshabilitado por bypass mientras dura la fase de prototipo interno.
-  if (!CONSTRUCTOR_ASSIST_EVENTS_AUTH_BYPASS) {
+  // BYPASS DE PROTOTIPO (gobernado por env): el guard solo se omite si el bypass
+  // está habilitado explícitamente en local/dev (nunca en production).
+  if (!isConstructorAssistEventsAuthBypassEnabled()) {
     const hasAccess = await hasConstructorAssistEventsAccess();
     if (!hasAccess) return unauthorizedError();
   }
