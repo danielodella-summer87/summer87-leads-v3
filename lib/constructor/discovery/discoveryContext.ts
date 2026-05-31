@@ -818,3 +818,102 @@ export function buildDiscoveryContextFromSetup(
 
   return context;
 }
+
+// ── Snapshot confirmado del Discovery (CONSTRUCTOR-DISCOVERY-8b) ──────────────
+//
+// El "snapshot" es lo que persiste el botón "Terminé" en
+// crm_setup_config.meta.discovery_submission. Incluye el DiscoveryContext
+// completo (para revisión interna) + un resumen legible + los blockers.
+// Se mantiene en este módulo autocontenido para que el selftest pueda ejecutarse
+// con `node --experimental-strip-types` sin cadenas de import con extensión.
+
+export const DISCOVERY_SUBMISSION_SCHEMA_VERSION = "1.0.0";
+
+export type DiscoverySubmission = {
+  schema_version: string;
+  source: "constructor_discovery";
+  submitted_at: string | null;
+  status: DiscoveryStatus;
+  completion_percent: number;
+  human_review_required: boolean;
+  missing_critical_fields: string[];
+  engine_blockers: string[];
+  vertical_blockers: string[];
+  business_module_blockers: string[];
+  /** Solo presente si el vertical declara un módulo pricing/costing/quotation. */
+  quoting_blockers?: string[];
+  summary: string;
+  discovery_context: DiscoveryContext;
+};
+
+export type BuildDiscoverySubmissionOptions = {
+  /** Timestamp de cierre provisto por el caller (mantiene el helper puro). */
+  submittedAt?: string | null;
+  /** Timestamp de generación provisto por el caller. */
+  generatedAt?: string | null;
+};
+
+function joinOrNone(list: string[]): string {
+  return list.length > 0 ? list.join(", ") : "ninguno";
+}
+
+/** Resumen legible para revisión interna. Determinístico (sin Date/random). */
+export function buildDiscoverySubmissionSummary(ctx: DiscoveryContext): string {
+  const lines: string[] = [];
+  lines.push(
+    `Discovery ${ctx.status} · completitud ${ctx.completion_percent}% · revisión humana: ${
+      ctx.human_review_required ? "sí" : "no"
+    }.`
+  );
+  lines.push(`Faltantes críticos: ${joinOrNone(ctx.missing_critical_fields)}.`);
+  lines.push(`Engine blockers: ${joinOrNone(ctx.engine_blockers)}.`);
+  lines.push(`Vertical blockers: ${joinOrNone(ctx.vertical_blockers)}.`);
+  lines.push(`Módulos bloqueados: ${joinOrNone(ctx.business_module_blockers)}.`);
+  if (ctx.quoting_blockers !== undefined) {
+    lines.push(`Costeo/cotización (módulo del vertical): ${joinOrNone(ctx.quoting_blockers)}.`);
+  }
+  const enabledModules = ctx.business_modules.filter((m) => m.enabled).map((m) => m.key);
+  if (ctx.business_modules.length > 0) {
+    lines.push(`Módulos habilitados: ${joinOrNone(enabledModules)}.`);
+  }
+  lines.push("Snapshot interno: NO activa motores, NO genera paquete y NO crea el CRM operativo.");
+  return lines.join("\n");
+}
+
+/**
+ * Construye el snapshot confirmado del Discovery a partir del setup.
+ * Puro y determinístico: el caller provee los timestamps.
+ * NO escribe nada: solo arma el objeto que luego se persiste vía PATCH meta.
+ */
+export function buildDiscoverySubmission(
+  input: DiscoverySetupInput = {},
+  options: BuildDiscoverySubmissionOptions = {}
+): DiscoverySubmission {
+  const submittedAt = asString(options.submittedAt) ?? null;
+  const ctx = buildDiscoveryContextFromSetup({
+    ...input,
+    submittedAt,
+    generatedAt: options.generatedAt ?? input.generatedAt ?? null,
+  });
+
+  const submission: DiscoverySubmission = {
+    schema_version: DISCOVERY_SUBMISSION_SCHEMA_VERSION,
+    source: "constructor_discovery",
+    submitted_at: submittedAt,
+    status: ctx.status,
+    completion_percent: ctx.completion_percent,
+    human_review_required: ctx.human_review_required,
+    missing_critical_fields: ctx.missing_critical_fields,
+    engine_blockers: ctx.engine_blockers,
+    vertical_blockers: ctx.vertical_blockers,
+    business_module_blockers: ctx.business_module_blockers,
+    summary: buildDiscoverySubmissionSummary(ctx),
+    discovery_context: ctx,
+  };
+
+  if (ctx.quoting_blockers !== undefined) {
+    submission.quoting_blockers = ctx.quoting_blockers;
+  }
+
+  return submission;
+}

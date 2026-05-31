@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { MockAISuggestionCard } from "@/components/constructor/MockAISuggestionCard";
 import { FieldQualityHint } from "@/components/constructor/FieldQualityHint";
 import { StepReadinessPanel } from "@/components/constructor/StepReadinessPanel";
+import { DiscoveryFinishPanel } from "@/components/constructor/DiscoveryFinishPanel";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ConstructorStepsBreadcrumb } from "@/components/constructor/ConstructorStepsBreadcrumb";
 import { CRM_SETUP_STEPS } from "@/lib/config/crmMode";
@@ -1246,6 +1247,9 @@ export default function CuestionarioPage() {
               currentStepPercent: readiness.completionPercent,
             })}
           />
+
+          {/* ── Cierre de Discovery (snapshot para revisión interna) ─────────── */}
+          <DiscoveryFinishPanel />
 
           {/* ── Formulario ─────────────────────────────────────────────────── */}
           <div className="space-y-8">

@@ -5,7 +5,10 @@
 
 export {
   buildDiscoveryContextFromSetup,
+  buildDiscoverySubmission,
+  buildDiscoverySubmissionSummary,
   DISCOVERY_CONTEXT_SCHEMA_VERSION,
+  DISCOVERY_SUBMISSION_SCHEMA_VERSION,
   READ_ONLY_ENGINES,
   SENSITIVE_ENGINES,
 } from "./discoveryContext";
@@ -23,4 +26,6 @@ export type {
   DiscoverySetupStep,
   DiscoverySetupInput,
   DiscoveryContext,
+  DiscoverySubmission,
+  BuildDiscoverySubmissionOptions,
 } from "./discoveryContext";

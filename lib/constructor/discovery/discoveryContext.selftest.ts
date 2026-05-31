@@ -12,6 +12,8 @@
 
 import {
   buildDiscoveryContextFromSetup,
+  buildDiscoverySubmission,
+  DISCOVERY_SUBMISSION_SCHEMA_VERSION,
   type DiscoverySetupInput,
 } from "./discoveryContext.ts";
 
@@ -223,14 +225,64 @@ function caseEmpty(): void {
   check("determinístico: dos llamadas idénticas", JSON.stringify(ctx) === JSON.stringify(buildDiscoveryContextFromSetup()));
 }
 
+// ── G. Snapshot confirmado (CONSTRUCTOR-DISCOVERY-8b) ─────────────────────────
+function caseSubmissionSnapshot(): void {
+  console.log("\n[G] Snapshot del Discovery (buildDiscoverySubmission)");
+  const completeInput: DiscoverySetupInput = {
+    empresa: { nombreComercial: "Cliente Completo SA", rubro: "Servicios", pais: "Argentina", servicios: ["A", "B"] },
+    cuestionario: { procesoActual: "Proceso en 4 etapas.", tiposClienteObj: ["Empresas medianas"] },
+    proceso_pipeline: { etapas: ["Nuevo", "Calificado", "Propuesta", "Ganado"] },
+  };
+
+  // Preview (sin submitted_at) — no marca como confirmado.
+  const preview = buildDiscoverySubmission(completeInput, { generatedAt: "2026-05-31T00:00:00.000Z" });
+  check("preview: submitted_at null", preview.submitted_at === null);
+  check("preview: status no confirmed sin submit", preview.status !== "confirmed", preview.status);
+  check("preview: schema_version correcto", preview.schema_version === DISCOVERY_SUBMISSION_SCHEMA_VERSION);
+  check("preview: source constructor_discovery", preview.source === "constructor_discovery");
+  check("preview: incrusta discovery_context", typeof preview.discovery_context === "object" && preview.discovery_context.schema_version.length > 0);
+  check("preview: summary legible", preview.summary.includes("Discovery") && preview.summary.includes("completitud"));
+  check("preview: summary aclara que NO activa motores/paquete/CRM", preview.summary.includes("NO activa motores"));
+
+  // Cierre (con submitted_at) — sella confirmado.
+  const submitted = buildDiscoverySubmission(completeInput, {
+    submittedAt: "2026-05-31T12:00:00.000Z",
+    generatedAt: "2026-05-31T12:00:00.000Z",
+  });
+  check("submitted: submitted_at presente", submitted.submitted_at === "2026-05-31T12:00:00.000Z");
+  check("submitted: status confirmed (sin blockers)", submitted.status === "confirmed", submitted.status);
+  check("submitted: human_review_required false", submitted.human_review_required === false);
+
+  // Vertical con pricing → quoting_blockers presente en el snapshot.
+  const pricing = buildDiscoverySubmission(
+    {
+      empresa: { nombreComercial: "X", rubro: "Limpieza", pais: "Ecuador", servicios: ["Limpieza"] },
+      cuestionario: { procesoActual: "Proceso.", tiposClienteObj: ["Empresas"] },
+      proceso_pipeline: { etapas: ["A", "B"] },
+      businessModules: [{ key: "costing", category: "pricing", required: true, required_fields: ["currency", "cost_inputs"] }],
+    },
+    { submittedAt: "2026-05-31T12:00:00.000Z" }
+  );
+  check("pricing: quoting_blockers presente en snapshot", Array.isArray(pricing.quoting_blockers) && (pricing.quoting_blockers ?? []).length > 0);
+  check("pricing: human_review_required true", pricing.human_review_required === true);
+
+  // Determinismo.
+  check(
+    "determinístico: dos snapshots idénticos",
+    JSON.stringify(buildDiscoverySubmission(completeInput, { generatedAt: "t" })) ===
+      JSON.stringify(buildDiscoverySubmission(completeInput, { generatedAt: "t" }))
+  );
+}
+
 function main(): void {
-  console.log("=== DiscoveryContext selftest (CONSTRUCTOR-DISCOVERY-8a) ===");
+  console.log("=== DiscoveryContext selftest (CONSTRUCTOR-DISCOVERY-8a/8b) ===");
   caseCasaLimpiaConceptual();
   casePickupConceptual();
   caseAgencyConceptual();
   caseGenericMinimal();
   caseCompleteMinimal();
   caseEmpty();
+  caseSubmissionSnapshot();
 
   console.log("\n=== SUMMARY ===");
   console.log(`total:  ${total}`);
