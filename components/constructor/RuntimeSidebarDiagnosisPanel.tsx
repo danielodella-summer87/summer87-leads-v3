@@ -62,7 +62,15 @@ const SUGGESTION_LABELS: Record<SidebarVisibilitySuggestion, string> = {
   keep: "Mantener",
   vertical_specific: "Del vertical",
   internal_only: "Interno",
-  suggest_hide: "Sugerir ocultar",
+  suggest_hide: "Revisar",
+};
+
+// Badge oscuro para la vista previa estilo sidebar.
+const SUGGESTION_BADGE_DARK: Record<SidebarVisibilitySuggestion, string> = {
+  keep: "bg-emerald-500/20 text-emerald-300",
+  vertical_specific: "bg-blue-500/20 text-blue-300",
+  internal_only: "bg-white/10 text-gray-300",
+  suggest_hide: "bg-amber-500/20 text-amber-300",
 };
 
 export function RuntimeSidebarDiagnosisPanel() {
@@ -150,23 +158,62 @@ export function RuntimeSidebarDiagnosisPanel() {
             </span>
           </div>
 
-          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-100">
-            {results.map((r) => (
-              <li key={r.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <span className="font-mono text-xs text-gray-700">{r.key}</span>
-                <span className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">{r.reason}</span>
-                  <span className={"rounded-full px-2.5 py-1 text-xs " + SUGGESTION_STYLES[r.suggestion]}>
-                    {SUGGESTION_LABELS[r.suggestion]}
+          {/* Vista previa estilo sidebar (mockup) — NO es el sidebar real. */}
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600">
+              Vista previa de badges en el sidebar (mockup interno — el sidebar real no se modifica)
+            </div>
+            <nav className="space-y-1 bg-[#0b1220] p-3">
+              {results.map((r) => (
+                <div
+                  key={r.key}
+                  className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-gray-200"
+                  title={r.reason}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="text-base leading-none text-gray-500" aria-hidden>·</span>
+                    <span className="font-mono text-xs">{r.key}</span>
                   </span>
-                </span>
-              </li>
-            ))}
-          </ul>
+                  {runtime.status === "ready_readonly" ? (
+                    <span
+                      className={"rounded-full px-2 py-0.5 text-[11px] " + SUGGESTION_BADGE_DARK[r.suggestion]}
+                    >
+                      {SUGGESTION_LABELS[r.suggestion]}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-gray-400">
+                      sin badge
+                    </span>
+                  )}
+                </div>
+              ))}
+            </nav>
+          </div>
+
+          {/* Detalle textual (razón por ítem) para trazabilidad del diagnóstico. */}
+          <details className="rounded-lg border border-gray-100">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-gray-600">
+              Ver detalle de sugerencias por ítem
+            </summary>
+            <ul className="divide-y divide-gray-100 border-t border-gray-100">
+              {results.map((r) => (
+                <li key={r.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="font-mono text-xs text-gray-700">{r.key}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">{r.reason}</span>
+                    <span className={"rounded-full px-2.5 py-1 text-xs " + SUGGESTION_STYLES[r.suggestion]}>
+                      {SUGGESTION_LABELS[r.suggestion]}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
 
           <p className="text-xs text-gray-400">
-            Lista representativa con fines de diagnóstico. No refleja ni altera el filtrado real del
-            sidebar; el CRM operativo (client_crm) no se ve afectado por este panel.
+            Mockup representativo con fines de diagnóstico. No refleja ni altera el filtrado real del
+            sidebar (componente compartido); el CRM operativo (client_crm) no se ve afectado por este
+            panel.
           </p>
         </div>
       )}
