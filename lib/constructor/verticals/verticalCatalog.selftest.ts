@@ -201,6 +201,38 @@ function caseCablingEndToEnd(): void {
   check("detectVerticalKey no muta empresa", JSON.stringify(empresaObj) === snap);
 }
 
+// ── J. vertical_key confirmado (meta) gana sobre detección por rubro (8d) ──────
+function caseConfirmedVerticalKey(): void {
+  console.log("\n[J] meta.vertical_key confirmado prevalece sobre el rubro (DISCOVERY-8d)");
+
+  // Rubro sugiere limpieza, pero el instalador confirmó pickup_4x4.
+  const empresa = { nombreComercial: "Cliente", rubro: "Servicios de limpieza", productos: ["P1"] };
+  const meta = { vertical_key: "pickup_4x4" };
+
+  const suggested = detectVerticalKey({ empresa });
+  check("rubro sugiere cleaning_services", suggested === "cleaning_services", suggested);
+
+  const effective = detectVerticalKey({ empresa, meta });
+  check("meta.vertical_key confirmado gana → pickup_4x4", effective === "pickup_4x4", effective);
+
+  // Snapshot end-to-end con el vertical confirmado.
+  const input = buildDiscoveryContextInputForVertical(
+    { empresa, cuestionario: { procesoActual: "P", tiposClienteObj: ["S"] }, proceso_pipeline: { etapas: ["A", "B"] }, meta },
+    effective
+  );
+  const submission = buildDiscoverySubmission(input, {});
+  check("snapshot usa pickup_4x4 → quoting_blockers UNDEFINED", submission.quoting_blockers === undefined);
+
+  // Sin meta.vertical_key → fallback a detección por rubro (cleaning → quoting presente).
+  const fallbackKey = detectVerticalKey({ empresa });
+  const fallbackInput = buildDiscoveryContextInputForVertical(
+    { empresa, cuestionario: { procesoActual: "P", tiposClienteObj: ["S"] }, proceso_pipeline: { etapas: ["A", "B"] } },
+    fallbackKey
+  );
+  const fallbackSubmission = buildDiscoverySubmission(fallbackInput, {});
+  check("sin confirmar → fallback cleaning → quoting_blockers PRESENTE", Array.isArray(fallbackSubmission.quoting_blockers));
+}
+
 function main(): void {
   console.log("=== VerticalCatalog selftest (CONSTRUCTOR-VERTICALS-1 / DISCOVERY-8c) ===");
   caseGeneric();
@@ -212,6 +244,7 @@ function main(): void {
   caseUnknownFallback();
   caseNoMutation();
   caseCablingEndToEnd();
+  caseConfirmedVerticalKey();
 
   console.log("\n=== SUMMARY ===");
   console.log(`total:  ${total}`);

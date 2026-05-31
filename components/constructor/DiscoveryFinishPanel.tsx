@@ -22,8 +22,15 @@ import {
   detectVerticalKey,
   resolveVerticalDefinition,
   buildDiscoveryContextInputForVertical,
+  VERTICAL_KEYS,
   type VerticalKey,
 } from "@/lib/constructor/verticals";
+
+function readConfirmedVerticalKey(row: SetupRow): VerticalKey | null {
+  const meta = (row?.meta as Record<string, unknown> | undefined) ?? {};
+  const raw = typeof meta.vertical_key === "string" ? meta.vertical_key.trim() : "";
+  return (VERTICAL_KEYS as readonly string[]).includes(raw) ? (raw as VerticalKey) : null;
+}
 
 type SetupRow = Record<string, unknown> | null;
 
@@ -59,6 +66,10 @@ export function DiscoveryFinishPanel() {
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  // "" => usar detección automática; un VerticalKey => override manual del instalador.
+  const [selectedVertical, setSelectedVertical] = useState<VerticalKey | "">("");
+  const [confirmingVertical, setConfirmingVertical] = useState(false);
+  const [verticalConfirmed, setVerticalConfirmed] = useState(false);
 
   const loadSetup = useCallback(async () => {
     setLoading(true);
@@ -72,8 +83,14 @@ export function DiscoveryFinishPanel() {
         setLoadError(json?.error ?? "No se pudo cargar la configuración del Constructor.");
         return;
       }
-      setRow(json?.data ?? null);
-      const existing = (json?.data?.meta as Record<string, unknown> | undefined)?.discovery_submission as
+      const data = json?.data ?? null;
+      setRow(data);
+      const confirmedKey = readConfirmedVerticalKey(data);
+      if (confirmedKey) {
+        setSelectedVertical(confirmedKey);
+        setVerticalConfirmed(true);
+      }
+      const existing = (data?.meta as Record<string, unknown> | undefined)?.discovery_submission as
         | DiscoverySubmission
         | undefined;
       if (existing?.submitted_at) setSavedAt(existing.submitted_at);
@@ -88,25 +105,59 @@ export function DiscoveryFinishPanel() {
     void loadSetup();
   }, [loadSetup]);
 
-  // Detecta el vertical desde el setup y arma el input con los módulos del catálogo.
+  // Vertical efectivo: override manual del instalador si existe, si no detección automática.
   const vertical = useMemo(() => {
     if (!row) return null;
     const base = rowToSetupInput(row);
-    const verticalKey: VerticalKey = detectVerticalKey({
-      verticalKey: base.verticalKey,
+    // Sugerencia basada en el rubro/giro (sin considerar meta.vertical_key persistido).
+    const autoDetected: VerticalKey = detectVerticalKey({
       empresa: (base.empresa as Record<string, unknown> | null) ?? null,
-      meta: (base.meta as Record<string, unknown> | null) ?? null,
     });
+    const verticalKey: VerticalKey = selectedVertical !== "" ? selectedVertical : autoDetected;
     const definition = resolveVerticalDefinition(verticalKey);
     const input = buildDiscoveryContextInputForVertical(base, verticalKey);
-    return { verticalKey, definition, input };
-  }, [row]);
+    const source: "confirmed" | "manual" | "detected" =
+      selectedVertical !== ""
+        ? verticalConfirmed && readConfirmedVerticalKey(row) === selectedVertical
+          ? "confirmed"
+          : "manual"
+        : "detected";
+    return { verticalKey, autoDetected, definition, input, source };
+  }, [row, selectedVertical, verticalConfirmed]);
 
   // Preview (sin sellar): muestra estado, vertical detectado y blockers antes de cerrar.
   const preview = useMemo<DiscoverySubmission | null>(() => {
     if (!vertical) return null;
     return buildDiscoverySubmission(vertical.input, {});
   }, [vertical]);
+
+  // Persiste meta.vertical_key como decisión explícita del instalador (sin snapshot).
+  const handleConfirmVertical = useCallback(async () => {
+    if (!row || !vertical) return;
+    setConfirmingVertical(true);
+    setSaveError(null);
+    try {
+      const existingMeta = (row.meta as Record<string, unknown> | undefined) ?? {};
+      const mergedMeta = { ...existingMeta, vertical_key: vertical.verticalKey };
+      const res = await fetch("/api/admin/constructor/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "meta", data: { meta: mergedMeta } }),
+      });
+      const json = (await res.json().catch(() => null)) as { error?: string | null } | null;
+      if (!res.ok) {
+        setSaveError(json?.error ?? "No se pudo confirmar el vertical.");
+        return;
+      }
+      setRow((prev) => ({ ...(prev ?? {}), meta: mergedMeta }));
+      setSelectedVertical(vertical.verticalKey);
+      setVerticalConfirmed(true);
+    } catch {
+      setSaveError("No se pudo confirmar el vertical.");
+    } finally {
+      setConfirmingVertical(false);
+    }
+  }, [row, vertical]);
 
   const handleFinish = useCallback(async () => {
     if (!row || !vertical) return;
@@ -120,7 +171,12 @@ export function DiscoveryFinishPanel() {
       });
 
       const existingMeta = (row.meta as Record<string, unknown> | undefined) ?? {};
-      const mergedMeta = { ...existingMeta, discovery_submission: submission };
+      // El cierre también deja persistido el vertical_key efectivo como decisión.
+      const mergedMeta = {
+        ...existingMeta,
+        vertical_key: vertical.verticalKey,
+        discovery_submission: submission,
+      };
 
       const res = await fetch("/api/admin/constructor/setup", {
         method: "PATCH",
@@ -133,6 +189,8 @@ export function DiscoveryFinishPanel() {
         return;
       }
       setRow((prev) => ({ ...(prev ?? {}), meta: mergedMeta }));
+      setSelectedVertical(vertical.verticalKey);
+      setVerticalConfirmed(true);
       setSavedAt(submittedAt);
     } catch {
       setSaveError("No se pudo guardar el snapshot del Discovery.");
@@ -160,18 +218,60 @@ export function DiscoveryFinishPanel() {
       ) : preview && vertical ? (
         <div className="mt-4 space-y-3">
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="text-sm">
-              <span className="font-medium text-gray-800">Vertical detectado:</span>{" "}
-              <span className="text-gray-700">
-                {vertical.definition.label} <code className="text-xs text-gray-500">({vertical.verticalKey})</code>
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="discovery-vertical" className="text-sm font-medium text-gray-800">
+                Vertical:
+              </label>
+              <select
+                id="discovery-vertical"
+                value={vertical.verticalKey}
+                onChange={(e) => {
+                  setSelectedVertical(e.target.value as VerticalKey);
+                  setVerticalConfirmed(false);
+                }}
+                className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-800"
+              >
+                {VERTICAL_KEYS.map((k) => (
+                  <option key={k} value={k}>
+                    {resolveVerticalDefinition(k).label} ({k})
+                  </option>
+                ))}
+              </select>
+              <span
+                className={
+                  "rounded-full px-2.5 py-1 text-xs " +
+                  (vertical.source === "confirmed"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : vertical.source === "manual"
+                      ? "bg-blue-100 text-blue-800"
+                      : "bg-gray-200 text-gray-700")
+                }
+              >
+                {vertical.source === "confirmed"
+                  ? "Confirmado"
+                  : vertical.source === "manual"
+                    ? "Selección manual (sin confirmar)"
+                    : "Detectado automáticamente"}
               </span>
+              <button
+                type="button"
+                onClick={handleConfirmVertical}
+                disabled={confirmingVertical || vertical.source === "confirmed"}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+              >
+                {confirmingVertical ? "Confirmando…" : "Confirmar vertical"}
+              </button>
             </div>
-            <div className="mt-1 text-sm text-gray-700">
+            <p className="mt-2 text-xs text-gray-500">
+              Sugerido por el rubro: <code className="text-gray-600">{vertical.autoDetected}</code>. El
+              vertical confirmado se guarda en la configuración del Constructor.
+            </p>
+            <div className="mt-2 text-sm text-gray-700">
               <span className="font-medium text-gray-800">Módulos del vertical:</span>{" "}
               {vertical.definition.business_modules.map((m) => m.key).join(", ")}
             </div>
             <p className="mt-1 text-xs text-gray-500">
-              Los módulos se derivan del vertical detectado. Podrán ajustarse luego antes de generar
+              Los módulos se derivan del vertical confirmado. Podrán ajustarse luego antes de generar
               el paquete instalable.
             </p>
           </div>
