@@ -14,3 +14,14 @@ export type {
   ConstructorRuntimeConfig,
   BuildConstructorRuntimeConfigInput,
 } from "./constructorRuntimeConfig";
+
+export {
+  suggestRuntimeSidebarVisibility,
+  getSuggestedHiddenKeys,
+} from "./runtimeSidebarVisibility";
+
+export type {
+  SidebarVisibilitySuggestion,
+  SidebarItemLite,
+  SidebarVisibilityResult,
+} from "./runtimeSidebarVisibility";
