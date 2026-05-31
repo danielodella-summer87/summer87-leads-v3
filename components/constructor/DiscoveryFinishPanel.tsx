@@ -18,6 +18,12 @@ import {
   type DiscoverySetupInput,
   type DiscoverySubmission,
 } from "@/lib/constructor/discovery";
+import {
+  detectVerticalKey,
+  resolveVerticalDefinition,
+  buildDiscoveryContextInputForVertical,
+  type VerticalKey,
+} from "@/lib/constructor/verticals";
 
 type SetupRow = Record<string, unknown> | null;
 
@@ -82,19 +88,33 @@ export function DiscoveryFinishPanel() {
     void loadSetup();
   }, [loadSetup]);
 
-  // Preview (sin sellar): muestra estado y blockers antes de cerrar.
-  const preview = useMemo<DiscoverySubmission | null>(() => {
+  // Detecta el vertical desde el setup y arma el input con los módulos del catálogo.
+  const vertical = useMemo(() => {
     if (!row) return null;
-    return buildDiscoverySubmission(rowToSetupInput(row), {});
+    const base = rowToSetupInput(row);
+    const verticalKey: VerticalKey = detectVerticalKey({
+      verticalKey: base.verticalKey,
+      empresa: (base.empresa as Record<string, unknown> | null) ?? null,
+      meta: (base.meta as Record<string, unknown> | null) ?? null,
+    });
+    const definition = resolveVerticalDefinition(verticalKey);
+    const input = buildDiscoveryContextInputForVertical(base, verticalKey);
+    return { verticalKey, definition, input };
   }, [row]);
 
+  // Preview (sin sellar): muestra estado, vertical detectado y blockers antes de cerrar.
+  const preview = useMemo<DiscoverySubmission | null>(() => {
+    if (!vertical) return null;
+    return buildDiscoverySubmission(vertical.input, {});
+  }, [vertical]);
+
   const handleFinish = useCallback(async () => {
-    if (!row) return;
+    if (!row || !vertical) return;
     setSubmitting(true);
     setSaveError(null);
     try {
       const submittedAt = new Date().toISOString();
-      const submission = buildDiscoverySubmission(rowToSetupInput(row), {
+      const submission = buildDiscoverySubmission(vertical.input, {
         submittedAt,
         generatedAt: submittedAt,
       });
@@ -119,7 +139,7 @@ export function DiscoveryFinishPanel() {
     } finally {
       setSubmitting(false);
     }
-  }, [row]);
+  }, [row, vertical]);
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -137,8 +157,25 @@ export function DiscoveryFinishPanel() {
         <p className="mt-4 text-sm text-gray-500">Cargando estado del Discovery…</p>
       ) : loadError ? (
         <p className="mt-4 text-sm text-red-600">{loadError}</p>
-      ) : preview ? (
+      ) : preview && vertical ? (
         <div className="mt-4 space-y-3">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div className="text-sm">
+              <span className="font-medium text-gray-800">Vertical detectado:</span>{" "}
+              <span className="text-gray-700">
+                {vertical.definition.label} <code className="text-xs text-gray-500">({vertical.verticalKey})</code>
+              </span>
+            </div>
+            <div className="mt-1 text-sm text-gray-700">
+              <span className="font-medium text-gray-800">Módulos del vertical:</span>{" "}
+              {vertical.definition.business_modules.map((m) => m.key).join(", ")}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Los módulos se derivan del vertical detectado. Podrán ajustarse luego antes de generar
+              el paquete instalable.
+            </p>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-800">
               Estado: {preview.status}

@@ -205,6 +205,70 @@ export function getVerticalRequiredFields(verticalKey: string | null | undefined
   return [...resolveVerticalDefinition(verticalKey).vertical_required_fields];
 }
 
+// ── Detección de vertical_key desde el setup (CONSTRUCTOR-DISCOVERY-8c) ───────
+//
+// Mapeo conservador: usa señales explícitas primero; si no, intenta mapear el
+// rubro/giro por palabras clave; si no hay match seguro → `generic`.
+// NO asume país, moneda, Casa Limpia ni Pickup.
+
+function normalizeText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // quita acentos (combining marks)
+    .toLowerCase()
+    .trim();
+}
+
+/** Reglas de palabras clave → vertical. Orden estable, primera coincidencia gana. */
+const VERTICAL_KEYWORD_RULES: ReadonlyArray<{ vertical: VerticalKey; keywords: readonly string[] }> = [
+  { vertical: "cleaning_services", keywords: ["limpieza", "cleaning", "facility", "aseo", "higiene"] },
+  { vertical: "pickup_4x4", keywords: ["pickup", "4x4", "vehiculo", "vehiculos", "repuesto", "repuestos", "automotriz", "autopart", "concesionario"] },
+  { vertical: "marketing_agency", keywords: ["marketing", "agencia", "publicidad", "agency", "comunicacion", "branding"] },
+  { vertical: "education", keywords: ["educacion", "colegio", "instituto", "universidad", "inscripcion", "inscripciones", "escuela", "academia", "education"] },
+];
+
+export type DetectVerticalInput = {
+  verticalKey?: string | null;
+  empresa?: Record<string, unknown> | null;
+  meta?: Record<string, unknown> | null;
+};
+
+/**
+ * Detecta el vertical desde el setup, de forma pura y conservadora:
+ *  1) `verticalKey` explícito (caller) si es una key conocida.
+ *  2) `empresa.vertical` o `meta.vertical_key` si son keys conocidas.
+ *  3) Mapeo por palabras clave sobre empresa.vertical / rubro / giro.
+ *  4) Fallback seguro a `generic` (sin pricing).
+ */
+export function detectVerticalKey(input: DetectVerticalInput = {}): VerticalKey {
+  const empresa = input.empresa ?? {};
+  const meta = input.meta ?? {};
+
+  // 1) key explícita del caller
+  if (isVerticalKey(input.verticalKey)) return input.verticalKey;
+
+  // 2) key explícita en empresa.vertical o meta.vertical_key
+  const empresaVerticalRaw = typeof empresa.vertical === "string" ? empresa.vertical.trim() : "";
+  if (isVerticalKey(empresaVerticalRaw)) return empresaVerticalRaw;
+  const metaVerticalRaw = typeof meta.vertical_key === "string" ? meta.vertical_key.trim() : "";
+  if (isVerticalKey(metaVerticalRaw)) return metaVerticalRaw;
+
+  // 3) mapeo por palabras clave sobre texto del rubro/giro/vertical
+  const haystack = [
+    normalizeText(empresa.vertical),
+    normalizeText(empresa.rubro),
+    normalizeText(empresa.rubroPersonalizado),
+    normalizeText(empresa.giro),
+  ].join(" ");
+  for (const rule of VERTICAL_KEYWORD_RULES) {
+    if (rule.keywords.some((kw) => haystack.includes(kw))) return rule.vertical;
+  }
+
+  // 4) fallback seguro
+  return FALLBACK_VERTICAL_KEY;
+}
+
 /**
  * Combina un setup base con los presets del vertical para alimentar
  * `buildDiscoveryContextFromSetup`. No muta `baseInput`.

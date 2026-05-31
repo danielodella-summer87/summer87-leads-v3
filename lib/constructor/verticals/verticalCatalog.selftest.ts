@@ -18,9 +18,13 @@ import {
   getBusinessModulesForVertical,
   getVerticalRequiredFields,
   buildDiscoveryContextInputForVertical,
+  detectVerticalKey,
   VERTICAL_KEYS,
 } from "./verticalCatalog.ts";
-import { buildDiscoveryContextFromSetup } from "../discovery/discoveryContext.ts";
+import {
+  buildDiscoveryContextFromSetup,
+  buildDiscoverySubmission,
+} from "../discovery/discoveryContext.ts";
 
 let total = 0;
 let passed = 0;
@@ -142,8 +146,63 @@ function caseNoMutation(): void {
   check("baseInput intacto tras build", JSON.stringify(base) === snapshot);
 }
 
+// ── I. Cableado end-to-end: rubro → detección → snapshot (DISCOVERY-8c) ───────
+function snapshotForRubro(rubro: string, extra?: Record<string, unknown>) {
+  const base: Record<string, unknown> = {
+    empresa: { nombreComercial: "Cliente Demo", rubro, servicios: ["S1", "S2"] },
+    cuestionario: { procesoActual: "Proceso definido.", tiposClienteObj: ["Segmento A"] },
+    proceso_pipeline: { etapas: ["Nuevo", "Cierre"] },
+    ...(extra ?? {}),
+  };
+  const vk = detectVerticalKey({
+    empresa: base.empresa as Record<string, unknown>,
+    meta: base.meta as Record<string, unknown> | undefined,
+  });
+  const input = buildDiscoveryContextInputForVertical(base, vk);
+  return { vk, submission: buildDiscoverySubmission(input, {}) };
+}
+
+function caseCablingEndToEnd(): void {
+  console.log("\n[I] Cableado: rubro → vertical → snapshot");
+
+  const a = snapshotForRubro("Servicios de limpieza corporativa");
+  check("A) rubro limpieza → cleaning_services", a.vk === "cleaning_services", a.vk);
+  check("A) quoting_blockers PRESENTE (faltan moneda/costos)", Array.isArray(a.submission.quoting_blockers) && (a.submission.quoting_blockers ?? []).length > 0);
+
+  const b = snapshotForRubro("Venta de pickups 4x4 y repuestos");
+  check("B) rubro pickup/4x4 → pickup_4x4", b.vk === "pickup_4x4", b.vk);
+  check("B) quoting_blockers UNDEFINED", b.submission.quoting_blockers === undefined);
+
+  const c = snapshotForRubro("Agencia de marketing digital");
+  check("C) rubro marketing → marketing_agency", c.vk === "marketing_agency", c.vk);
+  check("C) quoting_blockers UNDEFINED", c.submission.quoting_blockers === undefined);
+
+  const d = snapshotForRubro("Instituto de educación — inscripciones");
+  check("D) rubro educación → education", d.vk === "education", d.vk);
+  check("D) quoting_blockers UNDEFINED", d.submission.quoting_blockers === undefined);
+
+  const e = snapshotForRubro("Software a medida");
+  check("E) rubro desconocido → generic", e.vk === "generic", e.vk);
+  check("E) quoting_blockers UNDEFINED", e.submission.quoting_blockers === undefined);
+
+  const f = snapshotForRubro("Venta de pickups 4x4", {
+    businessModules: [{ key: "custom_quote", category: "pricing", required: true, required_fields: ["currency"] }],
+  });
+  check("F) pickup + módulo pricing explícito → quoting PRESENTE", Array.isArray(f.submission.quoting_blockers) && (f.submission.quoting_blockers ?? []).length > 0);
+
+  // G) empresa.vertical explícito gana sobre el rubro.
+  const gVk = detectVerticalKey({ empresa: { vertical: "education", rubro: "Servicios de limpieza" } });
+  check("G) empresa.vertical explícito gana sobre rubro", gVk === "education", gVk);
+
+  // detección no muta el objeto empresa.
+  const empresaObj = { rubro: "Servicios de limpieza", nombreComercial: "X" };
+  const snap = JSON.stringify(empresaObj);
+  detectVerticalKey({ empresa: empresaObj });
+  check("detectVerticalKey no muta empresa", JSON.stringify(empresaObj) === snap);
+}
+
 function main(): void {
-  console.log("=== VerticalCatalog selftest (CONSTRUCTOR-VERTICALS-1) ===");
+  console.log("=== VerticalCatalog selftest (CONSTRUCTOR-VERTICALS-1 / DISCOVERY-8c) ===");
   caseGeneric();
   caseCleaning();
   casePickup();
@@ -152,6 +211,7 @@ function main(): void {
   casePickupPlusPricing();
   caseUnknownFallback();
   caseNoMutation();
+  caseCablingEndToEnd();
 
   console.log("\n=== SUMMARY ===");
   console.log(`total:  ${total}`);

@@ -9,6 +9,7 @@ export {
   getBusinessModulesForVertical,
   getVerticalRequiredFields,
   buildDiscoveryContextInputForVertical,
+  detectVerticalKey,
   VERTICAL_KEYS,
   FALLBACK_VERTICAL_KEY,
   VERTICAL_CATALOG_SCHEMA_VERSION,
@@ -19,4 +20,5 @@ export type {
   VerticalCategory,
   BusinessModulePreset,
   VerticalDefinition,
+  DetectVerticalInput,
 } from "./verticalCatalog";
