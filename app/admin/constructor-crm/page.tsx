@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ConstructorRuntimeStatusPanel } from "@/components/constructor/ConstructorRuntimeStatusPanel";
+import { RuntimeSidebarDiagnosisPanel } from "@/components/constructor/RuntimeSidebarDiagnosisPanel";
 import {
   CRM_MODE,
   CRM_MODE_LABELS,
@@ -241,6 +242,9 @@ export default function ConstructorCRMPage() {
 
           {/* ── Runtime read-only (gobierno interno, CONSTRUCTOR-RUNTIME-2) ──── */}
           <ConstructorRuntimeStatusPanel />
+
+          {/* ── Diagnóstico de navegación por vertical (CONSTRUCTOR-RUNTIME-4) ─ */}
+          <RuntimeSidebarDiagnosisPanel />
 
         </div>
       </div>
