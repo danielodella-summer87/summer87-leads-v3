@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { ConstructorRuntimeStatusPanel } from "@/components/constructor/ConstructorRuntimeStatusPanel";
 import {
   CRM_MODE,
   CRM_MODE_LABELS,
@@ -237,6 +238,9 @@ export default function ConstructorCRMPage() {
               Comenzar con Empresa
             </Link>
           </div>
+
+          {/* ── Runtime read-only (gobierno interno, CONSTRUCTOR-RUNTIME-2) ──── */}
+          <ConstructorRuntimeStatusPanel />
 
         </div>
       </div>
