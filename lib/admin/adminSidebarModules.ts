@@ -189,6 +189,18 @@ export const DEFAULT_ADMIN_SIDEBAR_MODULES: AdminSidebarModule[] = [
     status: "activo",
     menuCategory: "internal_constructor",
   },
+  {
+    // CONSTRUCTOR-OPERATIONS-3 — Manual operativo del Constructor (interno).
+    // Categoría internal_constructor: visible solo en modos internos
+    // (constructor_base/installation_prep con constructorEnabled); NUNCA en client_crm
+    // (filterAdminSidebarModulesByMode devuelve false para internal_constructor).
+    key: "constructor_manual_operativo",
+    label: "Manual operativo",
+    href: "/admin/constructor-crm/manual-operativo",
+    icon: "📖",
+    status: "activo",
+    menuCategory: "internal_constructor",
+  },
 ];
 
 function hrefStartsWith(href: string, prefix: string): boolean {
